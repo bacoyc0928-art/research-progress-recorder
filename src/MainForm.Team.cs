@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -227,6 +227,10 @@ namespace SRLogbook
                 // Opening or refreshing this page only reads. Upload actions create the profile when needed.
                 bool created = false;
                 List<string> members = await Task.Run(() => GitHubSync.ListDir(cfg.owner, cfg.repo, "team", cfg.branch, token));
+                // Roster shows invited collaborators even before their first upload; failures are ignored on purpose.
+                List<string> roster = new List<string>();
+                try { roster = await Task.Run(() => GitHubSync.ListCollaborators(cfg.owner, cfg.repo, cfg.branch, token)); }
+                catch { roster = new List<string>(); }
                 teamFlow.SuspendLayout();
                 teamFlow.Controls.Clear();
                 AddTeamCard(login + "（我）", "已连接 GitHub 账号", true);
@@ -234,9 +238,17 @@ namespace SRLogbook
                 {
                     if (m == login) continue;
                     AddTeamCard(m, "团队成员", false);
+                    roster.RemoveAll(x => string.Equals(x, m, StringComparison.OrdinalIgnoreCase));
+                }
+                int pending = 0;
+                foreach (string m in roster)
+                {
+                    if (string.Equals(m, login, StringComparison.OrdinalIgnoreCase)) continue;
+                    AddTeamCard(m, "协作者（尚未上传）", false);
+                    pending++;
                 }
                 teamFlow.ResumeLayout();
-                teamStatus.Text = "共 " + members.Count + " 位成员" + (created ? "；已为 " + login + " 创建 team/" + login + "/" : "");
+                teamStatus.Text = "共 " + members.Count + " 位成员" + (pending > 0 ? "；另有 " + pending + " 位协作者尚未上传" : "") + (created ? "；已为 " + login + " 创建 team/" + login + "/" : "");
             }
             catch (Exception ex)
             {
