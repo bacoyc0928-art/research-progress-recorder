@@ -336,6 +336,19 @@ namespace SRLogbook
             try
             {
                 string me = await Task.Run(() => GitHubSync.GetUserLogin(token));
+                if (string.Equals(login, me, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Your own uploads are already on this machine; re-downloading them only adds a long staging path.
+                    string personal = LoadPersonalFolder();
+                    string refs = string.IsNullOrEmpty(personal) ? null : Path.Combine(personal, "references");
+                    if (refs != null && Directory.Exists(refs) && Directory.GetFiles(refs, "*", SearchOption.AllDirectories).Length > 0)
+                    { ShowMemberFiles(login + "（我）", refs); return; }
+                    Msg.Show(Lang.En
+                        ? "These are your own files. Uploaded copies live in the personal folder's references subfolder; use Remove My Uploaded References to manage the team area."
+                        : "这是你自己的账号。你上传的副本在个人文件夹的 references 子目录；团队区的文件请用“撤除我上传的参考资料”管理。", "团队研究");
+                    if (!string.IsNullOrEmpty(personal) && Directory.Exists(personal)) OpenPath(personal);
+                    return;
+                }
                 string dir = FileTransfers.Child(TeamConRefRoot(me), login);
                 bool downloaded = await Task.Run(() => GitHubSync.DownloadMemberFiles(cfg.owner, cfg.repo, login, cfg.branch, token, dir));
                 if (!downloaded) { Msg.Show("该成员尚未上传文件；已有本地副本保留。", "团队研究"); return; }
