@@ -27,7 +27,7 @@ namespace SRLogbook
             page.Controls.Add(card);
 
             Label h = new Label();
-            h.Text = "快速发行";
+            h.Text = "Quick Post";
             h.Font = Theme.FB(13f);
             h.ForeColor = Theme.Navy;
             h.BackColor = Color.White;
@@ -181,20 +181,20 @@ namespace SRLogbook
 
         private async void PublishPost()
         {
-            if (string.IsNullOrEmpty(sessionToken)) { Msg.Show("请先在左下角登录 GitHub 账号。", "快速发行"); return; }
+            if (string.IsNullOrEmpty(sessionToken)) { Msg.Show("请先在左下角登录 GitHub 账号。", "Quick Post"); return; }
             string body = postComposer.Text.Trim();
-            if (body.Length == 0) { Msg.Show("请先写点内容再发布。", "快速发行"); return; }
+            if (body.Length == 0) { Msg.Show("请先写点内容再发布。", "Quick Post"); return; }
             SyncConfig c = GitHubSync.LoadConfig(appDir);
             string token = sessionToken, login = sessionLogin;
             try
             {
                 await Task.Run(() => Posts.Publish(c.owner, c.repo, c.branch, token, login, body));
                 postComposer.Text = "";
-                await LogActivityAsync("发布快速发行", body.Length + " 字符");
+                await LogActivityAsync("发布帖子 / Publish post", body.Length + " 字符");
                 RefreshPostsPage();
-                Msg.Show("已发布；其他成员登录后即可看到。", "快速发行");
+                Msg.Show("已发布；其他成员登录后即可看到。", "Quick Post");
             }
-            catch (Exception ex) { Msg.Show("发布失败：" + ex.Message, "快速发行"); }
+            catch (Exception ex) { Msg.Show("发布失败：" + ex.Message, "Quick Post"); }
         }
 
         private void ShowPost(PostItem p)
@@ -247,23 +247,23 @@ namespace SRLogbook
                 await Task.Run(() => Posts.MarkRead(c.owner, c.repo, c.branch, token, login, p.Id));
                 RefreshPostsPage();
             }
-            catch (Exception ex) { Msg.Show("标记已阅失败：" + ex.Message, "快速发行"); }
+            catch (Exception ex) { Msg.Show("标记已阅失败：" + ex.Message, "Quick Post"); }
         }
 
         private async void DeletePost(PostItem p)
         {
             if (!string.Equals(p.Author, sessionLogin, StringComparison.OrdinalIgnoreCase))
-            { Msg.Show("只能删除自己发布的帖子。", "快速发行"); return; }
-            if (Msg.Show("确定删除这条帖子吗？删除后其他人也看不到了。", "快速发行", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            { Msg.Show("只能删除自己发布的帖子。", "Quick Post"); return; }
+            if (Msg.Show("确定删除这条帖子吗？删除后其他人也看不到了。", "Quick Post", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
             SyncConfig c = GitHubSync.LoadConfig(appDir);
             string token = sessionToken;
             try
             {
                 await Task.Run(() => Posts.Delete(c.owner, c.repo, c.branch, token, p.Id));
-                await LogActivityAsync("删除快速发行", p.Time);
+                await LogActivityAsync("删除帖子 / Delete post", p.Time);
                 RefreshPostsPage();
             }
-            catch (Exception ex) { Msg.Show("删除失败：" + ex.Message, "快速发行"); }
+            catch (Exception ex) { Msg.Show("删除失败：" + ex.Message, "Quick Post"); }
         }
 
         private async void ShowPostHistory()
