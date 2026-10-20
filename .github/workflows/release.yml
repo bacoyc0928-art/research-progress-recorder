@@ -52,7 +52,7 @@ jobs:
           python -m PyInstaller --noconfirm --clean --windowed --name ResearchProgressRecorder --osx-bundle-identifier org.syncresearch.recorder mac-client.py
           app=dist/ResearchProgressRecorder.app
           plutil -replace CFBundleShortVersionString -string 0.1.0 "$app/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 0.1.0' "$app/Contents/Info.plist"
+          plutil -insert CFBundleVersion -string 0.1.0 "$app/Contents/Info.plist"
           codesign --force --deep --sign - "$app"
           "$app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
           codesign --verify --deep --strict --verbose=2 "$app"
