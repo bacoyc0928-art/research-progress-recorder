@@ -1,11 +1,21 @@
+param([string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$sourceRoot = $PSScriptRoot
+if (-not $OutputDirectory) { $OutputDirectory = $sourceRoot }
+$OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
+New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
-if (-not (Test-Path -LiteralPath $compiler)) { throw '找不到 .NET Framework C# 编译器 csc.exe' }
-$sources = Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.cs' | ForEach-Object FullName
-$outputPath = Join-Path $root '研究进展记录器.exe'
-$iconPath = Join-Path $root 'app.ico'
-$manifestPath = Join-Path $root 'app.manifest'
-& $compiler /nologo /target:winexe "/out:$outputPath" "/win32icon:$iconPath" "/win32manifest:$manifestPath" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:Microsoft.VisualBasic.dll $sources
-if ($LASTEXITCODE -ne 0) { throw "编译失败，退出代码 $LASTEXITCODE" }
-Write-Host '编译完成：研究进展记录器.exe'
+if (-not (Test-Path -LiteralPath $compiler)) { throw 'Missing .NET Framework C# compiler.' }
+$sources = @(Get-ChildItem -LiteralPath (Join-Path $sourceRoot 'src') -Filter '*.cs' | ForEach-Object FullName)
+$buildDirectory = Join-Path $OutputDirectory ('.build-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $buildDirectory | Out-Null
+$appTemporary = Join-Path $buildDirectory 'SRPRecorder2027.exe'
+$uninstallTemporary = Join-Path $buildDirectory '卸载SRPRecorder2027.exe'
+& $compiler /nologo /target:winexe /main:SRLogbook.Program "/out:$appTemporary" "/win32icon:$sourceRoot\app.ico" "/win32manifest:$sourceRoot\app.manifest" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:Microsoft.VisualBasic.dll $sources
+if ($LASTEXITCODE -ne 0) { throw 'Main application compilation failed.' }
+& $compiler /nologo /target:winexe /main:SRUninstall.Program "/out:$uninstallTemporary" /r:System.Windows.Forms.dll /r:System.Drawing.dll (Join-Path $sourceRoot 'src\Uninstaller.cs') (Join-Path $sourceRoot 'src\Version.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Uninstaller compilation failed.' }
+Copy-Item -LiteralPath $appTemporary -Destination (Join-Path $OutputDirectory 'SRPRecorder2027.exe') -Force
+Copy-Item -LiteralPath $uninstallTemporary -Destination (Join-Path $OutputDirectory '卸载SRPRecorder2027.exe') -Force
+[IO.File]::WriteAllText((Join-Path $OutputDirectory '.srprec-install'), 'SRPRecorder2027 portable v1', [Text.UTF8Encoding]::new($false))
+Write-Host "Built local candidate in $OutputDirectory"

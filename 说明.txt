@@ -1,0 +1,2 @@
+SRPRecorder2027 0.1.0 Public Test
+See README.md. Extract the whole SRCRec folder before running SRPRecorder2027.exe. Back up data before upgrading. Private team files require your own GitHub token.
