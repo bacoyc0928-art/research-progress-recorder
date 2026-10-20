@@ -811,6 +811,7 @@ namespace SRLogbook
                 loginTokenBox.Text = "";
                 UpdateLoginUi();
                 RefreshTeamPage();
+                await LogActivityAsync("登录", "身份验证成功");
             }
             catch (Exception ex)
             {
