@@ -262,11 +262,11 @@ namespace SRLogbook
                         foreach (Entry e in store.Entries) if (e.Category == oldName) { e.Category = src.Name; e.Updated = SyncData.Now(); }
                         foreach (LocalDoc d in store.Documents) if (d.Category == oldName) { d.Category = src.Name; d.Updated = SyncData.Now(); }
                     }
-                    if (current != null) LoadEntry(current);
                 }
                 Persist();
                 RebuildCategories();
                 RefreshCategoryCombo();
+                if (current != null) LoadEntry(current);
                 RefreshOverview2();
             }
         }
