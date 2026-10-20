@@ -37,7 +37,7 @@ class Fake:
         raise urllib.error.HTTPError('',404,'missing',{},None)
 
 class FileChannelTests(unittest.TestCase):
-    def setUp(self): self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name); self.api=Fake(); self.files=f.FileChannels(self.api)
+    def setUp(self): self.tmp=tempfile.TemporaryDirectory(); self.root=f.no_links(Path(self.tmp.name)); self.api=Fake(); self.files=f.FileChannels(self.api)
     def tearDown(self): self.tmp.cleanup()
     def test_names(self):
         for name in ('..','../x','a/b','a\\b','CON','x:stream','trailing.','trailing '):
@@ -52,6 +52,9 @@ class FileChannelTests(unittest.TestCase):
         try: link.symlink_to(target,target_is_directory=True)
         except OSError: self.skipTest('symlink creation unavailable on this Windows host')
         with self.assertRaises(ValueError): f.upload_files(link)
+    @unittest.skipUnless(f.sys.platform == 'darwin', 'macOS system aliases only')
+    def test_macos_system_alias(self):
+        self.assertEqual(f.no_links('/var/folders'), Path('/private/var/folders'))
     def test_failed_download_preserves(self):
         dest=self.root/'dest'; dest.mkdir(); (dest/'old').write_text('old')
         def interrupted(stage): (stage/'partial').write_text('partial'); raise OSError('offline')

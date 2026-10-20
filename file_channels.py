@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import urllib.error
 import urllib.parse
 import uuid
@@ -15,6 +16,16 @@ MAX_FILE = 50 * 1024 * 1024
 
 def no_links(path):
     path = Path(os.path.abspath(path))
+    # macOS owns these root aliases. Canonicalize only the exact, root-owned
+    # system mapping; resolving an arbitrary user symlink would hide unsafe links.
+    if sys.platform == 'darwin':
+        for alias in ('var', 'tmp'):
+            prefix = Path('/') / alias
+            if path == prefix or prefix in path.parents:
+                expected = Path('/private') / alias
+                if prefix.is_symlink() and prefix.lstat().st_uid == 0 and prefix.parent / os.readlink(prefix) == expected:
+                    path = expected / path.relative_to(prefix)
+                break
     for p in (path, *path.parents):
         if p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()):
             raise ValueError('Linked files/folders are not supported: ' + str(p))
