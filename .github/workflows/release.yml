@@ -1,4 +1,4 @@
-name: Build 0.1.0 packages
+name: Build 0.1.1 packages
 on:
   workflow_dispatch:
 permissions:
@@ -13,17 +13,17 @@ jobs:
         shell: pwsh
         run: |
           ./test-local.ps1 -TestDirectory "$env:RUNNER_TEMP/offline-tests"
-          ./package-local.ps1 -Destination "$env:RUNNER_TEMP/package-010"
-          $package = "$env:RUNNER_TEMP/package-010/SRCRec"
-          if ((Get-Item "$package/SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.1.0.0') { throw 'Incorrect application version' }
-          if ((Get-Item "$package/卸载SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.1.0.0') { throw 'Incorrect uninstaller version' }
+          ./package-local.ps1 -Destination "$env:RUNNER_TEMP/package-011"
+          $package = "$env:RUNNER_TEMP/package-011/SRCRec"
+          if ((Get-Item "$package/SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.1.1.0') { throw 'Incorrect application version' }
+          if ((Get-Item "$package/卸载SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.1.1.0') { throw 'Incorrect uninstaller version' }
           $unexpected = Get-ChildItem $package -Recurse -File | Where-Object { $_.Extension -in '.pdf','.docx','.json' }
           if ($unexpected) { throw 'Private data entered the public package' }
-          Copy-Item "$env:RUNNER_TEMP/package-010/research-progress-recorder-0.1.0-Windows.zip" .
+          Copy-Item "$env:RUNNER_TEMP/package-011/research-progress-recorder-0.1.1-Windows.zip" .
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-0.1.0
-          path: research-progress-recorder-0.1.0-Windows.zip
+          name: windows-0.1.1
+          path: research-progress-recorder-0.1.1-Windows.zip
           if-no-files-found: error
   macos:
     timeout-minutes: 25
@@ -51,8 +51,8 @@ jobs:
           python -m pip install pyinstaller==6.22.3
           python -m PyInstaller --noconfirm --clean --windowed --name ResearchProgressRecorder --osx-bundle-identifier org.syncresearch.recorder mac-client.py
           app=dist/ResearchProgressRecorder.app
-          plutil -replace CFBundleShortVersionString -string 0.1.0 "$app/Contents/Info.plist"
-          plutil -insert CFBundleVersion -string 0.1.0 "$app/Contents/Info.plist"
+          plutil -replace CFBundleShortVersionString -string 0.1.1 "$app/Contents/Info.plist"
+          plutil -insert CFBundleVersion -string 0.1.1 "$app/Contents/Info.plist"
           codesign --force --deep --sign - "$app"
           "$app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
           codesign --verify --deep --strict --verbose=2 "$app"
@@ -65,8 +65,8 @@ jobs:
           cp README.md dmg-root/README.md
           cp 卸载工具/uninstall-macos.command dmg-root/uninstall-macos.command
           chmod +x dmg-root/uninstall-macos.command
-          image=research-progress-recorder-0.1.0-macOS-${{ matrix.arch }}.dmg
-          hdiutil create -volname 'Research Progress Recorder 0.1.0' -srcfolder dmg-root -format UDZO -fs HFS+ "$image"
+          image=research-progress-recorder-0.1.1-macOS-${{ matrix.arch }}.dmg
+          hdiutil create -volname 'Research Progress Recorder 0.1.1' -srcfolder dmg-root -format UDZO -fs HFS+ "$image"
           hdiutil verify "$image"
           mount="$RUNNER_TEMP/verify-dmg"
           mkdir "$mount"
@@ -75,10 +75,10 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$mount/ResearchProgressRecorder.app"
           "$mount/ResearchProgressRecorder.app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
           test -x "$mount/uninstall-macos.command"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/ResearchProgressRecorder.app/Contents/Info.plist")" = '0.1.0'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/ResearchProgressRecorder.app/Contents/Info.plist")" = '0.1.1'
           shasum -a 256 "$image"
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}-0.1.0
-          path: research-progress-recorder-0.1.0-macOS-${{ matrix.arch }}.dmg
+          name: macos-${{ matrix.arch }}-0.1.1
+          path: research-progress-recorder-0.1.1-macOS-${{ matrix.arch }}.dmg
           if-no-files-found: error
