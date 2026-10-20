@@ -165,13 +165,16 @@ namespace SRLogbook
             lbl = new Label();
             lbl.Text = text;
             lbl.AutoSize = false;
-            lbl.SetBounds(26, 0, width - 30, 46);
+            // 右侧留出 30px 给未读红点，否则 Label 会盖住它
+            lbl.SetBounds(26, 0, width - 62, 46);
             lbl.TextAlign = ContentAlignment.MiddleLeft;
             lbl.ForeColor = Color.FromArgb(196, 208, 228);
             lbl.Font = Theme.F(10.5f);
             lbl.BackColor = Theme.Navy;
             lbl.Cursor = Cursors.Hand;
             Controls.Add(lbl);
+
+
 
             EventHandler h = delegate(object s, EventArgs e) { if (Clicked != null) Clicked(this, e); };
             lbl.Click += h;
@@ -187,6 +190,25 @@ namespace SRLogbook
             lbl.BackColor = BackColor;
             lbl.ForeColor = sel ? Color.White : Color.FromArgb(196, 208, 228);
             lbl.Font = sel ? Theme.FB(10.5f) : Theme.F(10.5f);
+        }
+
+        /// <summary>栏目未读红点：有新内容时在右侧画一个红点，进入该栏目后清掉。</summary>
+        private bool badge;
+        public bool HasBadge { get { return badge; } }
+        public void SetBadge(bool on)
+        {
+            if (badge == on) return;
+            badge = on;
+            Invalidate();
+        }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            if (!badge) return;
+            int d = Ui.S(9);
+            int x = Width - d - Ui.S(16), y = (Height - d) / 2;
+            using (SolidBrush b = new SolidBrush(Color.FromArgb(226, 64, 64)))
+                e.Graphics.FillEllipse(b, x, y, d, d);
         }
     }
 
@@ -349,6 +371,10 @@ namespace SRLogbook
         private Panel header;
         private Panel pagesHost;
         private Label lblHeaderTitle;
+        /* ---------- 栏目未读红点 ---------- */
+        private readonly Dictionary<int, string> newsSeen = new Dictionary<int, string>();
+        private readonly Dictionary<int, string> newsNow = new Dictionary<int, string>();
+        private Timer newsTimer;
         private SideButton[] navs;
         private Panel[] pages;
         private int pageIndex;
@@ -378,6 +404,7 @@ namespace SRLogbook
             Ui.Init();
             appDir = Path.GetDirectoryName(Application.ExecutablePath);
             Lang.Load(appDir);
+            LoadNews();
             workspaceFolder = LoadWorkspace();
             if (!Directory.Exists(workspaceFolder))
             {
@@ -850,6 +877,8 @@ namespace SRLogbook
                 loginTokenBox.Text = "";
                 UpdateLoginUi();
                 RefreshTeamPage();
+                RefreshNews();
+                StartNewsTimer();
                 await LogActivityAsync("登录", "身份验证成功");
             }
             catch (Exception ex)
@@ -1422,6 +1451,7 @@ namespace SRLogbook
                 idx = 3;
             }
             pageIndex = idx;
+            MarkNewsSeen(idx);
             for (int i = 0; i < pages.Length; i++)
             {
                 pages[i].Visible = (i == idx);
@@ -1432,9 +1462,114 @@ namespace SRLogbook
             if (idx == 0) RefreshTeamPage();
             if (idx == 1) RefreshPostsPage();
             if (idx == 2) RebuildRefs();
-            if (idx == 3 && txtProgPath != null) txtProgPath.Text = LoadProgressFolder();
+            if (idx == 3 && txtProgPath != null) { txtProgPath.Text = LoadProgressFolder(); RefreshProgressFiles(); }
             if (idx == 4) RefreshSyncPage();
             Lang.Apply(this);
+        }
+
+        /* ---------- 栏目未读红点：有变化亮红点，进入栏目即清除 ---------- */
+
+        private string NewsPath() { return Path.Combine(appDir, "news.json"); }
+
+        private void LoadNews()
+        {
+            try
+            {
+                if (!File.Exists(NewsPath())) return;
+                Dictionary<string, string> d = SyncData.Serializer().Deserialize<Dictionary<string, string>>(File.ReadAllText(NewsPath(), Encoding.UTF8));
+                if (d == null) return;
+                foreach (KeyValuePair<string, string> kv in d)
+                {
+                    int k;
+                    if (int.TryParse(kv.Key, out k)) newsSeen[k] = kv.Value;
+                }
+            }
+            catch { }
+        }
+
+        private void SaveNews()
+        {
+            try
+            {
+                Dictionary<string, string> d = new Dictionary<string, string>();
+                foreach (KeyValuePair<int, string> kv in newsSeen) d[kv.Key.ToString()] = kv.Value;
+                SyncData.WriteAtomic(NewsPath(), SyncData.Serializer().Serialize(d));
+            }
+            catch { }
+        }
+
+        private void MarkNewsSeen(int idx)
+        {
+            if (navs != null && idx >= 0 && idx < navs.Length && navs[idx] != null) navs[idx].SetBadge(false);
+            string sig;
+            if (newsNow.TryGetValue(idx, out sig) && (!newsSeen.ContainsKey(idx) || newsSeen[idx] != sig))
+            {
+                newsSeen[idx] = sig;
+                SaveNews();
+            }
+        }
+
+        private void ApplyBadges()
+        {
+            if (navs == null) return;
+            foreach (KeyValuePair<int, string> kv in newsNow)
+            {
+                int idx = kv.Key;
+                if (idx < 0 || idx >= navs.Length || navs[idx] == null) continue;
+                string seen;
+                if (!newsSeen.TryGetValue(idx, out seen))
+                {
+                    // 第一次运行不亮，先把当前状态记为已读，避免一登录满屏红点。
+                    newsSeen[idx] = kv.Value;
+                    SaveNews();
+                    navs[idx].SetBadge(false);
+                    continue;
+                }
+                navs[idx].SetBadge(seen != kv.Value && idx != pageIndex);
+            }
+        }
+
+        /// <summary>拉一次远端状态，算出各栏目是否有新内容（团队研究=成员变化，Quick Post=未读帖子，团队同步=活动日志变化）。</summary>
+        private async void RefreshNews()
+        {
+            if (string.IsNullOrEmpty(sessionToken) || string.IsNullOrEmpty(sessionLogin)) return;
+            SyncConfig c = GitHubSync.LoadConfig(appDir);
+            string token = sessionToken, login = sessionLogin;
+            Dictionary<int, string> sig = new Dictionary<int, string>();
+            try
+            {
+                List<PostItem> posts = await Task.Run(() => Posts.List(c.owner, c.repo, c.branch, token));
+                List<string> read = await Task.Run(() => Posts.ReadIds(c.owner, c.repo, c.branch, token, login));
+                int unread = 0;
+                foreach (PostItem p in posts) if (!read.Contains(p.Id)) unread++;
+                sig[1] = "posts:" + unread;
+                List<string> members = await Task.Run(() => GitHubSync.ListDir(c.owner, c.repo, "team", c.branch, token));
+                members.Sort(StringComparer.OrdinalIgnoreCase);
+                sig[0] = "team:" + string.Join(",", members.ToArray());
+                List<ActivityEntry> pub = await Task.Run(() => ActivityLog.Read(c.owner, c.repo, c.branch, token, ActivityLog.PublicPath));
+                sig[4] = "act:" + pub.Count + ":" + (pub.Count == 0 ? "-" : pub[pub.Count - 1].Time);
+            }
+            catch { return; }
+            newsNow.Clear();
+            foreach (KeyValuePair<int, string> kv in sig) newsNow[kv.Key] = kv.Value;
+            ApplyBadges();
+        }
+
+        private void StartNewsTimer()
+        {
+            if (newsTimer == null)
+            {
+                newsTimer = new Timer();
+                newsTimer.Interval = 90000;
+                newsTimer.Tick += delegate { RefreshNews(); };
+            }
+            newsTimer.Start();
+        }
+
+        private void StopNewsTimer()
+        {
+            if (newsTimer != null) newsTimer.Stop();
+            if (navs != null) foreach (SideButton b in navs) if (b != null) b.SetBadge(false);
         }
 
         private void RefreshList()
