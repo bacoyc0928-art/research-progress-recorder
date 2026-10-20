@@ -135,6 +135,24 @@ namespace SRLogbook
             return names;
         }
 
+        public static List<string> ListCollaborators(string owner, string repo, string branch, string token)
+        {
+            List<string> logins = new List<string>();
+            string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                + "/collaborators?per_page=100";
+            JavaScriptSerializer ser = SyncData.Serializer();
+            object[] arr = ser.Deserialize<object[]>(Request("GET", url, token, null));
+            if (arr != null)
+            {
+                foreach (object o in arr)
+                {
+                    Dictionary<string, object> d = o as Dictionary<string, object>;
+                    if (d != null && d.ContainsKey("login")) logins.Add(Convert.ToString(d["login"]));
+                }
+            }
+            return logins;
+        }
+
         public static bool EnsureProfile(string owner, string repo, string branch, string token, string login)
         {
             string sha = null;
