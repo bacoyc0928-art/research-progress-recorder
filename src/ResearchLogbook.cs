@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -382,7 +382,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.1.0";
+            this.Text = "SRPRecorder2027 · 0.1.1";
             this.ClientSize = new Size(1180, 730);
             this.MinimumSize = new Size(1020, 680);
             this.StartPosition = FormStartPosition.CenterScreen;
