@@ -392,6 +392,9 @@ class Client:
         self.login_token=self.tk.StringVar()
         self.login_entry=self.ttk.Entry(bar,textvariable=self.login_token,show='●',width=46)
         self.login_entry.pack(side='left',padx=8)
+        self.login_show=self.tk.BooleanVar(value=False)
+        self.login_show_btn=self.ttk.Checkbutton(bar,text=self.tr('显示','Show'),variable=self.login_show,command=self.toggle_login_show)
+        self.login_show_btn.pack(side='left',padx=4)
         self.login_btn=self.ttk.Button(bar,text=self.tr('登录','Sign In'),command=self.sign_in)
         self.login_btn.pack(side='left',padx=4)
         self.logout_btn=self.ttk.Button(bar,text=self.tr('退出','Sign Out'),command=self.sign_out)
@@ -409,10 +412,12 @@ class Client:
         self.login_name.configure(text=self.session_login if signed else self.tr('未登录','Not signed in'))
         self.login_hint.configure(text=self.tr('已登录 GitHub','Signed in with GitHub') if signed else self.tr('输入密钥后登录','Enter token, then Sign In'))
         if signed:
-            self.login_entry.pack_forget(); self.login_btn.pack_forget(); self.logout_btn.pack(side='left',padx=4)
+            self.login_entry.pack_forget(); self.login_show_btn.pack_forget(); self.login_btn.pack_forget(); self.logout_btn.pack(side='left',padx=4)
         else:
-            self.logout_btn.pack_forget(); self.login_entry.pack(side='left',padx=8); self.login_btn.pack(side='left',padx=4)
+            self.logout_btn.pack_forget(); self.login_entry.pack(side='left',padx=8); self.login_show_btn.pack(side='left',padx=4); self.login_btn.pack(side='left',padx=4)
         self.draw_avatar()
+    def toggle_login_show(self):
+        self.login_entry.configure(show='' if self.login_show.get() else '●')
     def sign_in(self):
         token=self.login_token.get().strip()
         if not token:
