@@ -239,7 +239,12 @@ namespace SRLogbook
         private bool ReadSyncForm(out string owner, out string repo, out string path, out string branch, out string token)
         {
             owner = repo = path = branch = token = "";
+            // The sync page may never have been opened (actions can start from the team page),
+            // so fall back to the saved configuration instead of failing with "owner/repo".
+            SyncConfig saved = GitHubSync.LoadConfig(appDir);
             string full = txtSRepo.Text.Trim();
+            if (full.Length == 0 && !string.IsNullOrEmpty(saved.owner) && !string.IsNullOrEmpty(saved.repo))
+                full = saved.owner + "/" + saved.repo;
             int slash = full.IndexOf('/');
             if (slash <= 0 || slash == full.Length - 1 || full.LastIndexOf('/') != slash)
             {
@@ -249,9 +254,13 @@ namespace SRLogbook
             owner = full.Substring(0, slash).Trim();
             repo = full.Substring(slash + 1).Trim();
             path = txtSPath.Text.Trim();
-            if (path.Length == 0) path = "sync/research_log.json";
+            if (path.Length == 0) path = string.IsNullOrEmpty(saved.path) ? "sync/research_log.json" : saved.path;
             branch = txtSBranch.Text.Trim();
-            if (branch.Length == 0) branch = "main";
+            if (branch.Length == 0) branch = string.IsNullOrEmpty(saved.branch) ? "main" : saved.branch;
+            if (txtSRepo.Text.Trim().Length == 0)
+            {
+                txtSRepo.Text = full; txtSPath.Text = path; txtSBranch.Text = branch;
+            }
             token = txtSToken.Text.Trim();
             if (token == "********") token = "";
             token = CleanToken(token);
