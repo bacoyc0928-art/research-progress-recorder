@@ -373,6 +373,7 @@ class Client:
         self.button(header,'更换工作文件夹','Change Workspace',self.choose_workspace)
         self.button(header,'EN / 中文','中文 / EN',self.language)
         self.book=ttk.Notebook(self.root); self.book.pack(fill='both',expand=True,padx=12,pady=6)
+        self.book.bind('<<NotebookTabChanged>>', lambda e:self.on_tab_changed(e))
         self.tabs=[]
         for zh,en in [('团队研究','Team Research'),('快速发行','Quick Post'),('参考文献与资料','References'),('本地进度','Local Progress'),('团队同步','Team Sync'),('使用说明','Help')]:
             panel=ttk.Frame(self.book,padding=16); self.book.add(panel,text=self.tr(zh,en)); self.tabs.append(panel)
@@ -441,11 +442,19 @@ class Client:
             self.status.set(self.tr('已登录 ','Signed in as ')+login)
         self.run(work,done)
     def sign_out(self):
+        if not self.mb.askyesno('SRPRecorder2027',self.tr('退出登录将直接关闭程序，确定退出？','Signing out closes the app. Continue?'),parent=self.root): return
         self.session_login=''; self.session_token=''; self.login=''
-        self.update_login_ui()
-        try: self.members_tree.delete(*self.members_tree.get_children())
-        except Exception: pass
-        self.status.set(self.tr('已退出登录','Signed out'))
+        self.root.destroy()
+    def require_login(self):
+        if self.session_token: return True
+        self.mb.showinfo('SRPRecorder2027',self.tr('请先在窗口底部登录 GitHub 账号。','Sign in at the bottom first.'),parent=self.root)
+        return False
+    def on_tab_changed(self,event=None):
+        try: index=self.book.index(self.book.select())
+        except Exception: return
+        if index==2 and not self.session_token:
+            self.status.set(self.tr('请先登录后查看参考文献与资料。','Sign in to view References.'))
+            self.book.select(0)
     def log_activity(self,api,login,action,detail):
         try: append_activity(api,login,action,detail)
         except Exception as error: self.status.set(self.tr('活动日志写入失败：','Activity log failed: ')+str(error))
@@ -466,6 +475,7 @@ class Client:
             self.ttk.Button(win,text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
         self.run(work,done)
     def choose_workspace(self):
+        if not self.require_login(): return
         value=self.fd.askdirectory(initialdir=self.config.get('workspace',str(self.files_root)))
         if value: no_links(value); self.config['workspace']=value; atomic(self.configfile,self.config)
     def language(self):
@@ -506,6 +516,7 @@ class Client:
         self.members_tree=self.table(p,[self.tr('GitHub 账号','GitHub login')])
         self.members_tree.bind('<Double-1>',lambda _:self.guarded(self.member_research))
     def choose_personal(self):
+        if not self.require_login(): return
         value=self.fd.askdirectory()
         if value: no_links(value); self.config['personal']=value; atomic(self.configfile,self.config); self.personal_label.configure(text=self.personal_display())
     def open_personal(self):
@@ -709,9 +720,11 @@ class Client:
         self.button(bar,'打开本地资料文件夹','Open Progress Folder',lambda:self.open_path(self.progress.get()))
         self.ttk.Label(p,text=self.tr('在此文件夹编辑文件，完成后到团队同步上传。本机自动保存不等于云端上传。','Edit files in this dedicated folder; upload them from Team Sync when ready. Local saves do not upload automatically.'),wraplength=980).pack(anchor='w',pady=12)
     def choose_progress(self):
+        if not self.require_login(): return
         value=self.fd.askdirectory(initialdir=self.progress.get())
         if value: no_links(value); self.config['progress']=value; self.progress.set(value); atomic(self.configfile,self.config)
     def new_document(self):
+        if not self.require_login(): return
         project=self.ask.askstring(self.tr('新建文档','New Document'),self.tr('项目名称','Project name'),parent=self.root)
         if project:
             title=str(dt.date.today())+' '+project
