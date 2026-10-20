@@ -1,4 +1,4 @@
-name: Build 0.0.2 packages
+name: Build 0.1.0 packages
 on:
   workflow_dispatch:
 permissions:
@@ -9,27 +9,24 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Build and test Windows
+      - name: Test and package Windows
         shell: pwsh
         run: |
-          ./build.ps1
-          New-Item -ItemType Directory verify -Force | Out-Null
-          $sources = Get-ChildItem src -Filter '*.cs' | ForEach-Object FullName
-          $csc = "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
-          & $csc /nologo /target:exe /main:Verify002 /out:verify/verify.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:Microsoft.VisualBasic.dll /r:System.Xml.dll $sources verify_002.cs
-          if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed' }
-          & ./verify/verify.exe
-          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
-          New-Item -ItemType Directory bundle -Force | Out-Null
-          Copy-Item '研究进展记录器.exe',README.md,build.ps1,app.ico,app.manifest bundle
-          Copy-Item src bundle/src -Recurse
-          Compress-Archive -Path bundle/* -DestinationPath research-progress-recorder-0.0.2-Windows.zip
+          ./test-local.ps1 -TestDirectory "$env:RUNNER_TEMP/offline-tests"
+          ./package-local.ps1 -Destination "$env:RUNNER_TEMP/package-010"
+          $package = "$env:RUNNER_TEMP/package-010/SRCRec"
+          if ((Get-Item "$package/SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.1.0.0') { throw 'Incorrect application version' }
+          if ((Get-Item "$package/卸载SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.1.0.0') { throw 'Incorrect uninstaller version' }
+          $unexpected = Get-ChildItem $package -Recurse -File | Where-Object { $_.Extension -in '.pdf','.docx','.json' }
+          if ($unexpected) { throw 'Private data entered the public package' }
+          Copy-Item "$env:RUNNER_TEMP/package-010/research-progress-recorder-0.1.0-Windows.zip" .
       - uses: actions/upload-artifact@v4
         with:
-          name: windows
-          path: research-progress-recorder-0.0.2-Windows.zip
+          name: windows-0.1.0
+          path: research-progress-recorder-0.1.0-Windows.zip
+          if-no-files-found: error
   macos:
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -44,22 +41,44 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Test data handling and macOS GUI
+      - name: Test file channels and macOS GUI
         run: |
-          python -m unittest test_mac_client.py -v
+          python -m unittest test_mac_client.py test_file_channels.py -v
           python mac-client.py --smoke-test
-      - name: Build app bundle
+          bash -n 卸载工具/uninstall-macos.command
+      - name: Build and verify app
         run: |
           python -m pip install pyinstaller==6.22.3
           python -m PyInstaller --noconfirm --clean --windowed --name ResearchProgressRecorder --osx-bundle-identifier org.syncresearch.recorder mac-client.py
-          plutil -replace CFBundleShortVersionString -string 0.0.2 dist/ResearchProgressRecorder.app/Contents/Info.plist
-          plutil -insert CFBundleVersion -string 0.0.2 dist/ResearchProgressRecorder.app/Contents/Info.plist
-          codesign --force --deep --sign - dist/ResearchProgressRecorder.app
-          dist/ResearchProgressRecorder.app/Contents/MacOS/ResearchProgressRecorder --smoke-test
-          codesign --verify --deep --strict --verbose=2 dist/ResearchProgressRecorder.app
-          cd dist
-          ditto -c -k --sequesterRsrc --keepParent ResearchProgressRecorder.app ../research-progress-recorder-0.0.2-macOS-${{ matrix.arch }}.zip
+          app=dist/ResearchProgressRecorder.app
+          plutil -replace CFBundleShortVersionString -string 0.1.0 "$app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 0.1.0' "$app/Contents/Info.plist"
+          codesign --force --deep --sign - "$app"
+          "$app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
+          codesign --verify --deep --strict --verbose=2 "$app"
+          file "$app/Contents/MacOS/ResearchProgressRecorder"
+      - name: Create and verify DMG
+        run: |
+          mkdir dmg-root
+          ditto dist/ResearchProgressRecorder.app dmg-root/ResearchProgressRecorder.app
+          ln -s /Applications dmg-root/Applications
+          cp README.md dmg-root/README.md
+          cp 卸载工具/uninstall-macos.command dmg-root/uninstall-macos.command
+          chmod +x dmg-root/uninstall-macos.command
+          image=research-progress-recorder-0.1.0-macOS-${{ matrix.arch }}.dmg
+          hdiutil create -volname 'Research Progress Recorder 0.1.0' -srcfolder dmg-root -format UDZO -fs HFS+ "$image"
+          hdiutil verify "$image"
+          mount="$RUNNER_TEMP/verify-dmg"
+          mkdir "$mount"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" "$image"
+          trap 'hdiutil detach "$mount"' EXIT
+          codesign --verify --deep --strict --verbose=2 "$mount/ResearchProgressRecorder.app"
+          "$mount/ResearchProgressRecorder.app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
+          test -x "$mount/uninstall-macos.command"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/ResearchProgressRecorder.app/Contents/Info.plist")" = '0.1.0'
+          shasum -a 256 "$image"
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}
-          path: research-progress-recorder-0.0.2-macOS-${{ matrix.arch }}.zip
+          name: macos-${{ matrix.arch }}-0.1.0
+          path: research-progress-recorder-0.1.0-macOS-${{ matrix.arch }}.dmg
+          if-no-files-found: error
