@@ -31,7 +31,7 @@ namespace SRLogbook
             h.Font = Theme.FB(13f);
             h.ForeColor = Theme.Navy;
             h.BackColor = Color.White;
-            h.SetBounds(Ui.S(2), Ui.S(12), Ui.S(300), Ui.S(28));
+            h.SetBounds(Ui.S(2), Ui.S(12), Ui.S(460), Ui.S(28));
             top.Controls.Add(h);
 
             Label sub = new Label();
@@ -39,12 +39,12 @@ namespace SRLogbook
             sub.Font = Theme.F(8.8f);
             sub.ForeColor = Theme.TextMuted;
             sub.BackColor = Color.White;
-            sub.SetBounds(Ui.S(2), Ui.S(44), Ui.S(820), Ui.S(20));
+            sub.SetBounds(Ui.S(2), Ui.S(44), Ui.S(980), Ui.S(40));
             top.Controls.Add(sub);
 
             FlowLayoutPanel topRight = new FlowLayoutPanel();
             topRight.Dock = DockStyle.Right;
-            topRight.Width = Ui.S(470);
+            topRight.Width = Ui.S(640);
             topRight.FlowDirection = FlowDirection.RightToLeft;
             topRight.WrapContents = false;
             topRight.BackColor = Color.White;
@@ -75,7 +75,7 @@ namespace SRLogbook
             ph.Font = Theme.FB(10.5f);
             ph.ForeColor = Theme.Navy;
             ph.BackColor = Color.White;
-            ph.SetBounds(Ui.S(2), Ui.S(8), Ui.S(120), Ui.S(22));
+            ph.SetBounds(Ui.S(2), Ui.S(8), Ui.S(230), Ui.S(22));
             pp.Controls.Add(ph);
 
             lblPersonal = new LinkLabel();
@@ -83,7 +83,7 @@ namespace SRLogbook
             lblPersonal.Font = Theme.FB(10f);
             lblPersonal.LinkColor = Theme.Accent;
             lblPersonal.BackColor = Color.White;
-            lblPersonal.SetBounds(Ui.S(132), Ui.S(8), Ui.S(600), Ui.S(22));
+            lblPersonal.SetBounds(Ui.S(240), Ui.S(8), Ui.S(520), Ui.S(22));
             lblPersonal.AutoEllipsis = false;
             lblPersonal.LinkClicked += delegate { OpenPersonalFolder(); };
             pp.Controls.Add(lblPersonal);
@@ -100,7 +100,7 @@ namespace SRLogbook
 
             FlowLayoutPanel ppRight = new FlowLayoutPanel();
             ppRight.Dock = DockStyle.Right;
-            ppRight.Width = Ui.S(330);
+            ppRight.Width = Ui.S(520);
             ppRight.FlowDirection = FlowDirection.RightToLeft;
             ppRight.WrapContents = false;
             ppRight.BackColor = Color.White;
@@ -346,9 +346,7 @@ namespace SRLogbook
                     string refs = string.IsNullOrEmpty(personal) ? null : Path.Combine(personal, "references");
                     if (refs != null && Directory.Exists(refs) && Directory.GetFiles(refs, "*", SearchOption.AllDirectories).Length > 0)
                     { ShowMemberFiles(login + "（我）", refs); return; }
-                    Msg.Show(Lang.En
-                        ? "These are your own files. Uploaded copies live in the personal folder's references subfolder; use Remove My Uploaded References to manage the team area."
-                        : "这是你自己的账号。你上传的副本在个人文件夹的 references 子目录；团队区的文件请用“撤除我上传的参考资料”管理。", "团队研究");
+                    Msg.Show("这是你自己的账号。你上传的副本在个人文件夹的 references 子目录；团队区的文件请用“撤除我上传的参考资料”管理。 / These are your own files; use Remove My Uploaded References to manage the team area.", "团队研究");
                     if (!string.IsNullOrEmpty(personal) && Directory.Exists(personal)) OpenPath(personal);
                     return;
                 }
@@ -405,18 +403,18 @@ namespace SRLogbook
             d.BackColor = Color.White;
             d.SetBounds(Ui.S(18), Ui.S(34), Ui.S(500), Ui.S(18));
             card.Controls.Add(d);
-            Button view = new Button(); view.Text = Lang.En ? "Open Folder" : "打开文件夹";
-            view.SetBounds(card.Width - Ui.S(150), Ui.S(16), Ui.S(130), Ui.S(32));
+            Button view = new Button(); view.Text = "打开文件夹 / Open Folder";
+            view.SetBounds(card.Width - Ui.S(210), Ui.S(16), Ui.S(190), Ui.S(32));
             string login = name.Replace("（我）", "");
             view.Click += delegate { ShowMemberResearch(login); };
             card.Controls.Add(view);
             if (me)
             {
-                int labelWidth = Math.Max(Ui.S(160), card.Width - Ui.S(150) - Ui.S(160) - Ui.S(24));
+                int labelWidth = Math.Max(Ui.S(160), card.Width - Ui.S(210) - Ui.S(220) - Ui.S(24));
                 n.Width = labelWidth; d.Width = labelWidth;
-                Button remove = TeamBtn(Lang.En ? "Remove My References" : "撤除参考资料");
+                Button remove = TeamBtn("撤除参考资料 / Remove");
                 remove.AutoSize = false;
-                remove.SetBounds(card.Width - Ui.S(150) - Ui.S(160), Ui.S(16), Ui.S(150), Ui.S(32));
+                remove.SetBounds(card.Width - Ui.S(210) - Ui.S(220), Ui.S(16), Ui.S(210), Ui.S(32));
                 remove.Click += delegate { RemoveMyUploadedRefs(); };
                 card.Controls.Add(remove);
             }
