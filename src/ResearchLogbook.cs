@@ -807,6 +807,13 @@ namespace SRLogbook
             };
         }
 
+        private bool RequireLogin(string caption)
+        {
+            if (!string.IsNullOrEmpty(sessionToken)) return true;
+            Msg.Show("请先在左下角登录 GitHub 账号。", caption);
+            return false;
+        }
+
         private void UpdateLoginUi()
         {
             if (loginNameLabel == null) return;
@@ -816,6 +823,7 @@ namespace SRLogbook
                 ? (Lang.En ? "Signed in with GitHub" : "已登录 GitHub")
                 : (Lang.En ? "Enter token, then Sign In" : "输入密钥后登录");
             if (loginTokenBox != null) loginTokenBox.Visible = !signed;
+            if (helpEditor != null) helpEditor.ReadOnly = !signed;
             if (loginButton != null) loginButton.Visible = !signed;
             if (logoutButton != null) logoutButton.Visible = signed;
             if (avatarPanel != null) avatarPanel.Invalidate();
@@ -855,10 +863,11 @@ namespace SRLogbook
 
         private void SignOut()
         {
+            if (Msg.Show("退出登录将直接关闭程序，确定退出？", "退出登录", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             sessionToken = null;
             sessionLogin = null;
             UpdateLoginUi();
-            RefreshTeamPage();
+            Close();
         }
 
         private void BuildHeader()
@@ -1407,6 +1416,11 @@ namespace SRLogbook
         {
             if (idx < 0 || idx >= pages.Length) throw new ArgumentOutOfRangeException("idx");
             if (saveTimer != null && saveTimer.Enabled) { saveTimer.Stop(); SaveCurrent(); }
+            if (idx == 2 && string.IsNullOrEmpty(sessionToken))
+            {
+                Msg.Show("请先在左下角登录 GitHub 账号，再查看参考文献与资料。", "参考文献与资料");
+                idx = 0;
+            }
             if (idx == 5 && helpEditor != null && !helpDirty)
                 LoadHelpFromGitHub(false);
             if (idx == 4 && !Directory.Exists(LoadProgressFolder()))
