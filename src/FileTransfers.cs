@@ -52,8 +52,9 @@ namespace SRLogbook
         {
             destination = Path.GetFullPath(destination).TrimEnd(Path.DirectorySeparatorChar);
             NoLinks(destination);
-            string stage = destination + ".download-" + Guid.NewGuid().ToString("N");
-            string backup = destination + ".backup-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 6);
+            // Keep the suffixes short: long member filenames plus a long suffix can exceed MAX_PATH.
+            string stage = destination + ".dl-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            string backup = destination + ".bak-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 4);
             Directory.CreateDirectory(stage);
             bool moved = false;
             try
