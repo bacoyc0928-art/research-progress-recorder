@@ -681,8 +681,8 @@ namespace SRLogbook
             divider.SetBounds(22, 118, 188, 1);
             sidebar.Controls.Add(divider);
 
-            navs = new SideButton[5];
-            string[] texts = new string[] { "团队研究", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
+            navs = new SideButton[6];
+            string[] texts = new string[] { "团队研究", "快速发行", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
             for (int i = 0; i < texts.Length; i++)
             {
                 int idx = i;
@@ -911,12 +911,13 @@ namespace SRLogbook
             pagesHost.Padding = new Padding(18);
             Controls.Add(pagesHost);
 
-            pages = new Panel[5];
+            pages = new Panel[6];
             pages[0] = BuildTeamPage();
-            pages[1] = BuildRefsAndCategoriesPage();
-            pages[2] = BuildLocalProgressPage();
-            pages[3] = BuildSyncPage();
-            pages[4] = BuildHelpPage();
+            pages[1] = BuildPostsPage();
+            pages[2] = BuildRefsAndCategoriesPage();
+            pages[3] = BuildLocalProgressPage();
+            pages[4] = BuildSyncPage();
+            pages[5] = BuildHelpPage();
             for (int i = 0; i < pages.Length; i++)
             {
                 pages[i].Dock = DockStyle.Fill;
@@ -1376,12 +1377,12 @@ namespace SRLogbook
         {
             if (idx < 0 || idx >= pages.Length) throw new ArgumentOutOfRangeException("idx");
             if (saveTimer != null && saveTimer.Enabled) { saveTimer.Stop(); SaveCurrent(); }
-            if (idx == 4 && helpEditor != null && !helpDirty)
+            if (idx == 5 && helpEditor != null && !helpDirty)
                 LoadHelpFromGitHub(false);
-            if (idx == 3 && !Directory.Exists(LoadProgressFolder()))
+            if (idx == 4 && !Directory.Exists(LoadProgressFolder()))
             {
                 Msg.Show("请先在“本地进度”选择文件夹，否则无法进入团队同步。", "本地进度");
-                idx = 2;
+                idx = 3;
             }
             pageIndex = idx;
             for (int i = 0; i < pages.Length; i++)
@@ -1389,12 +1390,13 @@ namespace SRLogbook
                 pages[i].Visible = (i == idx);
                 navs[i].SetSelected(i == idx);
             }
-            string[] titles = new string[] { "团队研究", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
+            string[] titles = new string[] { "团队研究", "快速发行", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
             lblHeaderTitle.Text = titles[idx];
             if (idx == 0) RefreshTeamPage();
-            if (idx == 1) RebuildRefs();
-            if (idx == 2 && txtProgPath != null) txtProgPath.Text = LoadProgressFolder();
-            if (idx == 3) RefreshSyncPage();
+            if (idx == 1) RefreshPostsPage();
+            if (idx == 2) RebuildRefs();
+            if (idx == 3 && txtProgPath != null) txtProgPath.Text = LoadProgressFolder();
+            if (idx == 4) RefreshSyncPage();
             Lang.Apply(this);
         }
 
