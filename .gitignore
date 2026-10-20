@@ -1,0 +1,8 @@
+research_log*.json
+sync_config.json
+startup_error.txt
+*.candidate.exe
+*.png
+本地文档/
+*.user
+*.suo
