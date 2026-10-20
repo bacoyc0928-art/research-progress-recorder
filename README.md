@@ -1,5 +1,6 @@
 # Research Progress Recorder 0.0.2 / 研究进展记录器
 
+警告：当前版本为测试版本，上传的所有数据信息，以及程序运行时的信息和内容随时有可能丢失。后续代码以及程序功能的根本性变更有可能随时发生。
 Windows 和 macOS 桌面客户端，共用私有数据仓库 bacoyc0928-art/research-data。
 
 ## 下载与启动
