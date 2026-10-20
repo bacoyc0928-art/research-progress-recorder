@@ -976,6 +976,7 @@ namespace SRLogbook
             string login = sessionLogin, token = sessionToken;
             try { await Task.Run(() => ActivityLog.Append(c.owner, c.repo, c.branch, token, login, action, detail, toPublic)); }
             catch (Exception ex) { Log("活动日志写入失败 / Activity log failed: " + ex.Message); }
+            RefreshNews();
         }
 
         private void Log(string text)
