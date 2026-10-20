@@ -99,7 +99,7 @@ namespace SRLogbook
             if (keepY > 0) catsFlow.AutoScrollPosition = new Point(0, keepY);
             if (btnAddCat != null && catsTop != null)
                 btnAddCat.Left = Math.Max(Ui.S(0), catsTop.Width - btnAddCat.Width - Ui.S(22));
-            if (Lang.En) Lang.Apply(catsFlow);
+            Lang.Apply(catsFlow);
         }
 
         private void OpenLinkSafe(Category c, CatLink l)
@@ -443,7 +443,7 @@ namespace SRLogbook
                 shown++;
             }
             p3.ResumeLayout();
-            if (Lang.En) Lang.Apply(p3);
+            Lang.Apply(p3);
         }
 
 
@@ -871,7 +871,7 @@ namespace SRLogbook
             cancel.SetBounds(Ui.S(458), Ui.S(496), Ui.S(100), Ui.S(38));
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             Controls.Add(cancel);
-            if (Lang.En) Lang.Apply(this);
+            Lang.Apply(this);
         }
 
         private void AddLabel(string text, int x, int y)
