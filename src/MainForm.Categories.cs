@@ -236,6 +236,7 @@ namespace SRLogbook
 
         private void EditCategory(Category src)
         {
+            if (!RequireLogin("研究类别")) return;
             using (CategoryForm f = new CategoryForm(src))
             {
                 if (f.ShowDialog(this) != DialogResult.OK) return;
@@ -273,6 +274,7 @@ namespace SRLogbook
 
         private void DeleteCategory(Category c)
         {
+            if (!RequireLogin("研究类别")) return;
             if (Msg.Show("删除类别“" + c.Name + "”？该类别下的记录不会被删除，会变为未归类。", "删除类别", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             foreach (Entry e in store.Entries) if (e.Category == c.Name) { e.Category = ""; e.Updated = SyncData.Now(); }
             foreach (LocalDoc d in store.Documents) if (d.Category == c.Name) d.Category = "";
@@ -686,6 +688,7 @@ namespace SRLogbook
 
         private void RemoveSelectedDoc()
         {
+            if (!RequireLogin("本地文档")) return;
             if (lstDocs == null || lstDocs.SelectedIndex < 0 || lstDocs.SelectedIndex >= store.Documents.Count) return;
             LocalDoc d = store.Documents[lstDocs.SelectedIndex];
             if (Msg.Show("删除“" + d.Name + "”？\r\n这会将该文档移入回收站。", "删除文档", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
@@ -707,6 +710,7 @@ namespace SRLogbook
 
         private void CreateLocalDoc()
         {
+            if (!RequireLogin("本地文档")) return;
             string project = txtDProject.Text.Trim();
             if (project.Length == 0) project = "Untitled";
             string title = txtDTitle.Text.Trim();
