@@ -186,6 +186,7 @@ namespace SRLogbook
 
         private void ChoosePersonalFolder()
         {
+            if (!RequireLogin("团队研究")) return;
             using (FolderBrowserDialog d = new FolderBrowserDialog())
             {
                 d.Description = "选择个人研究文件夹（存放你上传到 GitHub 的个人资料）";
