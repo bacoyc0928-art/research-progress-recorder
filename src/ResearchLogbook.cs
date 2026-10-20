@@ -1412,20 +1412,24 @@ namespace SRLogbook
 
 
 
-        private void SetPage(int idx)
+        private void SetPage(int idx) { SetPage(idx, true); }
+
+        /// <summary>切换页面。interactive=false 用于程序化导航（--shot 截图自检、离线测试），
+        /// 此时拦截不弹模态对话框，否则无人点击会让进程永久阻塞（曾导致 Windows CI 卡满 15 分钟超时）。</summary>
+        private void SetPage(int idx, bool interactive)
         {
             if (idx < 0 || idx >= pages.Length) throw new ArgumentOutOfRangeException("idx");
             if (saveTimer != null && saveTimer.Enabled) { saveTimer.Stop(); SaveCurrent(); }
             if (idx == 2 && string.IsNullOrEmpty(sessionToken))
             {
-                Msg.Show("请先在左下角登录 GitHub 账号，再查看参考文献与资料。", "参考文献与资料");
+                if (interactive) Msg.Show("请先在左下角登录 GitHub 账号，再查看参考文献与资料。", "参考文献与资料");
                 idx = 0;
             }
             if (idx == 5 && helpEditor != null && !helpDirty)
                 LoadHelpFromGitHub(false);
             if (idx == 4 && !Directory.Exists(LoadProgressFolder()))
             {
-                Msg.Show("请先在“本地进度”选择文件夹，否则无法进入团队同步。", "本地进度");
+                if (interactive) Msg.Show("请先在“本地进度”选择文件夹，否则无法进入团队同步。", "本地进度");
                 idx = 3;
             }
             pageIndex = idx;
@@ -1934,7 +1938,7 @@ namespace SRLogbook
             }
         }
 
-        public void SetPagePublic(int idx) { SetPage(idx); }
+        public void SetPagePublic(int idx) { SetPage(idx, false); }
 
         public void SetSizePublic(int w, int h) { this.ClientSize = new Size(w, h); }
 
