@@ -420,7 +420,7 @@ namespace SRLogbook
                 lstEntries.SelectedIndex = 0;
             }
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (syncBusy || teamLoading) { e.Cancel = true; return; } saveTimer.Stop(); SaveCurrent(); };
-            if (Lang.En) Lang.Apply(this);
+            Lang.Apply(this);
         }
 
         private string ComputeProjectRoot()
@@ -657,7 +657,7 @@ namespace SRLogbook
         {
             sidebar = new Panel();
             sidebar.Dock = DockStyle.Left;
-            sidebar.Width = 220;
+            sidebar.Width = 252;
             sidebar.BackColor = Theme.Navy;
             Controls.Add(sidebar);
 
@@ -683,18 +683,18 @@ namespace SRLogbook
             sidebar.Controls.Add(divider);
 
             navs = new SideButton[6];
-            string[] texts = new string[] { "团队研究", "快速发行", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
+            string[] texts = new string[] { "团队研究 / Team", "Quick Post", "参考资料 / Refs", "本地进度 / Progress", "团队同步 / Sync", "使用说明 / Help" };
             for (int i = 0; i < texts.Length; i++)
             {
                 int idx = i;
-                navs[i] = new SideButton(texts[i], 136 + i * 46, 220);
+                navs[i] = new SideButton(texts[i], 136 + i * 46, 252);
                 navs[i].Clicked += delegate { SetPage(idx); };
                 sidebar.Controls.Add(navs[i]);
             }
 
             loginPanel = new Panel();
             loginPanel.BackColor = Theme.Navy;
-            loginPanel.SetBounds(14, 0, 192, 122);
+            loginPanel.SetBounds(14, 0, 224, 122);
             sidebar.Controls.Add(loginPanel);
 
             avatarPanel = new Panel();
@@ -721,21 +721,21 @@ namespace SRLogbook
             loginNameLabel.Font = Theme.FB(9.5f);
             loginNameLabel.ForeColor = Color.White;
             loginNameLabel.BackColor = Theme.Navy;
-            loginNameLabel.SetBounds(50, 2, 142, 20);
+            loginNameLabel.SetBounds(50, 2, 174, 20);
             loginPanel.Controls.Add(loginNameLabel);
 
             loginHintLabel = new Label();
             loginHintLabel.Font = Theme.F(7.6f);
             loginHintLabel.ForeColor = Color.FromArgb(150, 166, 190);
             loginHintLabel.BackColor = Theme.Navy;
-            loginHintLabel.SetBounds(50, 22, 142, 18);
+            loginHintLabel.SetBounds(50, 22, 174, 18);
             loginPanel.Controls.Add(loginHintLabel);
 
             loginTokenBox = new TextBox();
             loginTokenBox.Font = Theme.F(8.8f);
             loginTokenBox.UseSystemPasswordChar = true;
             loginTokenBox.ShortcutsEnabled = true;
-            loginTokenBox.SetBounds(0, 50, 148, 26);
+            loginTokenBox.SetBounds(0, 50, 132, 26);
             // WinForms blocks Ctrl+C on password fields; copy the selection ourselves.
             loginTokenBox.KeyDown += delegate(object s, KeyEventArgs e)
             {
@@ -750,19 +750,19 @@ namespace SRLogbook
             loginPanel.Controls.Add(loginTokenBox);
 
             loginShowButton = new Button();
-            loginShowButton.Text = "显示";
-            loginShowButton.Font = Theme.F(7.6f);
+            loginShowButton.Text = "显示 / Show";
+            loginShowButton.Font = Theme.F(7.2f);
             loginShowButton.FlatStyle = FlatStyle.Flat;
             loginShowButton.FlatAppearance.BorderColor = Color.FromArgb(90, 106, 134);
             loginShowButton.FlatAppearance.BorderSize = 1;
             loginShowButton.BackColor = Color.FromArgb(48, 62, 92);
             loginShowButton.ForeColor = Color.White;
             loginShowButton.Cursor = Cursors.Hand;
-            loginShowButton.SetBounds(152, 50, 40, 26);
+            loginShowButton.SetBounds(136, 50, 86, 26);
             loginShowButton.Click += delegate
             {
                 loginTokenBox.UseSystemPasswordChar = !loginTokenBox.UseSystemPasswordChar;
-                loginShowButton.Text = loginTokenBox.UseSystemPasswordChar ? "显示" : "隐藏";
+                loginShowButton.Text = loginTokenBox.UseSystemPasswordChar ? "显示 / Show" : "隐藏 / Hide";
             };
             loginPanel.Controls.Add(loginShowButton);
 
@@ -818,11 +818,12 @@ namespace SRLogbook
         {
             if (loginNameLabel == null) return;
             bool signed = !string.IsNullOrEmpty(sessionLogin);
-            loginNameLabel.Text = signed ? sessionLogin : (Lang.En ? "Not signed in" : "未登录");
+            loginNameLabel.Text = signed ? sessionLogin : "未登录 / Not signed in";
             loginHintLabel.Text = signed
-                ? (Lang.En ? "Signed in with GitHub" : "已登录 GitHub")
-                : (Lang.En ? "Enter token, then Sign In" : "输入密钥后登录");
+                ? "已登录 / Signed in"
+                : "输入密钥登录 / Sign in";
             if (loginTokenBox != null) loginTokenBox.Visible = !signed;
+            if (loginShowButton != null) loginShowButton.Visible = !signed;
             if (helpEditor != null) helpEditor.ReadOnly = !signed;
             if (loginButton != null) loginButton.Visible = !signed;
             if (logoutButton != null) logoutButton.Visible = signed;
@@ -836,11 +837,11 @@ namespace SRLogbook
             string token = CleanToken(loginTokenBox.Text);
             if (token.Length == 0)
             {
-                Msg.Show(Lang.En ? "Paste your GitHub token first." : "请先粘贴你的 GitHub 访问密钥。", "登录");
+                Msg.Show("请先粘贴你的 GitHub 访问密钥 / Paste your GitHub token first.", "登录");
                 return;
             }
             loginButton.Enabled = false;
-            loginHintLabel.Text = Lang.En ? "Checking…" : "正在验证…";
+            loginHintLabel.Text = "正在验证… / Checking…";
             try
             {
                 string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
@@ -856,7 +857,7 @@ namespace SRLogbook
                 sessionToken = null;
                 sessionLogin = null;
                 UpdateLoginUi();
-                Msg.Show((Lang.En ? "Sign-in failed: " : "登录失败：") + ex.Message, "登录", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Msg.Show("登录失败 / Sign-in failed: " + ex.Message, "登录", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally { loginButton.Enabled = true; Lang.Apply(this); }
         }
@@ -887,31 +888,11 @@ namespace SRLogbook
 
             lblHeaderTitle = new Label();
             lblHeaderTitle.Text = "研究日志";
-            lblHeaderTitle.Font = Theme.FB(17f);
+            lblHeaderTitle.Font = Theme.FB(15.5f);
             lblHeaderTitle.ForeColor = Theme.Navy;
             lblHeaderTitle.BackColor = Color.White;
-            lblHeaderTitle.SetBounds(28, 16, 520, 30);
+            lblHeaderTitle.SetBounds(28, 16, 700, 30);
             header.Controls.Add(lblHeaderTitle);
-
-            Button bLang = new Button();
-            bLang.Text = Lang.En ? "中文" : "EN";
-            bLang.Font = Theme.F(8.8f);
-            bLang.FlatStyle = FlatStyle.Flat;
-            bLang.FlatAppearance.BorderSize = 1;
-            bLang.FlatAppearance.BorderColor = Theme.CardBorder;
-            bLang.BackColor = Color.White;
-            bLang.ForeColor = Theme.TextMain;
-            bLang.Cursor = Cursors.Hand;
-            bLang.SetBounds(header.Width - 240, 24, 56, 40);
-            bLang.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            bLang.Click += delegate
-            {
-                Lang.En = !Lang.En;
-                Lang.Save(appDir);
-                Lang.ApplyAll();
-                bLang.Text = Lang.En ? "中文" : "EN";
-            };
-            header.Controls.Add(bLang);
 
             Button bWs = new Button();
             bWs.Text = "更换工作文件夹";
@@ -922,7 +903,7 @@ namespace SRLogbook
             bWs.BackColor = Color.White;
             bWs.ForeColor = Theme.TextMain;
             bWs.Cursor = Cursors.Hand;
-            bWs.SetBounds(header.Width - 430, 24, 180, 40);
+            bWs.SetBounds(header.Width - 560, 24, 270, 40);
             bWs.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             bWs.Click += delegate { ChangeWorkspace(); };
             header.Controls.Add(bWs);
@@ -936,7 +917,7 @@ namespace SRLogbook
             bOpen.BackColor = Color.White;
             bOpen.ForeColor = Theme.TextMain;
             bOpen.Cursor = Cursors.Hand;
-            bOpen.SetBounds(header.Width - 176, 24, 166, 40);
+            bOpen.SetBounds(header.Width - 276, 24, 248, 40);
             bOpen.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             bOpen.Click += delegate { OpenPath(projectRoot); };
             header.Controls.Add(bOpen);
@@ -1438,7 +1419,7 @@ namespace SRLogbook
                 pages[i].Visible = (i == idx);
                 navs[i].SetSelected(i == idx);
             }
-            string[] titles = new string[] { "团队研究", "快速发行", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
+            string[] titles = new string[] { "团队研究", "Quick Post", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
             lblHeaderTitle.Text = titles[idx];
             if (idx == 0) RefreshTeamPage();
             if (idx == 1) RefreshPostsPage();
