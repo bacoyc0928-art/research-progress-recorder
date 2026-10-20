@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -24,6 +24,10 @@ namespace SRLogbook
         
         
         private string syncScope = "entries,categories";
+        private Button btnOthers;
+        private Button btnDefault;
+        private Button btnUpRefs;
+        private Button btnUpProgress;
 
         private Panel BuildSyncPage()
         {
@@ -49,7 +53,7 @@ namespace SRLogbook
             card.Controls.Add(h);
 
             Label hint = new Label();
-            hint.Text = "每位成员使用自己的 GitHub 账号和访问密钥。进度记录、类别及相关材料链接会同步；本地文件和文档本身不会上传。";
+            hint.Text = "每位成员使用自己的 GitHub 账号和访问密钥。可下载成员文件或默认资料库，并上传本人选择的参考文件、本地进度文件夹；每个文件最大 50 MiB。";
             hint.Font = Theme.F(8.6f);
             hint.ForeColor = Theme.TextMuted;
             hint.BackColor = Color.White;
@@ -80,6 +84,8 @@ namespace SRLogbook
             txtSToken.UseSystemPasswordChar = true;
             txtSToken.SetBounds(24, 182, 620, 30);
             card.Controls.Add(txtSToken);
+            Button saveConfig = SButton("验证并保存配置", 654, 182, 180);
+            saveConfig.Click += delegate { ValidateAndSaveSyncConfig(); };
 
             Label sc = new Label();
             sc.Text = "同步内容：";
@@ -87,28 +93,23 @@ namespace SRLogbook
             sc.ForeColor = Theme.TextMuted;
             sc.BackColor = Color.White;
             sc.SetBounds(24, 220, 80, 24);
-            card.Controls.Add(sc);
+            sc.Visible = false;
             chkSyncEntries = Chk("记录", 100, 220);
             chkSyncCategories = Chk("类别", 170, 220);
+            chkSyncEntries.Visible = chkSyncCategories.Visible = false;
 
 
-            Button bSave = SButton("保存配置", 24, 254, 110);
-            bSave.Click += delegate { ValidateAndSaveSyncConfig(); };
-            Button bTest = SButton("测试连接", 144, 254, 110);
-            bTest.Click += delegate { TestSyncConnection(); };
-            Button bPull = SButton("从 GitHub 合并", 264, 254, 130);
-            bPull.Click += delegate { PullSync(); };
-            Button bPush = SButton("合并后上传", 404, 254, 130);
-            bPush.Click += delegate { UploadSync(); };
-            Button bAll = SButton("一键同步", 544, 254, 110);
-            bAll.Click += delegate { SyncAll(); };
-            bAll.BackColor = Theme.Accent;
-            bAll.ForeColor = Color.White;
+            btnOthers = SButton("从 GitHub 下载他人内容", 24, 254, 220);
+            btnOthers.Click += delegate { PullOthersContent(); };
+            btnDefault = SButton("从 GitHub 下载默认资料库", 254, 254, 230);
+            btnDefault.Click += delegate { PullDefaultLibrary(); };
+            btnUpRefs = SButton("上传参考资料", 24, 294, 180);
+            btnUpRefs.Click += delegate { UploadRefsAction(); };
+            btnUpProgress = SButton("上传本地进度", 214, 294, 180);
+            btnUpProgress.Click += delegate { UploadProgressFolder(); };
 
-            Button bRefs = SButton("上传参考资料", 24, 294, 130);
-            bRefs.Click += delegate { UploadRefsChannel(); };
-            Button bMine = SButton("上传个人研究", 164, 294, 130);
-            bMine.Click += delegate { UploadMyResearch(); };
+            txtSToken.TextChanged += delegate { UpdateSyncActionState(); };
+            UpdateSyncActionState();
 
             lblSStatus = new Label();
             lblSStatus.Font = Theme.F(8.6f);
@@ -221,7 +222,7 @@ namespace SRLogbook
             txtSToken.Text = GitHubSync.HasToken() ? "********" : "";
             ApplyScope(c.scope);
             if (string.IsNullOrEmpty(txtSLog.Text))
-                txtSLog.Text = "提示：仓库需为私有仓库；每人使用自己的令牌。个人仓库的协作者目前需使用 classic PAT（repo 权限）。";
+                txtSLog.Text = Lang.En ? "Use your own token for the private data repository. Personal-repository collaborators need a classic PAT with repo scope." : "提示：数据仓库保持私有；每人使用自己的令牌。个人仓库协作者使用 classic PAT（repo 权限）。";
         }
 
         private bool ReadSyncForm(out string owner, out string repo, out string path, out string branch, out string token)
@@ -241,7 +242,7 @@ namespace SRLogbook
             branch = txtSBranch.Text.Trim();
             if (branch.Length == 0) branch = "main";
             token = txtSToken.Text.Trim();
-            if (token == "********") token = SecretStore.Load(GitHubSync.TokenTarget);
+            if (token == "********" || token.Length == 0) token = SecretStore.Load(GitHubSync.TokenTarget);
             if (string.IsNullOrEmpty(token))
             {
                 Msg.Show("请填写你自己的 GitHub 访问密钥。", "团队同步");
@@ -288,7 +289,7 @@ namespace SRLogbook
 
         private async void PullSync()
         {
-            if (syncBusy) return;
+            if (syncBusy || teamLoading) return;
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             syncBusy = true;
@@ -322,7 +323,7 @@ namespace SRLogbook
 
         private async void SyncAll()
         {
-            if (syncBusy) return;
+            if (syncBusy || teamLoading) return;
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             syncBusy = true;
@@ -381,7 +382,7 @@ namespace SRLogbook
 
         private async void ValidateAndSaveSyncConfig()
         {
-            if (syncBusy) return;
+            if (syncBusy || teamLoading) return;
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             syncBusy = true; syncCard.Enabled = false;
@@ -441,11 +442,33 @@ namespace SRLogbook
             }
         }
 
+        private void AddPersonalRefs()
+        {
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Filter = "所有文件|*.*";
+                d.Multiselect = true;
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                int added = 0;
+                foreach (string f in d.FileNames)
+                {
+                    if (store.Refs.Find(x => x.Path == f) == null)
+                    {
+                        store.Refs.Add(new RefItem { Title = Path.GetFileName(f), Path = f, RelPath = "", Kind = "file", Personal = true });
+                        added++;
+                    }
+                }
+                Persist();
+                RebuildRefs();
+                Msg.Show("已添加 " + added + " 条个人参考资料。", "团队同步");
+            }
+        }
+
         private void UploadRefsChannel() { UploadPersonal(false); }
         private void UploadMyResearch() { UploadPersonal(true); }
         private async void UploadPersonal(bool research)
         {
-            if (syncBusy) return;
+            if (syncBusy || teamLoading) return;
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             string folder = LoadPersonalFolder();
@@ -458,7 +481,17 @@ namespace SRLogbook
                 var files = new Dictionary<string, string>();
                 var ser = SyncData.Serializer();
                 if (research) { files["research.json"] = ser.Serialize(store.Entries); files["documents.json"] = ser.Serialize(store.Documents); }
-                else files["references.json"] = ser.Serialize(store.Refs);
+                else
+                {
+                    List<RefItem> mine = store.Refs.FindAll(x => x.Personal);
+                    if (mine.Count == 0)
+                    {
+                        Msg.Show("没有个人参考资料可上传。请先在“参考文献与资料”页添加个人资料。", "团队同步");
+                        lblSStatus.Text = "没有个人参考资料。";
+                        return;
+                    }
+                    files["references.json"] = ser.Serialize(mine);
+                }
                 // Write the local export first, so an unwritable folder cannot report a successful upload.
                 foreach (var f in files) SyncData.WriteAtomic(Path.Combine(folder, f.Key), f.Value);
                 await Task.Run(() => GitHubSync.EnsureProfile(owner, repo, branch, token, login));
@@ -479,42 +512,188 @@ namespace SRLogbook
 
         private async void MergeTeamRefs()
         {
+            if (syncBusy || teamLoading) return;
             SyncConfig cfg = GitHubSync.LoadConfig(appDir);
             string token = SecretStore.Load(GitHubSync.TokenTarget);
-            if (string.IsNullOrEmpty(cfg.owner) || string.IsNullOrEmpty(token))
-            {
-                Msg.Show("请先在“团队同步”页配置仓库和访问密钥。", "团队同步");
-                return;
-            }
+            if (string.IsNullOrEmpty(cfg.owner) || string.IsNullOrEmpty(token)) { Msg.Show("请先在“团队同步”页配置仓库和访问密钥。", "团队同步"); return; }
+            syncBusy = true; Cursor = Cursors.WaitCursor;
             try
             {
+                string me = await Task.Run(() => GitHubSync.GetUserLogin(token));
                 List<string> members = await Task.Run(() => GitHubSync.ListDir(cfg.owner, cfg.repo, "team", cfg.branch, token));
                 int added = 0;
-                JavaScriptSerializer ser = SyncData.Serializer();
-                foreach (string m in members)
+                foreach (string member in members)
                 {
-                    string sha;
-                    string json = null;
-                    try { json = await Task.Run(() => GitHubSync.GetFile(cfg.owner, cfg.repo, "team/" + m + "/references.json", cfg.branch, token, out sha)); }
-                    catch { continue; }
-                    if (string.IsNullOrEmpty(json)) continue;
-                    List<RefItem> list = null;
-                    try { list = ser.Deserialize<List<RefItem>>(json); } catch { continue; }
-                    if (list == null) continue;
-                    foreach (RefItem r in list)
-                    {
-                        if (r == null || string.IsNullOrEmpty(r.Path)) continue;
-                        if (store.Refs.Find(x => x.Path == r.Path) == null) { store.Refs.Add(r); added++; }
-                    }
+                    List<string> folders = await Task.Run(() => GitHubSync.ListDir(cfg.owner, cfg.repo, "team/" + member, cfg.branch, token));
+                    if (!folders.Contains("references")) continue;
+                    string dest = FileTransfers.Child(FileTransfers.Child(TeamConRefRoot(me), member), "references");
+                    await Task.Run(() => FileTransfers.ReplaceFromDownload(dest, stage => GitHubSync.DownloadDir(cfg.owner, cfg.repo, "team/" + member + "/references", cfg.branch, token, stage)));
+                    foreach (string file in FileTransfers.UploadFiles(dest))
+                        if (!store.Refs.Exists(x => x.Path == file)) { store.Refs.Add(new RefItem { Title = Path.GetFileName(file), Path = file, Kind = "file", Personal = true }); added++; }
                 }
-                Persist();
-                RebuildRefs();
-                Msg.Show("已合并团队成员参考资料，新增 " + added + " 条。", "团队信息");
+                Persist(); RebuildRefs(); Msg.Show("团队参考资料已下载，新增 " + added + " 条。", "团队研究");
             }
-            catch (Exception ex)
+            catch (Exception ex) { Msg.Show("合并失败；旧副本保留：" + ex.Message, "团队研究"); }
+            finally { syncBusy = false; Cursor = Cursors.Default; }
+        }
+
+        private async void UploadProgressFolder()
+        {
+            if (syncBusy || teamLoading) return;
+            string owner, repo, path, branch, token;
+            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
+            string folder = Path.GetFullPath(LoadProgressFolder()).TrimEnd(Path.DirectorySeparatorChar);
+            if (!Directory.Exists(folder)) { Msg.Show("请先在“本地进度”选择文件夹。", "本地进度"); return; }
+            if (SyncData.IsWithin(appDir, folder)) { Msg.Show("请选择专用进度文件夹，不能上传程序目录或其上级目录。", "本地进度"); return; }
+            syncBusy = true; syncCard.Enabled = false;
+            lblSStatus.Text = "正在上传本地进度…";
+            try
             {
-                Msg.Show("合并失败：" + ex.Message, "团队信息");
+                List<string> files = FileTransfers.UploadFiles(folder);
+                if (files.Count == 0) { lblSStatus.Text = "本地进度文件夹为空，未上传。"; return; }
+                string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
+                await Task.Run(() => GitHubSync.EnsureProfile(owner, repo, branch, token, login));
+                int n = 0;
+                foreach (string file in files)
+                {
+                    string rel = file.Substring(folder.Length).TrimStart('\\', '/').Replace('\\', '/');
+                    byte[] bytes = File.ReadAllBytes(file);
+                    await Task.Run(() => GitHubSync.UploadFileBytes(owner, repo, "team/" + login + "/progress/" + rel, branch, token, bytes));
+                    n++;
+                }
+                SaveSyncConfig();
+                Log("已上传本地进度 " + n + " 个文件；其他远端文件保留，不自动删除。");
+                lblSStatus.Text = "本地进度上传完成（" + n + " 个文件）。";
             }
+            catch (Exception ex) { Log("本地进度上传失败（可能已上传部分文件）：" + ex.Message); lblSStatus.Text = "上传失败，详见日志。"; }
+            finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
+        }
+
+        private void UpdateSyncActionState()
+        {
+            bool has = (txtSToken != null && txtSToken.Text.Trim().Length > 0) || GitHubSync.HasToken();
+            if (btnOthers != null) btnOthers.Enabled = has;
+            if (btnDefault != null) btnDefault.Enabled = has;
+            if (btnUpRefs != null) btnUpRefs.Enabled = has;
+            if (btnUpProgress != null) btnUpProgress.Enabled = has;
+        }
+
+        private async void PullOthersContent()
+        {
+            if (syncBusy || teamLoading) return;
+            string owner, repo, path, branch, token;
+            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
+            syncBusy = true; syncCard.Enabled = false;
+            lblSStatus.Text = "正在下载他人内容…";
+            try
+            {
+                string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
+                List<string> members = await Task.Run(() => GitHubSync.ListDir(owner, repo, "team", branch, token));
+                int n = 0;
+                foreach (string member in members)
+                {
+                    if (member.Equals(login, StringComparison.OrdinalIgnoreCase)) continue;
+                    string dest = FileTransfers.Child(TeamConRefRoot(login), member);
+                    bool downloaded = await Task.Run(() => GitHubSync.DownloadMemberFiles(owner, repo, member, branch, token, dest));
+                    if (downloaded) n++;
+                }
+                SaveSyncConfig();
+                lblSStatus.Text = n == 0 ? "没有其他成员内容。" : "已下载 " + n + " 位成员内容。";
+                string baseDir = Path.Combine(AppPaths.MemberReferences(appDir, login), "TeamConRef");
+                Log(lblSStatus.Text + " " + baseDir);
+                if (n > 0) OpenPath(baseDir);
+            }
+            catch (Exception ex) { Log("下载他人内容失败：" + ex.Message); lblSStatus.Text = "下载失败，原有内容保留，详见日志。"; }
+            finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
+        }
+
+        private async void PullDefaultLibrary()
+        {
+            if (syncBusy || teamLoading) return;
+            string owner, repo, path, branch, token;
+            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
+            string local = AppPaths.DefaultReferences(appDir);
+            if (Msg.Show("将先下载并检查默认资料库，成功后替换本地副本并保留旧副本备份。继续？", "默认资料库", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
+            syncBusy = true; syncCard.Enabled = false;
+            lblSStatus.Text = "正在下载默认资料库…";
+            try
+            {
+                string backup = await Task.Run(() => FileTransfers.ReplaceFromDownload(local,
+                    stage => GitHubSync.DownloadDir(owner, repo, "default", branch, token, stage)));
+                int count = Directory.GetFiles(local, "*", SearchOption.AllDirectories).Length;
+                SaveSyncConfig();
+                if (backup != null) Log("旧默认资料库备份：" + backup);
+                lblSStatus.Text = "默认资料库已更新：" + count + " 个文件。";
+                Log(lblSStatus.Text); RebuildRefs();
+            }
+            catch (Exception ex) { Log("下载默认资料库失败：" + ex.Message); lblSStatus.Text = "下载失败，原有默认资料库保留。"; }
+            finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
+        }
+
+        private async void UploadRefsAction()
+        {
+            if (syncBusy || teamLoading) return;
+            string owner, repo, path, branch, token;
+            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
+            string folder = LoadPersonalFolder();
+            if (!Directory.Exists(folder)) { Msg.Show("请先在“团队研究”页选择个人文件夹；未选择时上传会失败。", "团队研究"); return; }
+            string[] files;
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Filter = "所有文件|*.*"; dialog.Multiselect = true;
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                files = dialog.FileNames;
+            }
+            syncBusy = true; syncCard.Enabled = false;
+            lblSStatus.Text = "正在上传参考资料…";
+            try
+            {
+                HashSet<string> names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string file in files)
+                {
+                    FileTransfers.NoLinks(file);
+                    if (new FileInfo(file).Length > FileTransfers.MaxUploadBytes) throw new IOException("File exceeds 50 MiB: " + file);
+                    if (!names.Add(Path.GetFileName(file))) throw new IOException("Selected files have duplicate names; rename them first.");
+                }
+                string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
+                await Task.Run(() => GitHubSync.EnsureProfile(owner, repo, branch, token, login));
+                string refDir = Path.Combine(folder, "references");
+                FileTransfers.NoLinks(refDir); Directory.CreateDirectory(refDir);
+                List<RefItem> selected = new List<RefItem>();
+                foreach (string file in files)
+                {
+                    string name = Path.GetFileName(file), copy = FileTransfers.Child(refDir, name);
+                    if (!Path.GetFullPath(file).Equals(copy, StringComparison.OrdinalIgnoreCase)) File.Copy(file, copy, true);
+                    string remote = "team/" + login + "/references/" + name;
+                    byte[] bytes = File.ReadAllBytes(file);
+                    await Task.Run(() => GitHubSync.UploadFileBytes(owner, repo, remote, branch, token, bytes));
+                    selected.Add(new RefItem { Title = name, Path = remote, RelPath = name, Kind = "file", Personal = true });
+                }
+                string metaPath = "team/" + login + "/references.json";
+                List<RefItem> merged = null;
+                for (int attempt = 0; ; attempt++)
+                {
+                    string sha = null;
+                    string old = await Task.Run(() => GitHubSync.GetFile(owner, repo, metaPath, branch, token, out sha));
+                    merged = string.IsNullOrEmpty(old) ? new List<RefItem>() : SyncData.Serializer().Deserialize<List<RefItem>>(old);
+                    if (merged == null) throw new InvalidDataException("Invalid references manifest.");
+                    foreach (RefItem item in selected) { merged.RemoveAll(x => x != null && x.Path == item.Path); merged.Add(item); }
+                    string json = SyncData.Serializer().Serialize(merged);
+                    try { await Task.Run(() => GitHubSync.PutFile(owner, repo, metaPath, branch, token, json, sha)); break; }
+                    catch (GitHubApiException ex) { if (attempt >= 2 || (ex.StatusCode != 409 && ex.StatusCode != 422)) throw; }
+                }
+                SyncData.WriteAtomic(Path.Combine(folder, "references.json"), SyncData.Serializer().Serialize(merged));
+                foreach (RefItem item in selected)
+                {
+                    string local = FileTransfers.Child(refDir, item.RelPath);
+                    if (!store.Refs.Exists(x => x.Path == local)) store.Refs.Add(new RefItem { Title = item.Title, Path = local, Kind = "file", Personal = true });
+                }
+                Persist(); RebuildRefs(); SaveSyncConfig();
+                Log("已上传 " + files.Length + " 个参考文件，保留此前参考资料清单。");
+                lblSStatus.Text = "参考资料上传完成。";
+            }
+            catch (Exception ex) { Log("参考资料上传失败（可能已上传部分文件）：" + ex.Message); lblSStatus.Text = "上传失败，详见日志。"; }
+            finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
         }
 
         private void Log(string text)

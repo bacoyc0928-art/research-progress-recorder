@@ -29,6 +29,8 @@ namespace SRLogbook
     public static class GitHubSync
     {
         private const string API = "https://api.github.com";
+        internal static Func<string, string, string, string, string, string> RequestForTests;
+        internal static Func<string, string, byte[]> BytesForTests;
         public const string TokenTarget = "SRLogbook/github_token";
 
         static GitHubSync()
@@ -60,6 +62,12 @@ namespace SRLogbook
         }
 
         public static bool HasToken() { return !string.IsNullOrEmpty(SecretStore.Load(TokenTarget)); }
+
+        private static void CheckBranchAccess(string owner, string repo, string branch, string token)
+        {
+            Request("GET", API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                + "/branches/" + Uri.EscapeDataString(branch), token, null);
+        }
 
         public static void SetToken(string token) { if (!SecretStore.Save(TokenTarget, token)) throw new IOException("Cannot save token to Windows Credential Manager."); }
 
@@ -109,7 +117,7 @@ namespace SRLogbook
             try { json = Request("GET", url, token, null); }
             catch (Exception ex)
             {
-                if (ex is GitHubApiException && ((GitHubApiException)ex).StatusCode == 404) return names;
+                if (ex is GitHubApiException && ((GitHubApiException)ex).StatusCode == 404) { CheckBranchAccess(owner, repo, branch, token); return names; }
                 throw;
             }
             JavaScriptSerializer ser = SyncData.Serializer();
@@ -202,6 +210,128 @@ namespace SRLogbook
                 + "/contents/" + EncodePath(path), token, ser.Serialize(body));
         }
 
+        public static byte[] GetFileBytes(string owner, string repo, string path, string branch, string token, out string sha)
+        {
+            sha = null;
+            string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                + "/contents/" + EncodePath(path) + "?ref=" + Uri.EscapeDataString(branch);
+            string json;
+            try { json = Request("GET", url, token, null); }
+            catch (GitHubApiException ex) { if (ex.StatusCode == 404) return null; throw; }
+            Dictionary<string, object> d = Parse(json);
+            sha = d.ContainsKey("sha") ? Convert.ToString(d["sha"]) : null;
+            if (string.IsNullOrEmpty(sha)) throw new InvalidDataException("GitHub did not return a file SHA.");
+            if (d.ContainsKey("encoding") && Convert.ToString(d["encoding"]) == "none")
+                return RequestBytes(url, token);
+            if (!d.ContainsKey("content")) throw new InvalidDataException("GitHub did not return file contents.");
+            string b64 = Convert.ToString(d["content"]).Replace("\n", "").Replace("\r", "");
+            return Convert.FromBase64String(b64);
+        }
+
+        public static void PutFileBytes(string owner, string repo, string path, string branch, string token, byte[] content, string sha)
+        {
+            if (content == null || content.LongLength > FileTransfers.MaxUploadBytes) throw new IOException("File exceeds 50 MiB.");
+            Dictionary<string, object> body = new Dictionary<string, object>();
+            body["message"] = "upload: " + Path.GetFileName(path) + " " + DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            body["content"] = Convert.ToBase64String(content);
+            body["branch"] = branch;
+            if (!string.IsNullOrEmpty(sha)) body["sha"] = sha;
+            JavaScriptSerializer ser = SyncData.Serializer();
+            ser.MaxJsonLength = Math.Max(ser.MaxJsonLength, content.Length * 2 + 4096);
+            Request("PUT", API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                + "/contents/" + EncodePath(path), token, ser.Serialize(body));
+        }
+
+        public static void UploadFileBytes(string owner, string repo, string path, string branch, string token, byte[] content)
+        {
+            for (int attempt = 0; ; attempt++)
+            {
+                string sha = null;
+                string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                    + "/contents/" + EncodePath(path) + "?ref=" + Uri.EscapeDataString(branch);
+                try { Dictionary<string, object> info = Parse(Request("GET", url, token, null)); sha = Convert.ToString(info["sha"]); }
+                catch (GitHubApiException ex) { if (ex.StatusCode != 404) throw; }
+                try { PutFileBytes(owner, repo, path, branch, token, content, sha); return; }
+                catch (GitHubApiException ex) { if (attempt >= 2 || (ex.StatusCode != 409 && ex.StatusCode != 422)) throw; }
+            }
+        }
+
+        private static byte[] RequestBytes(string url, string token)
+        {
+            if (BytesForTests != null) return BytesForTests(url, token);
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+            req.UserAgent = "SRPRecorder2027";
+            req.Accept = "application/vnd.github.raw+json";
+            req.Headers.Add("Authorization", "token " + token);
+            req.Timeout = 120000;
+            req.ReadWriteTimeout = 120000;
+            using (WebResponse response = req.GetResponse())
+            using (Stream input = response.GetResponseStream())
+            using (MemoryStream output = new MemoryStream())
+            {
+                input.CopyTo(output);
+                return output.ToArray();
+            }
+        }
+
+        public static List<string> ListFiles(string owner, string repo, string path, string branch, string token)
+        {
+            List<string> names = new List<string>();
+            string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                + "/contents/" + EncodePath(path) + "?ref=" + Uri.EscapeDataString(branch);
+            string json;
+            try { json = Request("GET", url, token, null); }
+            catch (GitHubApiException ex) { if (ex.StatusCode == 404) { CheckBranchAccess(owner, repo, branch, token); return names; } throw; }
+            JavaScriptSerializer ser = SyncData.Serializer();
+            object[] arr = ser.Deserialize<object[]>(json);
+            if (arr != null)
+            {
+                foreach (object o in arr)
+                {
+                    Dictionary<string, object> d = o as Dictionary<string, object>;
+                    if (d == null) continue;
+                    if (d.ContainsKey("type") && Convert.ToString(d["type"]) == "file")
+                        names.Add(Convert.ToString(d["name"]));
+                }
+            }
+            return names;
+        }
+
+        public static void DownloadDir(string owner, string repo, string dir, string branch, string token, string dest)
+        {
+            FileTransfers.NoLinks(dest);
+            string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                + "/contents/" + EncodePath(dir) + "?ref=" + Uri.EscapeDataString(branch);
+            object[] entries = SyncData.Serializer().Deserialize<object[]>(Request("GET", url, token, null));
+            if (entries == null) throw new InvalidDataException("GitHub did not return a directory.");
+            Directory.CreateDirectory(dest);
+            foreach (object entry in entries)
+            {
+                Dictionary<string, object> item = entry as Dictionary<string, object>;
+                if (item == null || !item.ContainsKey("name") || !item.ContainsKey("type")) throw new InvalidDataException("Invalid remote directory entry.");
+                string name = Convert.ToString(item["name"]), kind = Convert.ToString(item["type"]);
+                string child = FileTransfers.Child(dest, name);
+                if (kind == "dir") { DownloadDir(owner, repo, dir + "/" + name, branch, token, child); continue; }
+                if (kind != "file") throw new InvalidDataException("Remote links are not supported: " + name);
+                string sha;
+                byte[] bytes = GetFileBytes(owner, repo, dir + "/" + name, branch, token, out sha);
+                if (bytes == null) throw new IOException("Remote file disappeared during download: " + name);
+                File.WriteAllBytes(child, bytes);
+            }
+        }
+
+        public static bool DownloadMemberFiles(string owner, string repo, string member, string branch, string token, string destination)
+        {
+            string remote = "team/" + member;
+            List<string> dirs = ListDir(owner, repo, remote, branch, token);
+            if (!dirs.Contains("references") && !dirs.Contains("progress")) return false;
+            FileTransfers.ReplaceFromDownload(destination, stage => {
+                foreach (string name in new[] { "references", "progress" })
+                    if (dirs.Contains(name)) DownloadDir(owner, repo, remote + "/" + name, branch, token, FileTransfers.Child(stage, name));
+            });
+            return true;
+        }
+
         private static string EncodePath(string path)
         {
             string[] parts = path.Replace("\\", "/").Split('/');
@@ -211,13 +341,15 @@ namespace SRLogbook
 
         private static string Request(string method, string url, string token, string body, string accept = "application/vnd.github+json")
         {
+            if (RequestForTests != null) return RequestForTests(method, url, token, body, accept);
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
             req.Method = method;
             req.UserAgent = "SRLogbook";
             req.Accept = accept;
             if (!string.IsNullOrEmpty(token)) req.Headers.Add("Authorization", "token " + token);
             req.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
-            req.Timeout = 20000;
+            req.Timeout = 120000;
+            req.ReadWriteTimeout = 120000;
             if (body != null)
             {
                 req.ContentType = "application/json";

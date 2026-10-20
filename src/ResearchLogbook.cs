@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -29,6 +29,7 @@ namespace SRLogbook
         public string Path { get; set; }
         public string RelPath { get; set; }
         public string Kind { get; set; }
+        public bool Personal { get; set; }
     }
 
     public class CatLink
@@ -94,6 +95,13 @@ namespace SRLogbook
 
     public static class Ui
     {
+        [DllImport("user32.dll")] private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+        [DllImport("shcore.dll")] private static extern int SetProcessDpiAwareness(int value);
+        public static void EnableHighDpi()
+        {
+            try { if (SetProcessDpiAwarenessContext(new IntPtr(-4))) return; } catch (EntryPointNotFoundException) { } catch (DllNotFoundException) { }
+            try { SetProcessDpiAwareness(2); } catch (EntryPointNotFoundException) { } catch (DllNotFoundException) { }
+        }
         public static float Scale = 1f;
         public static bool StaticBuild = false;
         public static void Init()
@@ -120,7 +128,7 @@ namespace SRLogbook
         public static readonly Color TextMain = Color.FromArgb(31, 41, 55);
         public static readonly Color TextMuted = Color.FromArgb(94, 105, 122);
         public static readonly Color TextFaint = Color.FromArgb(132, 141, 158);
-        public const string UiFont = "Noto Sans SC";
+        public const string UiFont = "Microsoft YaHei UI";
 
         public static Font F(float size)
         {
@@ -284,6 +292,7 @@ namespace SRLogbook
             bDel.SetBounds(Ui.S(166), Ui.S(86), Ui.S(58), Ui.S(28));
             bDel.Click += delegate { onRemove(item); };
             Controls.Add(bDel);
+            if (item.Personal || (item.Kind != null && item.Kind == "default")) bDel.Visible = false;
 
             this.Paint += delegate(object s, PaintEventArgs e)
             {
@@ -361,26 +370,19 @@ namespace SRLogbook
             workspaceFolder = LoadWorkspace();
             if (!Directory.Exists(workspaceFolder))
             {
-                using (FolderBrowserDialog dlg = new FolderBrowserDialog())
-                {
-                    dlg.Description = "请选择你的工作文件夹（存放本项目资料）。不选择将无法运行。";
-                    string seed = Directory.Exists(workspaceFolder) ? workspaceFolder : ComputeProjectRoot();
-                    if (Directory.Exists(seed)) dlg.SelectedPath = seed;
-                    if (dlg.ShowDialog() != DialogResult.OK)
-                    {
-                        Msg.Show("未选择工作文件夹，程序将退出。", "需要工作文件夹", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        StartupCancelled = true;
-                        return;
-                    }
-                    workspaceFolder = dlg.SelectedPath;
-                    SaveWorkspace(workspaceFolder);
-                }
+                workspaceFolder = AppPaths.Ensure(appDir);
+                SaveWorkspace(workspaceFolder);
             }
             projectRoot = workspaceFolder;
             dataPath = Path.Combine(appDir, "research_log.json");
             store = LoadStore();
+            RefItem defaultRef = store.Refs.Find(r => r.Kind == "default" || r.Title == "Default Reference Material");
+            if (defaultRef == null) { defaultRef = new RefItem { Title = "Default Reference Material" }; store.Refs.Insert(0, defaultRef); }
+            defaultRef.Kind = "default";
+            defaultRef.Path = AppPaths.DefaultReferences(appDir);
+            defaultRef.RelPath = "";
 
-            this.Text = "研究进展记录器 · Synchrotron Radiation Project 2027 · 0.0.2";
+            this.Text = "SRPRecorder2027 · 0.1.0";
             this.ClientSize = new Size(1180, 730);
             this.MinimumSize = new Size(1020, 680);
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -401,11 +403,11 @@ namespace SRLogbook
             SetPage(0);
             RefreshCategoryCombo();
             RefreshList();
-            if (lstEntries.Items.Count > 0)
+            if (lstEntries != null && lstEntries.Items.Count > 0)
             {
                 lstEntries.SelectedIndex = 0;
             }
-            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (syncBusy) { e.Cancel = true; return; } saveTimer.Stop(); SaveCurrent(); };
+            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (syncBusy || teamLoading) { e.Cancel = true; return; } saveTimer.Stop(); SaveCurrent(); };
             if (Lang.En) Lang.Apply(this);
         }
 
@@ -477,6 +479,26 @@ namespace SRLogbook
                         }
                         if (s.Categories.Count == 0 && !s.CategoriesInitialized) MigrateCategories(s);
                         s.CategoriesInitialized = true;
+                        for (int i = s.Refs.Count - 1; i >= 0; i--)
+                        {
+                            for (int j = i - 1; j >= 0; j--)
+                            {
+                                if (!string.IsNullOrEmpty(s.Refs[i].Path) && s.Refs[i].Path == s.Refs[j].Path) { s.Refs.RemoveAt(i); break; }
+                            }
+                        }
+                        bool hasDefault = false;
+                        foreach (RefItem r0 in s.Refs) if (r0.Kind == "default") hasDefault = true;
+                        if (!hasDefault)
+                        {
+                            string def = AppPaths.DefaultReferences(appDir);
+                            if (!Directory.Exists(def)) def = Path.Combine(projectRoot, "同步辐射器件资料", "Default Reference Material");
+                            RefItem found = null;
+                            foreach (RefItem r1 in s.Refs)
+                                if ((r1.Title != null && r1.Title.IndexOf("Default Reference Material", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                    (r1.Path != null && r1.Path.EndsWith("Default Reference Material", StringComparison.OrdinalIgnoreCase))) found = r1;
+                            if (found != null) found.Kind = "default";
+                            else if (Directory.Exists(def)) s.Refs.Insert(0, new RefItem { Title = "Default Reference Material", Path = def, RelPath = "", Kind = "default" });
+                        }
                         projectRoot = !string.IsNullOrEmpty(workspaceFolder) && Directory.Exists(workspaceFolder)
                             ? workspaceFolder
                             : ((s.ProjectRoot != null && Directory.Exists(s.ProjectRoot)) ? s.ProjectRoot : ComputeProjectRoot());
@@ -636,7 +658,7 @@ namespace SRLogbook
             sidebar.Controls.Add(brand);
 
             Label title = new Label();
-            title.Text = "研究进展记录器";
+            title.Text = "SRPRecorder2027";
             title.Font = Theme.FB(11f);
             title.ForeColor = Color.White;
             title.BackColor = Theme.Navy;
@@ -648,8 +670,8 @@ namespace SRLogbook
             divider.SetBounds(22, 118, 188, 1);
             sidebar.Controls.Add(divider);
 
-            navs = new SideButton[6];
-            string[] texts = new string[] { "项目概览", "团队研究", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
+            navs = new SideButton[5];
+            string[] texts = new string[] { "团队研究", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
             for (int i = 0; i < texts.Length; i++)
             {
                 int idx = i;
@@ -753,13 +775,12 @@ namespace SRLogbook
             pagesHost.Padding = new Padding(18);
             Controls.Add(pagesHost);
 
-            pages = new Panel[6];
-            pages[0] = BuildOverviewPage();
-            pages[1] = BuildTeamPage();
-            pages[2] = BuildRefsAndCategoriesPage();
-            pages[3] = BuildLocalProgressPage();
-            pages[4] = BuildSyncPage();
-            pages[5] = BuildHelpPage();
+            pages = new Panel[5];
+            pages[0] = BuildTeamPage();
+            pages[1] = BuildRefsAndCategoriesPage();
+            pages[2] = BuildLocalProgressPage();
+            pages[3] = BuildSyncPage();
+            pages[4] = BuildHelpPage();
             for (int i = 0; i < pages.Length; i++)
             {
                 pages[i].Dock = DockStyle.Fill;
@@ -1035,6 +1056,10 @@ namespace SRLogbook
             bFolder.Click += delegate { AddFolderRef(); };
             top.Controls.Add(bFolder);
 
+            bFile.Visible = false;
+            bFolder.Visible = false;
+            t.Text = "参考资料为只读；个人资料请在“团队同步”页上传。";
+
             flow = new FlowLayoutPanel();
             Application.AddMessageFilter(new WheelRouter(flow));
             flow.Dock = DockStyle.None;
@@ -1120,21 +1145,25 @@ namespace SRLogbook
 
         private void SetPage(int idx)
         {
+            if (idx < 0 || idx >= pages.Length) throw new ArgumentOutOfRangeException("idx");
             if (saveTimer != null && saveTimer.Enabled) { saveTimer.Stop(); SaveCurrent(); }
+            if (idx == 3 && !Directory.Exists(LoadProgressFolder()))
+            {
+                Msg.Show("请先在“本地进度”选择文件夹，否则无法进入团队同步。", "本地进度");
+                idx = 2;
+            }
             pageIndex = idx;
             for (int i = 0; i < pages.Length; i++)
             {
                 pages[i].Visible = (i == idx);
                 navs[i].SetSelected(i == idx);
             }
-            string[] titles = new string[] { "项目概览", "团队研究", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
+            string[] titles = new string[] { "团队研究", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
             lblHeaderTitle.Text = titles[idx];
-            if (idx == 0) RefreshOverview2();
-            if (idx == 1) RefreshTeamPage();
-            if (idx == 2) { RebuildRefs(); RebuildCategories(); }
-            if (idx == 3) { RefreshList(); RefreshDocPage(); RefreshLocalRefs(); }
-            if (idx == 4) RefreshSyncPage();
-            if (idx == 0 && lstEntries != null) lstEntries.Focus();
+            if (idx == 0) RefreshTeamPage();
+            if (idx == 1) RebuildRefs();
+            if (idx == 2 && txtProgPath != null) txtProgPath.Text = LoadProgressFolder();
+            if (idx == 3) RefreshSyncPage();
             Lang.Apply(this);
         }
 
@@ -1394,6 +1423,11 @@ namespace SRLogbook
 
         private void RemoveRef(RefItem r)
         {
+            if (r.Kind == "default" || r.Personal)
+            {
+                Msg.Show("参考资料为只读；个人资料请在“团队同步”页重新上传。", "参考资料");
+                return;
+            }
             string p = Resolve(r);
             if (Msg.Show("删除“" + r.Title + "”？\r\n这会将该文件或文件夹移入回收站。", "删除", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
             if (!string.IsNullOrEmpty(p) && (SyncData.IsWithin(projectRoot, p) || SyncData.IsWithin(appDir, p)))
@@ -1580,7 +1614,7 @@ namespace SRLogbook
                 using (SolidBrush bv = new SolidBrush(accent))
                 using (SolidBrush bu = new SolidBrush(Theme.TextMuted))
                 {
-                    e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                    e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
                     e.Graphics.DrawString(val, fv, bv, new PointF(Ui.S(18), Ui.S(8)));
                     float w = e.Graphics.MeasureString(val, fv).Width;
                     e.Graphics.DrawString(unitText, fu, bu, new PointF(Ui.S(22) + w, Ui.S(34)));
@@ -1595,7 +1629,7 @@ namespace SRLogbook
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            try
+            if (!uiReady) try
             {
                 this.AutoScaleDimensions = new SizeF(96F, 96F);
                 this.AutoScaleMode = AutoScaleMode.Dpi;
@@ -1608,6 +1642,19 @@ namespace SRLogbook
             RebuildRefs();
             RebuildCategories();
             RefreshOverview2();
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            bool dpiChanged = m.Msg == 0x02E0;
+            if (dpiChanged) Ui.Scale = Math.Max(1f, (m.WParam.ToInt64() & 0xffff) / 96f);
+            base.WndProc(ref m);
+            if (dpiChanged && uiReady)
+            {
+                if (layoutLog != null) layoutLog();
+                LayoutRefsPage(); RebuildRefs(); RebuildCategories(); RefreshOverview2();
+                Invalidate(true);
+            }
         }
 
         public void SetPagePublic(int idx) { SetPage(idx); }
@@ -1676,15 +1723,16 @@ namespace SRLogbook
         [STAThread]
         static void Main(string[] args)
         {
+            Ui.EnableHighDpi();
+            Application.EnableVisualStyles();
             bool firstInstance;
             using (System.Threading.Mutex instance = new System.Threading.Mutex(true, @"Local\SRLogbook_ResearchProgressRecorder", out firstInstance))
             {
                 if (!firstInstance)
                 {
-                    Msg.Show("研究进展记录器已经打开。请切换到现有窗口，避免同时修改研究数据。", "研究进展记录器", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Msg.Show("SRPRecorder2027 已经打开。请切换到现有窗口，避免同时修改研究数据。", "SRPRecorder2027", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
-            Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             MainForm f;
             try

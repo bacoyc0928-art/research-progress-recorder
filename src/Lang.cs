@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -16,6 +16,16 @@ namespace SRLogbook
 
         private static readonly Dictionary<string, string> exact = new Dictionary<string, string>
         {
+            { "验证并保存配置", "Validate and Save" },
+            { "从 GitHub 下载他人内容", "Download Team Files" },
+            { "从 GitHub 下载默认资料库", "Download Default Library" },
+            { "上传本地进度", "Upload Local Progress" },
+            { "本地进度文件夹", "Local Progress Folder" },
+            { "打开本地资料文件夹", "Open Progress Folder" },
+            { "所有本地进度内容都存放在这个文件夹；未选择时无法进入“团队同步”。", "Create documents here, then upload this folder from Team Sync." },
+            { "每位成员使用自己的 GitHub 账号和访问密钥。可下载成员文件或默认资料库，并上传本人选择的参考文件、本地进度文件夹；每个文件最大 50 MiB。", "Use your own GitHub account/token. Download team/default files; upload selected references or your progress folder (50 MiB per file)." },
+            { "下载成员内容到 References/<用户名>；上传时会建立本人的 team/<用户名>/ 档案。", "Team files download to References/<your login>/TeamConRef/<member>. Uploading creates your team/<login>/ profile." },
+            { "已连接 GitHub 账号", "Connected to GitHub account" },
             { "研究进展记录器", "Research Progress Recorder" },
             { "研究进展记录器 · Synchrotron Radiation Project 2027 · 0.0.2", "Research Progress Recorder · Synchrotron Radiation Project 2027 · 0.0.2" },
             { "文档可打开或归入类别；移除会将磁盘文件移入回收站。", "Open or categorize documents; Remove moves the file to Recycle Bin." },
@@ -250,69 +260,9 @@ namespace SRLogbook
 
 
 
-        private const string HelpZh =
-            "使用说明\r\n\r\n" +
-            "一、界面与语言\r\n" +
-            "· 右上角“EN / 中文”即时切换界面语言，选择保存在程序目录 lang.txt。\r\n" +
-            "· “更换工作文件夹”重新选择工作目录；“打开工作文件夹”在资源管理器中打开当前目录。\r\n\r\n" +
-            "二、项目概览\r\n" +
-            "· 汇总总体进度、任务完成数、预计工时、各类别进度与最近更新。\r\n" +
-            "· 点类别名称直接编辑；点“最近更新”里的条目跳到研究日志。\r\n\r\n" +
-            "三、团队研究\r\n" +
-            "· 列出仓库 team/ 下的成员；每位成员首次打开本页时，程序按其 GitHub 账号自动创建 team/<用户名>/profile.json。\r\n" +
-            "· “合并团队参考资料”读取各成员的 references.json，按路径去重后并入本地，不修改他人文件。未选择个人文件夹时，个人研究上传会失败。\r\n\r\n" +
-            "四、参考文献与资料\r\n" +
-            "· 两个子栏：参考资料、研究类别。\r\n" +
-            "· 资料卡片点击即打开文件/文件夹；文件缺失时提示重新定位。\r\n" +
-            "· 可“添加文件/添加文件夹”，也可把文件拖入资料卡区域；移除会同时删除磁盘文件（有确认）。\r\n" +
-            "· 研究类别可添加、编辑、删除，支持任务数、预计工时与任意类型附件；删除类别只把所属记录改为未归类。\r\n\r\n" +
-            "五、本地进度\r\n" +
-            "· 三个子栏：研究日志、本地文档、本地资料。\r\n" +
-            "· 研究日志：新建、编辑标题/日期/类别/状态/进度/正文，自动保存，可搜索与删除记录。\r\n" +
-            "· 本地文档：填写项目名称与归属类别，在工作文件夹内新建“日期 + 项目名称”.docx；删除记录会同时删除该文件。\r\n" +
-            "· 本地资料：选择参考文件夹后列出其中文件，双击打开；“补录文件”会把选中的文件复制进该文件夹。\r\n\r\n" +
-            "六、团队同步\r\n" +
-            "· 填写 owner/repo、文件路径、分支与访问密钥；密钥保存在 Windows 凭据管理器，不写入项目文件。\r\n" +
-            "· 一键同步：先合并远端较新的记录与类别，再上传；可勾选记录/类别；未勾选的远端数据保持原样，记录删除会同步。\r\n" +
-            "· 上传参考资料：仅写入 team/<你的用户名>/references.json；请先在团队研究页选择本机个人文件夹。\r\n" +
-            "· 上传个人研究：写入 team/<你的用户名>/research.json 与 documents.json，不会覆盖他人。\r\n" +
-            "· 改动记录：读取仓库 sync/history.json，显示时间、用户与同步范围。\r\n\r\n" +
-            "七、常见问题\r\n" +
-            "· 找不到文件：可重新定位或移除；他人同步来的路径可能不存在。\r\n" +
-            "· 同步冲突：记录与类别以较新的 Updated 为准；应用按账号选择上传目录；仓库写权限仍允许通过 GitHub 修改其他目录。\r\n" +
-            "· 访问密钥：使用个人 GitHub PAT，不要分享；泄露后立即在 GitHub 撤销。\r\n";
+        private const string HelpZh = "SRPRecorder2027 · 0.1.0 公开测试版\r\n\r\n1. 团队研究\r\n配置自己的 GitHub 令牌后刷新成员；打开文件夹查看已下载的成员内容。浏览页面只读取，上传时才建立个人档案。\r\n\r\n2. 参考资料\r\nReferences/Default 是私有团队默认资料库，登录后下载，软件内只读；他人内容位于 References/<本人账号>/TeamConRef/<成员账号>。\r\n\r\n3. 本地进度\r\n选择专用进度文件夹，新建 Word 文档或打开文件夹编辑。默认位置为 SRCRec/PersonalWorkspaceSRRec。\r\n\r\n4. 团队同步\r\n填写数据仓库与本人令牌，点“验证并保存配置”。四个动作：下载他人内容、下载默认资料库、上传参考资料、上传本地进度。个人仓库协作者使用 classic PAT（repo 权限），令牌存 Windows 凭据管理器。\r\n下载先保存到临时目录，成功后替换目标，旧副本保留备份；失败或远端缺失不清空本地库。上传参考资料会上传所选文件及合并后的清单；上传进度递归上传专用文件夹，不自动删除远端旧文件。每个上传文件最大 50 MiB，不支持链接目录。\r\n\r\n5. 卸载与版本区别\r\n关闭主程序后运行“卸载SRPRecorder2027.exe”。默认仅移除程序，保留研究资料，配置另存到文档/SRPRecorder2027-数据备份。外部自选文件夹不删除。\r\nWindows 与 Mac 0.1.0 均支持文件传输；升级前备份，旧研究 JSON 保留。";
 
-        private const string HelpEn =
-            "Help\r\n\r\n" +
-            "1. Interface and language\r\n" +
-            "· Use EN / 中文 at the top right to switch instantly; the choice is stored in lang.txt.\r\n" +
-            "· Change Workspace Folder re-selects the working directory; Open Workspace Folder opens it in Explorer.\r\n\r\n" +
-            "2. Project Overview\r\n" +
-            "· Shows overall progress, completed tasks, estimated hours, category progress and recent updates.\r\n" +
-            "· Click a category name to edit it; click a recent item to jump to the Research Log.\r\n\r\n" +
-            "3. Team Info\r\n" +
-            "· Lists members under team/; each member gets team/<login>/profile.json created automatically on first open.\r\n" +
-            "· Merge Team References reads every member's references.json and merges by path without modifying others' files. Personal uploads fail until a personal folder is chosen.\r\n\r\n" +
-            "4. References & Materials\r\n" +
-            "· Two sub-tabs: References and Categories.\r\n" +
-            "· Click a card to open the file or folder; if missing, you are prompted to relocate it.\r\n" +
-            "· Use Add File / Add Folder, or drag files in; Remove also deletes the file from disk after confirmation.\r\n" +
-            "· Categories can be added, edited or deleted, with task counts, estimated hours and any type of attachments; deleting a category only marks its entries as uncategorized.\r\n\r\n" +
-            "5. Local Progress\r\n" +
-            "· Three sub-tabs: Research Log, Local Docs, Local Materials.\r\n" +
-            "· Research Log: create and edit entries (title, date, category, status, progress, notes), auto-save, search and delete.\r\n" +
-            "· Local Docs: enter a project name and category to create 'date + project'.docx in the workspace; deleting a record also deletes the file.\r\n" +
-            "· Local Materials: choose a reference folder to list its files (double-click to open); Add Files copies selected files into that folder.\r\n\r\n" +
-            "6. Team Sync\r\n" +
-            "· Enter owner/repo, file path, branch and access token; the token is stored in Windows Credential Manager, never in project files.\r\n" +
-            "· Sync All merges newer records and categories first, then uploads selected records/categories; unselected remote data is preserved and entry deletions propagate.\r\n" +
-            "· Upload References writes only to team/<your login>/references.json, choose a local personal folder first.\r\n" +
-            "· Upload My Research writes team/<your login>/research.json and documents.json without overwriting others.\r\n" +
-            "· Change Log reads sync/history.json and shows time, user and scope.\r\n\r\n" +
-            "7. FAQ\r\n" +
-            "· Missing file: relocate or remove it; paths synced from others may not exist locally.\r\n" +
-            "· Conflicts: records and categories use the newer Updated value; the app chooses your own folder; GitHub repository writers can still modify other folders.\r\n" +
-            "· Token: use your own GitHub PAT and never share it; revoke it on GitHub if leaked.\r\n";
+        private const string HelpEn = "SRPRecorder2027 · 0.1.0 Public Test\r\n\r\n1. Team Research\r\nConfigure your own GitHub token and refresh members. Open Folder shows downloaded team files. Refresh only reads; uploading creates your profile.\r\n\r\n2. References\r\nReferences/Default is a private team library; download it after signing in. Downloaded member files are under References/<your login>/TeamConRef/<member>.\r\n\r\n3. Local Progress\r\nChoose a dedicated folder; create Word documents and edit files there. Default: SRCRec/PersonalWorkspaceSRRec.\r\n\r\n4. Team Sync\r\nEnter the private data repository and your own token; click Validate & Save. Four actions: Download Team Files, Download Default Library, Upload References, Upload Local Progress. Personal-repository collaborators use a classic PAT with repo scope; tokens stay in Windows Credential Manager.\r\nDownloads use staging and preserve the previous folder as a backup. Failures/empty results do not erase your files. Reference uploads preserve earlier manifest entries. Progress uploads recursively copy the dedicated folder and do not delete older remote files. Maximum 50 MiB per uploaded file; linked folders are rejected.\r\n\r\n5. Uninstall and version differences\r\nClose the app and run the uninstaller. Research data stays in place by default; configurations are backed up in Documents/SRPRecorder2027-数据备份. External folders are never removed.\r\nWindows and Mac 0.1.0 support file transfers. Back up existing data and upgrade all team clients. Existing 0.0.2 JSON data is preserved.";
 
         public static void Apply(Control root)
         {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -35,40 +35,27 @@ namespace SRLogbook
             top.Controls.Add(h);
 
             Label sub = new Label();
-            sub.Text = "每位成员加入仓库后，程序用其 GitHub 账号自动建立个人档案文件夹（team/<用户名>/）。";
+            sub.Text = "下载成员内容到 References/<用户名>；上传时会建立本人的 team/<用户名>/ 档案。";
             sub.Font = Theme.F(8.8f);
             sub.ForeColor = Theme.TextMuted;
             sub.BackColor = Color.White;
             sub.SetBounds(Ui.S(2), Ui.S(44), Ui.S(820), Ui.S(20));
             top.Controls.Add(sub);
 
-            Button b = new Button();
-            b.Text = "刷新";
-            b.Font = Theme.F(8.8f);
-            b.FlatStyle = FlatStyle.Flat;
-            b.FlatAppearance.BorderSize = 1;
-            b.FlatAppearance.BorderColor = Theme.CardBorder;
-            b.BackColor = Color.White;
-            b.ForeColor = Theme.TextMain;
-            b.Cursor = Cursors.Hand;
-            b.SetBounds(Ui.S(860), Ui.S(18), Ui.S(80), Ui.S(30));
-            b.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            FlowLayoutPanel topRight = new FlowLayoutPanel();
+            topRight.Dock = DockStyle.Right;
+            topRight.Width = Ui.S(470);
+            topRight.FlowDirection = FlowDirection.RightToLeft;
+            topRight.WrapContents = false;
+            topRight.BackColor = Color.White;
+            topRight.Padding = new Padding(0, Ui.S(16), Ui.S(10), 0);
+            Button b = TeamBtn("刷新");
             b.Click += delegate { RefreshTeamPage(); };
-            top.Controls.Add(b);
-
-            Button bMerge = new Button();
-            bMerge.Text = "合并团队参考资料";
-            bMerge.Font = Theme.F(8.8f);
-            bMerge.FlatStyle = FlatStyle.Flat;
-            bMerge.FlatAppearance.BorderSize = 1;
-            bMerge.FlatAppearance.BorderColor = Theme.CardBorder;
-            bMerge.BackColor = Color.White;
-            bMerge.ForeColor = Theme.TextMain;
-            bMerge.Cursor = Cursors.Hand;
-            bMerge.SetBounds(Ui.S(670), Ui.S(18), Ui.S(180), Ui.S(30));
-            bMerge.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            Button bMerge = TeamBtn("下载并合并团队参考资料");
             bMerge.Click += delegate { MergeTeamRefs(); };
-            top.Controls.Add(bMerge);
+            topRight.Controls.Add(b);
+            topRight.Controls.Add(bMerge);
+            top.Controls.Add(topRight);
 
             teamStatus = new Label();
             teamStatus.Text = "";
@@ -96,7 +83,8 @@ namespace SRLogbook
             lblPersonal.Font = Theme.FB(10f);
             lblPersonal.LinkColor = Theme.Accent;
             lblPersonal.BackColor = Color.White;
-            lblPersonal.SetBounds(Ui.S(110), Ui.S(8), Ui.S(420), Ui.S(22));
+            lblPersonal.SetBounds(Ui.S(132), Ui.S(8), Ui.S(600), Ui.S(22));
+            lblPersonal.AutoEllipsis = false;
             lblPersonal.LinkClicked += delegate { OpenPersonalFolder(); };
             pp.Controls.Add(lblPersonal);
 
@@ -110,33 +98,20 @@ namespace SRLogbook
             personalFolder = LoadPersonalFolder();
             UpdatePersonalLabels();
 
-            Button bChoose = new Button();
-            bChoose.Text = "选择个人文件夹";
-            bChoose.Font = Theme.F(8.8f);
-            bChoose.FlatStyle = FlatStyle.Flat;
-            bChoose.FlatAppearance.BorderSize = 1;
-            bChoose.FlatAppearance.BorderColor = Theme.CardBorder;
-            bChoose.BackColor = Color.White;
-            bChoose.ForeColor = Theme.TextMain;
-            bChoose.Cursor = Cursors.Hand;
-            bChoose.SetBounds(Ui.S(610), Ui.S(30), Ui.S(130), Ui.S(30));
-            bChoose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            bChoose.Click += delegate { ChoosePersonalFolder(); };
-            pp.Controls.Add(bChoose);
-
-            Button bOpenP = new Button();
-            bOpenP.Text = "打开个人文件夹";
-            bOpenP.Font = Theme.F(8.8f);
-            bOpenP.FlatStyle = FlatStyle.Flat;
-            bOpenP.FlatAppearance.BorderSize = 1;
-            bOpenP.FlatAppearance.BorderColor = Theme.CardBorder;
-            bOpenP.BackColor = Color.White;
-            bOpenP.ForeColor = Theme.TextMain;
-            bOpenP.Cursor = Cursors.Hand;
-            bOpenP.SetBounds(Ui.S(750), Ui.S(30), Ui.S(130), Ui.S(30));
-            bOpenP.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            FlowLayoutPanel ppRight = new FlowLayoutPanel();
+            ppRight.Dock = DockStyle.Right;
+            ppRight.Width = Ui.S(330);
+            ppRight.FlowDirection = FlowDirection.RightToLeft;
+            ppRight.WrapContents = false;
+            ppRight.BackColor = Color.White;
+            ppRight.Padding = new Padding(0, Ui.S(28), Ui.S(10), 0);
+            Button bOpenP = TeamBtn("打开个人文件夹");
             bOpenP.Click += delegate { OpenPersonalFolder(); };
-            pp.Controls.Add(bOpenP);
+            Button bChoose = TeamBtn("选择个人文件夹");
+            bChoose.Click += delegate { ChoosePersonalFolder(); };
+            ppRight.Controls.Add(bOpenP);
+            ppRight.Controls.Add(bChoose);
+            pp.Controls.Add(ppRight);
 
             teamFlow = new FlowLayoutPanel();
             teamFlow.Dock = DockStyle.Fill;
@@ -149,6 +124,20 @@ namespace SRLogbook
             page.Controls.Add(teamFlow);
             page.Controls.Add(pp);
             page.Controls.Add(top);
+            Action layoutTeam = delegate
+            {
+                b.Anchor = bMerge.Anchor = bChoose.Anchor = bOpenP.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+                b.SetBounds(Math.Max(Ui.S(310), top.ClientSize.Width - Ui.S(94)), Ui.S(12), Ui.S(84), Ui.S(30));
+                bMerge.SetBounds(Math.Max(Ui.S(110), top.ClientSize.Width - Ui.S(304)), Ui.S(12), Ui.S(200), Ui.S(30));
+                sub.Width = teamStatus.Width = Math.Max(Ui.S(200), top.ClientSize.Width - Ui.S(12));
+                lblPersonal.Width = Math.Max(Ui.S(200), pp.ClientSize.Width - Ui.S(150));
+                lblPersonalPath.Width = Math.Max(Ui.S(150), pp.ClientSize.Width - Ui.S(330));
+                bChoose.SetBounds(Math.Max(Ui.S(170), pp.ClientSize.Width - Ui.S(318)), Ui.S(30), Ui.S(150), Ui.S(30));
+                bOpenP.SetBounds(Math.Max(Ui.S(330), pp.ClientSize.Width - Ui.S(158)), Ui.S(30), Ui.S(150), Ui.S(30));
+            };
+            top.Resize += delegate { layoutTeam(); };
+            pp.Resize += delegate { layoutTeam(); };
+            layoutTeam();
             return page;
         }
 
@@ -235,11 +224,12 @@ namespace SRLogbook
                 lblPersonal.Text = login;
                 personalFolder = LoadPersonalFolder();
                 UpdatePersonalLabels();
-                bool created = await Task.Run(() => GitHubSync.EnsureProfile(cfg.owner, cfg.repo, cfg.branch, token, login));
+                // Opening or refreshing this page only reads. Upload actions create the profile when needed.
+                bool created = false;
                 List<string> members = await Task.Run(() => GitHubSync.ListDir(cfg.owner, cfg.repo, "team", cfg.branch, token));
                 teamFlow.SuspendLayout();
                 teamFlow.Controls.Clear();
-                AddTeamCard(login + "（我）", created ? "已创建个人档案文件夹" : "个人档案已存在", true);
+                AddTeamCard(login + "（我）", "已连接 GitHub 账号", true);
                 foreach (string m in members)
                 {
                     if (m == login) continue;
@@ -256,25 +246,110 @@ namespace SRLogbook
         }
 
         private bool teamLoading;
+
+        private string MemberFolder(string login)
+        {
+            return AppPaths.MemberReferences(appDir, login);
+        }
+
+        private string TeamConRefRoot(string myLogin)
+        {
+            return Path.Combine(AppPaths.MemberReferences(appDir, myLogin), "TeamConRef");
+        }
+
+        private void ShowMemberFiles(string login, string dir)
+        {
+            using (Form dialog = new Form())
+            {
+                dialog.Text = login + " - 团队内容";
+                dialog.Size = new Size(760, 520);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.BackColor = Color.White;
+                ListView list = new ListView();
+                list.Dock = DockStyle.Fill;
+                list.View = View.Details;
+                list.FullRowSelect = true;
+                list.Columns.Add("文件", 320);
+                list.Columns.Add("目录", 300);
+                string[] files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories);
+                foreach (string f in files)
+                {
+                    string rel = f.Substring(dir.Length).TrimStart('\\');
+                    ListViewItem it = new ListViewItem(Path.GetFileName(f));
+                    it.SubItems.Add(Path.GetDirectoryName(rel));
+                    it.Tag = f;
+                    list.Items.Add(it);
+                }
+                list.DoubleClick += delegate
+                {
+                    if (list.SelectedItems.Count > 0) OpenPath(Convert.ToString(list.SelectedItems[0].Tag));
+                };
+                Panel bottom = new Panel();
+                bottom.Dock = DockStyle.Bottom;
+                bottom.Height = 48;
+                Button open = new Button();
+                open.Text = "打开文件";
+                open.FlatStyle = FlatStyle.Flat;
+                open.SetBounds(12, 10, 100, 30);
+                open.Click += delegate
+                {
+                    if (list.SelectedItems.Count > 0) OpenPath(Convert.ToString(list.SelectedItems[0].Tag));
+                };
+                Button openDir = new Button();
+                openDir.Text = "打开文件夹";
+                openDir.FlatStyle = FlatStyle.Flat;
+                openDir.SetBounds(122, 10, 110, 30);
+                openDir.Click += delegate { OpenPath(dir); };
+                Button close = new Button();
+                close.Text = "关闭";
+                close.FlatStyle = FlatStyle.Flat;
+                close.SetBounds(660, 10, 80, 30);
+                close.Click += delegate { dialog.Close(); };
+                bottom.Controls.Add(open);
+                bottom.Controls.Add(openDir);
+                bottom.Controls.Add(close);
+                dialog.Controls.Add(list);
+                dialog.Controls.Add(bottom);
+                Lang.Apply(dialog); dialog.ShowDialog(this);
+            }
+        }
+
         private async void ShowMemberResearch(string login)
         {
+            if (syncBusy || teamLoading) return;
             SyncConfig cfg = GitHubSync.LoadConfig(appDir);
             string token = SecretStore.Load(GitHubSync.TokenTarget);
+            if (string.IsNullOrEmpty(cfg.owner) || string.IsNullOrEmpty(token)) { Msg.Show("请先在“团队同步”页配置仓库和访问密钥。", "团队研究"); return; }
+            syncBusy = true; Cursor = Cursors.WaitCursor;
             try
             {
-                string sha;
-                string json = await Task.Run(() => GitHubSync.GetFile(cfg.owner, cfg.repo, "team/" + login + "/research.json", cfg.branch, token, out sha));
-                var entries = string.IsNullOrEmpty(json) ? new List<Entry>() : SyncData.Serializer().Deserialize<List<Entry>>(json);
-                var text = new System.Text.StringBuilder();
-                foreach (var e in entries) if (e != null) text.AppendLine(e.Date + "  " + e.Title).AppendLine(e.Content).AppendLine();
-                using (Form dialog = new Form())
-                {
-                    dialog.Text = login; dialog.Size = new Size(700, 560); dialog.StartPosition = FormStartPosition.CenterParent;
-                    TextBox view = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, Dock = DockStyle.Fill, Text = text.Length == 0 ? "No personal research uploaded." : text.ToString() };
-                    dialog.Controls.Add(view); dialog.ShowDialog(this);
-                }
+                string me = await Task.Run(() => GitHubSync.GetUserLogin(token));
+                string dir = FileTransfers.Child(TeamConRefRoot(me), login);
+                bool downloaded = await Task.Run(() => GitHubSync.DownloadMemberFiles(cfg.owner, cfg.repo, login, cfg.branch, token, dir));
+                if (!downloaded) { Msg.Show("该成员尚未上传文件；已有本地副本保留。", "团队研究"); return; }
+                ShowMemberFiles(login, dir);
             }
-            catch (Exception ex) { Msg.Show(ex.Message, "Team Research"); }
+            catch (Exception ex) { Msg.Show("打开成员内容失败：" + ex.Message, "团队研究"); }
+            finally { syncBusy = false; Cursor = Cursors.Default; }
+        }
+
+        private Button TeamBtn(string text)
+        {
+            Button b = new Button();
+            b.Text = text;
+            b.Font = Theme.F(8.8f);
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderSize = 1;
+            b.FlatAppearance.BorderColor = Theme.CardBorder;
+            b.BackColor = Color.White;
+            b.ForeColor = Theme.TextMain;
+            b.Cursor = Cursors.Hand;
+            b.AutoSize = true;
+            b.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            b.Padding = new Padding(Ui.S(10), Ui.S(3), Ui.S(10), Ui.S(3));
+            b.MinimumSize = new Size(Ui.S(70), Ui.S(30));
+            b.Margin = new Padding(Ui.S(4), 0, 0, 0);
+            return b;
         }
 
         private void AddTeamCard(string name, string note, bool me)
@@ -302,8 +377,8 @@ namespace SRLogbook
             d.BackColor = Color.White;
             d.SetBounds(Ui.S(18), Ui.S(34), Ui.S(500), Ui.S(18));
             card.Controls.Add(d);
-            Button view = new Button(); view.Text = Lang.En ? "View Research" : "查看研究";
-            view.SetBounds(card.Width - 150, 16, 130, 30);
+            Button view = new Button(); view.Text = Lang.En ? "Open Folder" : "打开文件夹";
+            view.SetBounds(card.Width - Ui.S(150), Ui.S(16), Ui.S(130), Ui.S(32));
             string login = name.Replace("（我）", "");
             view.Click += delegate { ShowMemberResearch(login); };
             card.Controls.Add(view);

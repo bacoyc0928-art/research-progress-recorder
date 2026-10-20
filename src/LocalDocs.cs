@@ -53,6 +53,33 @@ namespace SRLogbook
             return path;
         }
 
+        public static string CreateDocxIn(string dir, string project, string title)
+        {
+            Directory.CreateDirectory(dir);
+            string safe = Sanitize(title);
+            string path = Path.Combine(dir, safe + ".docx");
+            int n = 1;
+            while (File.Exists(path)) { n++; path = Path.Combine(dir, safe + " (" + n + ").docx"); }
+            using (FileStream fs = new FileStream(path, FileMode.CreateNew))
+            using (ZipArchive zip = new ZipArchive(fs, ZipArchiveMode.Create))
+            {
+                Write(zip, "[Content_Types].xml",
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                    "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
+                    "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+                    "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
+                    "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>" +
+                    "</Types>");
+                Write(zip, "_rels/.rels",
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                    "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                    "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>" +
+                    "</Relationships>");
+                Write(zip, "word/document.xml", DocumentXml(title, project, ""));
+            }
+            return path;
+        }
+
         private static string DocumentXml(string title, string project, string category)
         {
             string meta = "项目：" + project + "    类别：" + (string.IsNullOrEmpty(category) ? "未分类" : category) +

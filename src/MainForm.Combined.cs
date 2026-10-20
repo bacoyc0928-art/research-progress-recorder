@@ -9,85 +9,169 @@ namespace SRLogbook
 {
     public partial class MainForm
     {
-        /* ---------- 参考文献与资料（含研究类别） ---------- */
+        /* ---------- 参考文献与资料（仅参考资料） ---------- */
 
         private Panel BuildRefsAndCategoriesPage()
         {
             Panel page = new Panel();
             page.BackColor = Color.White;
-            Panel content = new Panel();
-            content.Dock = DockStyle.Fill;
-            content.BackColor = Color.White;
             Panel refs = BuildRefPage();
             refs.Dock = DockStyle.Fill;
-            Panel cats = BuildCategoryPage();
-            cats.Dock = DockStyle.Fill;
-            cats.Visible = false;
-            content.Controls.Add(refs);
-            content.Controls.Add(cats);
-            Panel bar = new Panel();
-            bar.Dock = DockStyle.Top;
-            bar.Height = Ui.S(44);
-            bar.BackColor = Color.White;
-            AddSegBar(bar, new string[] { "参考资料", "研究类别" }, delegate(int sel)
-            {
-                refs.Visible = sel == 0;
-                cats.Visible = sel == 1;
-                if (sel == 0) RebuildRefs(); else RebuildCategories();
-            });
-            page.Controls.Add(content);
-            page.Controls.Add(bar);
+            page.Controls.Add(refs);
             return page;
         }
 
-        /* ---------- 本地进度（研究日志 / 本地文档 / 本地资料） ---------- */
+        /* ---------- 本地进度（仅：选文件夹 / 新建 docx / 打开文件夹） ---------- */
 
-        private Panel[] localProgressTabs;
-        private Button[] localProgressButtons;
-        private void ShowResearchEntry(Entry entry)
+        private TextBox txtProgPath;
+
+        private void ShowResearchEntry(Entry entry) { SetPage(3); }
+
+        private string ProgressConfigPath() { return Path.Combine(appDir, "progress.json"); }
+
+        private string LoadProgressFolder()
         {
-            SetPage(3);
-            for (int i = 0; i < localProgressTabs.Length; i++) localProgressTabs[i].Visible = i == 0;
-            SelectSeg(localProgressButtons, 0);
-            txtSearch.Text = "搜索标题或内容"; txtSearch.ForeColor = Theme.TextFaint;
-            current = entry; RefreshList();
+            try
+            {
+                if (File.Exists(ProgressConfigPath()))
+                {
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    Dictionary<string, object> d = ser.Deserialize<Dictionary<string, object>>(File.ReadAllText(ProgressConfigPath(), System.Text.Encoding.UTF8));
+                    if (d != null && d.ContainsKey("folder")) return Convert.ToString(d["folder"]);
+                }
+            }
+            catch { }
+            return AppPaths.PersonalProgress(appDir);
+        }
+
+        private void SaveProgressFolder(string f)
+        {
+            try
+            {
+                JavaScriptSerializer ser = new JavaScriptSerializer();
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["folder"] = f;
+                SyncData.WriteAtomic(ProgressConfigPath(), ser.Serialize(d));
+            }
+            catch { }
         }
 
         private Panel BuildLocalProgressPage()
         {
             Panel page = new Panel();
             page.BackColor = Color.White;
-            Panel content = new Panel();
-            content.Dock = DockStyle.Fill;
-            content.BackColor = Color.White;
-            Panel log = BuildLogPage();
-            log.Dock = DockStyle.Fill;
-            Panel doc = BuildDocPage();
-            doc.Dock = DockStyle.Fill;
-            Panel local = BuildLocalRefsPanel();
-            local.Dock = DockStyle.Fill;
-            doc.Visible = false;
-            local.Visible = false;
-            content.Controls.Add(log);
-            content.Controls.Add(doc);
-            content.Controls.Add(local);
-            Panel bar = new Panel();
-            bar.Dock = DockStyle.Top;
-            bar.Height = Ui.S(44);
-            bar.BackColor = Color.White;
-            localProgressTabs = new Panel[] { log, doc, local };
-            localProgressButtons = AddSegBar(bar, new string[] { "研究日志", "本地文档", "本地资料" }, delegate(int sel)
+            Panel card = new Panel();
+            card.SetBounds(0, 0, 860, 300);
+            card.BackColor = Color.White;
+            card.Paint += delegate(object s, PaintEventArgs e)
             {
-                log.Visible = sel == 0;
-                doc.Visible = sel == 1;
-                local.Visible = sel == 2;
-                if (sel == 0) RefreshList();
-                if (sel == 1) RefreshDocPage();
-                if (sel == 2) RefreshLocalRefs();
-            });
-            page.Controls.Add(content);
-            page.Controls.Add(bar);
+                using (Pen p = new Pen(Theme.CardBorder)) e.Graphics.DrawRectangle(p, 0, 0, card.Width - 1, card.Height - 1);
+            };
+            page.Controls.Add(card);
+
+            Label h = new Label();
+            h.Text = "本地进度文件夹";
+            h.Font = Theme.FB(13f);
+            h.ForeColor = Theme.Navy;
+            h.BackColor = Color.White;
+            h.SetBounds(Ui.S(24), Ui.S(18), Ui.S(400), Ui.S(28));
+            card.Controls.Add(h);
+
+            Label hint = new Label();
+            hint.Text = "所有本地进度内容都存放在这个文件夹；未选择时无法进入“团队同步”。";
+            hint.Font = Theme.F(8.8f);
+            hint.ForeColor = Theme.TextMuted;
+            hint.BackColor = Color.White;
+            hint.SetBounds(Ui.S(24), Ui.S(52), Ui.S(800), Ui.S(24));
+            card.Controls.Add(hint);
+
+            txtProgPath = new TextBox();
+            txtProgPath.ReadOnly = true;
+            txtProgPath.Font = Theme.F(9.5f);
+            txtProgPath.SetBounds(Ui.S(24), Ui.S(96), Ui.S(620), Ui.S(30));
+            card.Controls.Add(txtProgPath);
+
+            Button bChoose = new Button();
+            bChoose.Text = "选择文件夹";
+            bChoose.Font = Theme.F(9f);
+            bChoose.FlatStyle = FlatStyle.Flat;
+            bChoose.FlatAppearance.BorderSize = 0;
+            bChoose.BackColor = Theme.Accent;
+            bChoose.ForeColor = Color.White;
+            bChoose.Cursor = Cursors.Hand;
+            bChoose.SetBounds(Ui.S(660), Ui.S(96), Ui.S(160), Ui.S(30));
+            bChoose.Click += delegate { ChooseProgressFolder(); };
+            card.Controls.Add(bChoose);
+
+            Button bDoc = new Button();
+            bDoc.Text = "新建文档";
+            bDoc.Font = Theme.F(9f);
+            bDoc.FlatStyle = FlatStyle.Flat;
+            bDoc.FlatAppearance.BorderSize = 1;
+            bDoc.FlatAppearance.BorderColor = Theme.CardBorder;
+            bDoc.BackColor = Color.White;
+            bDoc.ForeColor = Theme.TextMain;
+            bDoc.Cursor = Cursors.Hand;
+            bDoc.SetBounds(Ui.S(24), Ui.S(150), Ui.S(140), Ui.S(36));
+            bDoc.Click += delegate { CreateProgressDoc(); };
+            card.Controls.Add(bDoc);
+
+            Button bOpen = new Button();
+            bOpen.Text = "打开本地资料文件夹";
+            bOpen.Font = Theme.F(9f);
+            bOpen.FlatStyle = FlatStyle.Flat;
+            bOpen.FlatAppearance.BorderSize = 1;
+            bOpen.FlatAppearance.BorderColor = Theme.CardBorder;
+            bOpen.BackColor = Color.White;
+            bOpen.ForeColor = Theme.TextMain;
+            bOpen.Cursor = Cursors.Hand;
+            bOpen.SetBounds(Ui.S(176), Ui.S(150), Ui.S(180), Ui.S(36));
+            bOpen.Click += delegate { OpenProgressFolder(); };
+            card.Controls.Add(bOpen);
+
+            page.Resize += delegate
+            {
+                card.Width = Math.Min(Ui.S(880), page.ClientSize.Width - Ui.S(2));
+            };
             return page;
+        }
+
+        private void ChooseProgressFolder()
+        {
+            using (FolderBrowserDialog d = new FolderBrowserDialog())
+            {
+                d.Description = "选择本地进度文件夹（所有内容都存放在这里）";
+                string cur = LoadProgressFolder();
+                if (Directory.Exists(cur)) d.SelectedPath = cur;
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                try { Directory.CreateDirectory(d.SelectedPath); } catch { }
+                SaveProgressFolder(d.SelectedPath);
+                txtProgPath.Text = d.SelectedPath;
+            }
+        }
+
+        private void CreateProgressDoc()
+        {
+            string folder = LoadProgressFolder();
+            if (!Directory.Exists(folder)) { ChooseProgressFolder(); folder = LoadProgressFolder(); }
+            if (!Directory.Exists(folder)) return;
+            string project = Prompt.Show(this, "新建文档", "项目名称", "本地进度");
+            if (string.IsNullOrEmpty(project)) return;
+            string title = DateTime.Now.ToString("yyyy-MM-dd") + " " + project;
+            try
+            {
+                string path = LocalDocs.CreateDocxIn(folder, project, title);
+                Msg.Show("文档已创建：" + path, "本地进度");
+                OpenPath(path);
+            }
+            catch (Exception ex) { Msg.Show("创建失败：" + ex.Message, "本地进度"); }
+        }
+
+        private void OpenProgressFolder()
+        {
+            string folder = LoadProgressFolder();
+            if (!Directory.Exists(folder)) { ChooseProgressFolder(); folder = LoadProgressFolder(); }
+            if (Directory.Exists(folder)) OpenPath(folder);
         }
 
         /* ---------- 本地资料（选定文件夹作为参考） ---------- */
