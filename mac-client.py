@@ -426,7 +426,7 @@ class Client:
             try:
                 api=GitHub({'repo':DEFAULT_REPO,'branch':'main'},token)
                 login=api.login(); api.login_cached=login
-                try: append_activity(api,login,'登录','身份验证成功')
+                try: append_activity(api,login,'登录 / Sign in','身份验证成功 / verified')
                 except Exception: pass
                 return login,None
             except Exception as error:
@@ -623,7 +623,7 @@ class Client:
         def work():
             login=api.login(); api.login_cached=login
             publish_post(api,login,text)
-            try: append_activity(api,login,'发布快速发行',str(len(text))+' 字符')
+            try: append_activity(api,login,'发布帖子 / Publish post',str(len(text))+' 字符 / chars')
             except Exception: pass
             return True
         def done(_):
@@ -653,7 +653,7 @@ class Client:
         api,config=self.api()
         def work():
             delete_post(api,post['id'])
-            try: append_activity(api,login,'删除快速发行',post['time'])
+            try: append_activity(api,login,'删除帖子 / Delete post',post['time'])
             except Exception: pass
             return True
         def done(_):
@@ -767,22 +767,77 @@ class Client:
                 +self.tr(' 已登录，但访问仓库失败：\n\n',' but the repository is not reachable:\n\n')
                 +repo_problem_text(problem,self.en),parent=self.root)
         self.run(work,done)
+    def pick(self, title, hint, items, extra_files=False):
+        """先预览、再勾选：返回选中的条目（空列表表示取消）。"""
+        result = {'picked': []}
+        win = self.tk.Toplevel(self.root); win.title(title); win.geometry('780x540')
+        win.transient(self.root); win.grab_set()
+        self.ttk.Label(win, text=hint, wraplength=740).pack(anchor='w', padx=12, pady=8)
+        body = self.ttk.Frame(win); body.pack(fill='both', expand=True, padx=12)
+        box = self.tk.Listbox(body, selectmode='extended', height=18)
+        sb = self.ttk.Scrollbar(body, orient='vertical', command=box.yview)
+        box.configure(yscrollcommand=sb.set); box.pack(side='left', fill='both', expand=True); sb.pack(side='right', fill='y')
+        rows = list(items)
+        for row in rows: box.insert('end', row)
+        box.selection_set(0, 'end')
+        bar = self.ttk.Frame(win); bar.pack(fill='x', padx=12, pady=8)
+        def add_files():
+            for path in self.fd.askopenfilenames(parent=win):
+                if path in rows: continue
+                rows.append(path); box.insert('end', path); box.selection_set('end')
+        def ok():
+            result['picked'] = [rows[i] for i in box.curselection()]; win.destroy()
+        if extra_files: self.ttk.Button(bar, text=self.tr('添加文件', 'Add files'), command=add_files).pack(side='left')
+        self.ttk.Button(bar, text=self.tr('全选', 'Select all'), command=lambda: box.selection_set(0, 'end')).pack(side='right', padx=4)
+        self.ttk.Button(bar, text=self.tr('全不选', 'Select none'), command=lambda: box.selection_clear(0, 'end')).pack(side='right', padx=4)
+        self.ttk.Button(bar, text=self.tr('确定', 'OK'), command=ok).pack(side='right', padx=4)
+        self.ttk.Button(bar, text=self.tr('取消', 'Cancel'), command=win.destroy).pack(side='right', padx=4)
+        self.root.wait_window(win)
+        return result['picked']
     def pull_others(self):
         api,config=self.api()
         def work():
-            files=self.channels(api); me=files.identity(); api.login_cached=me; count=0
-            for member in files.members():
-                if member.lower()!=me.lower() and files.download_member(member,self.team_destination(me,member)): count+=1
-            if count: self.log_activity(api,me,'下载他人内容',str(count)+' 位成员')
-            return count
-        self.run(work,lambda count:self.finish(api,config,self.tr('成员内容下载完成：','Team downloads completed: ')+str(count)))
+            files=self.channels(api); me=files.identity(); api.login_cached=me
+            return me,sorted([m for m in files.members() if m.lower()!=me.lower()])
+        def done(result):
+            me,members=result
+            if not members:
+                self.status.set(self.tr('没有其他成员内容。','No other member content.')); return
+            picked=self.pick(self.tr('下载他人内容','Download team files'),
+                self.tr('勾选要下载的成员；只下载勾选内容，其他成员不动。','Check the members to download; everything else stays untouched.'),members)
+            if not picked: return
+            def work2():
+                files=self.channels(api); count=0
+                for member in picked:
+                    if files.download_member(member,self.team_destination(me,member)): count+=1
+                if count: self.log_activity(api,me,'下载他人内容 / Download team files',str(count)+' 位成员 / members')
+                return count
+            self.run(work2,lambda count:self.finish(api,config,self.tr('成员内容下载完成：','Team downloads completed: ')+str(count)))
+        self.run(work,done)
     def pull_default(self):
-        if not self.mb.askyesno('SRPRecorder2027',self.tr('下载成功后替换默认库，保留旧副本。继续？','Replace the default library after a successful download, keeping a backup?'),parent=self.root): return
         api,config=self.api()
         def work():
-            self.channels(api).default_library(self.default)
-            self.log_activity(api,self.session_login,'下载默认资料库','完成')
-        self.run(work,lambda _:self.finish(api,config,self.tr('默认资料库已更新。','Default library updated.')))
+            files=self.channels(api); rows=files.listing('default',True)
+            return sorted([x['name'] for x in rows if x.get('type')=='file'])
+        def done(names):
+            if not names:
+                self.status.set(self.tr('远端默认资料库为空。','The remote default library is empty.')); return
+            dest=Path(self.default)
+            picked=self.pick(self.tr('下载默认资料库','Download default library'),
+                self.tr('勾选要下载的文件；未勾选的不动，被覆盖的旧文件保留 .bak 备份。','Check files to download; unchecked files stay untouched, overwritten ones keep a .bak copy.'),names)
+            if not picked: return
+            def work2():
+                files=self.channels(api); dest.mkdir(parents=True,exist_ok=True); count=0
+                for name in picked:
+                    data=files.get_bytes('default/'+name)
+                    target=child(dest,name)
+                    if target.exists(): target.replace(Path(str(target)+'.bak-'+dt.datetime.now().strftime('%Y%m%d%H%M%S')))
+                    tmp=target.with_name(target.name+'.tmp-'+uuid.uuid4().hex[:8]); tmp.write_bytes(data); os.replace(tmp,target)
+                    count+=1
+                self.log_activity(api,self.session_login,'下载默认资料库 / Download default library',str(count)+' 个文件 / files')
+                return count
+            self.run(work2,lambda count:self.finish(api,config,self.tr('默认资料库已更新：','Default library updated: ')+str(count)))
+        self.run(work,done)
     def team_references(self):
         api,config=self.api()
         def work():
@@ -792,20 +847,40 @@ class Client:
             return count
         self.run(work,lambda count:self.finish(api,config,self.tr('团队参考资料下载完成：','Team reference downloads completed: ')+str(count)))
     def upload_progress(self):
-        api,config=self.api(); folder=self.progress.get()
-        def work():
-            files=self.channels(api); result=files.upload_progress(folder,self.files_root); api.login_cached=files.identity()
-            self.log_activity(api,files.identity(),'上传本地进度',str(result)+' 个文件')
-            return result
-        self.run(work,lambda count:self.finish(api,config,self.tr('本地进度已上传：','Progress files uploaded: ')+str(count)))
-    def upload_references(self):
-        selected=self.fd.askopenfilenames()
-        if not selected: return
+        folder=self.progress.get()
+        if not folder:
+            self.status.set(self.tr('请先选择本地进度文件夹。','Choose the local progress folder first.')); return
+        local=upload_files(Path(folder))
+        if not local:
+            self.status.set(self.tr('本地进度文件夹为空。','The progress folder is empty.')); return
+        root=Path(folder)
+        picked=self.pick(self.tr('上传本地进度','Upload progress'),
+            self.tr('勾选要上传的文件；未勾选的不上传。','Check the files to upload; unchecked files are not sent.'),
+            [p.relative_to(root).as_posix() for p in local])
+        if not picked: return
         api,config=self.api()
         def work():
-            files=self.channels(api); login=files.identity(); api.login_cached=login
-            result=files.upload_references(selected,self.personal_folder(login))
-            self.log_activity(api,login,'上传参考资料',str(len(selected))+' 个文件')
+            files=self.channels(api); login=files.ensure_profile(); api.login_cached=login
+            count=0
+            for rel in picked:
+                files.upload_bytes('team/'+login+'/progress/'+rel,(root/rel).read_bytes()); count+=1
+            self.log_activity(api,login,'上传本地进度 / Upload progress',str(count)+' 个文件 / files')
+            return count
+        self.run(work,lambda count:self.finish(api,config,self.tr('本地进度已上传：','Progress files uploaded: ')+str(count)))
+    def upload_references(self):
+        login=self.session_login or self.login
+        candidates=[]
+        if login:
+            refs=self.personal_folder(login)/'references'
+            if refs.is_dir(): candidates=[str(p) for p in sorted(refs.iterdir()) if p.is_file()]
+        picked=self.pick(self.tr('上传参考资料','Upload references'),
+            self.tr('勾选要上传的文件，也可以用“添加文件”从别处挑选。','Check the files to upload, or add more from elsewhere.'),candidates,extra_files=True)
+        if not picked: return
+        api,config=self.api()
+        def work():
+            files=self.channels(api); me=files.identity(); api.login_cached=me
+            result=files.upload_references([Path(p) for p in picked],self.personal_folder(me))
+            self.log_activity(api,me,'上传参考资料 / Upload references',str(len(picked))+' 个文件 / files')
             return result
         self.run(work,lambda _:self.finish(api,config,self.tr('参考资料已上传，旧清单保留。','References uploaded; earlier manifest entries preserved.')))
     def remove_my_references(self):
@@ -833,7 +908,7 @@ class Client:
             win.destroy()
             def work():
                 count=self.channels(api).remove_references(picked,self.personal_folder(login))
-                self.log_activity(api,login,'撤除参考资料',str(count)+' 个文件：'+'、'.join(picked))
+                self.log_activity(api,login,'撤除参考资料 / Remove references',str(count)+' 个文件 / files: '+'、'.join(picked))
                 return count
             self.run(work,lambda count:self.finish(api,config,self.tr('已撤除 %d 个参考资料。' % count,'Removed %d uploaded reference(s).' % count)))
         self.ttk.Button(bar,text=self.tr('撤除所选','Remove Selected'),command=confirm).pack(side='right',padx=4)
@@ -885,7 +960,7 @@ class Client:
             body={'message':'help: SRPRecorder2027 '+VERSION,'branch':api.branch,'content':base64.b64encode(text.encode()).decode()}
             if sha: body['sha']=sha
             api.request('PUT',endpoint,body)
-            try: append_activity(api,login,'更新使用说明',str(len(text))+' 字符')
+            try: append_activity(api,login,'更新使用说明 / Update help',str(len(text))+' 字符 / chars')
             except Exception: pass
             return len(text)
         self.run(work,lambda _:self.finish(api,config,self.tr('使用说明已上传，所有成员登录后都能读到。','Help uploaded for every member.')))
@@ -929,9 +1004,7 @@ def main():
                 client=Client(root,tmp,smoke=True); root.update()
                 assert len(client.tabs)==6
                 for index in range(6): client.book.select(index); root.update()
-                client.language(); root.update()
-                for index in range(6): client.book.select(index); root.update()
-                root.destroy(); print('SRPRecorder2027 0.1.1: six pages and both languages passed')
+                root.destroy(); print('SRPRecorder2027 0.1.1: six pages and the bilingual UI passed')
         else:
             Client(root); root.deiconify(); root.mainloop()
     except Exception as error:
