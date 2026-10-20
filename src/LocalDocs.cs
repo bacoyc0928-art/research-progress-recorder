@@ -82,20 +82,18 @@ namespace SRLogbook
 
         private static string DocumentXml(string title, string project, string category)
         {
-            string meta = "项目：" + project + "    类别：" + (string.IsNullOrEmpty(category) ? "未分类" : category) +
-                          "    日期：" + DateTime.Now.ToString("yyyy-MM-dd");
+            // 版式（用户要求）：标题 → 中英文项目/日期 → 副标题“此文档的目的 / Purpose” → 之后整页留白。
+            // 全文中文用楷体、西文用 Times New Roman；不出现“研究主题 / 下一步”之类的栏目。
             StringBuilder b = new StringBuilder();
             b.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             b.Append("<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>");
             b.Append(Para(title, true, 32));
-            b.Append(Para(meta, false, 20));
-            b.Append(Para("", false, 20));
-            b.Append(Para("研究进展", true, 24));
-            b.Append(Para("", false, 22));
-            b.Append(Para("", false, 22));
-            b.Append(Para("下一步", true, 24));
-            b.Append(Para("", false, 22));
-            b.Append(Para("", false, 22));
+            b.Append(Para("项目 / Project：" + (string.IsNullOrEmpty(project) ? "" : project), false, 21));
+            b.Append(Para("日期 / Date：" + DateTime.Now.ToString("yyyy-MM-dd"), false, 21));
+            b.Append(Para("", false, 21));
+            b.Append(Para("此文档的目的 / Purpose", true, 24));
+            b.Append(Para("", false, 24));
+            for (int i = 0; i < 24; i++) b.Append(Para("", false, 24));
             b.Append("<w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"1440\" w:right=\"1440\" w:bottom=\"1440\" w:left=\"1440\"/></w:sectPr>");
             b.Append("</w:body></w:document>");
             return b.ToString();
@@ -105,7 +103,7 @@ namespace SRLogbook
         {
             StringBuilder b = new StringBuilder();
             b.Append("<w:p><w:pPr><w:spacing w:after=\"120\"/></w:pPr><w:r><w:rPr>");
-            b.Append("<w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\" w:eastAsia=\"楷体\"/>");
+            b.Append("<w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\" w:cs=\"Times New Roman\" w:eastAsia=\"楷体\" w:hint=\"eastAsia\"/>");
             if (bold) b.Append("<w:b/>");
             b.Append("<w:sz w:val=\"" + halfPoints + "\"/><w:szCs w:val=\"" + halfPoints + "\"/></w:rPr>");
             b.Append("<w:t xml:space=\"preserve\">" + Escape(text) + "</w:t></w:r></w:p>");
