@@ -17,10 +17,10 @@ namespace SRLogbook
         private static readonly Dictionary<string, string> exact = new Dictionary<string, string>
         {
             { "验证并保存配置", "Validate and Save" },
-            { "从 GitHub 下载他人内容", "Download Team Files" },
-            { "从 GitHub 下载默认资料库", "Download Default Library" },
-            { "上传本地进度", "Upload Local Progress" },
-            { "撤除我上传的参考资料", "Remove My Uploaded References" },
+            { "从 GitHub 下载他人内容", "Download team files" },
+            { "从 GitHub 下载默认资料库", "Download default library" },
+            { "上传本地进度", "Upload progress" },
+            { "撤除我上传的参考资料", "Remove my refs" },
             { "撤除所选", "Remove Selected" },
             { "撤除参考资料", "Remove References" },
             { "登录", "Sign In" },
@@ -44,6 +44,10 @@ namespace SRLogbook
             { "下载成员内容到 References/<用户名>；上传时会建立本人的 team/<用户名>/ 档案。", "Team files download to References/<your login>/TeamConRef/<member>. Uploading creates your team/<login>/ profile." },
             { "已连接 GitHub 账号", "Connected to GitHub account" },
             { "团队成员", "Team member" },
+            { "请先在左下角登录 GitHub 账号。", "Sign in at the bottom-left first." },
+            { "写下要告诉全组的信息；发布后所有人登录即可看到，已阅的帖子会收进右上角“历史记录”。", "Write a note for the whole team; once posted everyone signed in can read it. Read posts move to History." },
+            { "查看活动日志", "Activity log" },
+            { "登录后在团队同步页操作即可；仓库已绑定，无需填写任何配置。", "Operate from Team Sync after signing in; the repository is already bound." },
             { "项目成员", "Project member" },
             { "协作者（尚未上传）", "Collaborator (no upload yet)" },
             { "研究进展记录器", "Research Progress Recorder" },
@@ -81,7 +85,7 @@ namespace SRLogbook
             { "打开个人文件夹", "Open Personal Folder" },
             { "未选择个人文件夹：个人研究上传将失败。", "No personal folder selected: personal uploads will fail." },
             { "团队同步（GitHub 仓库）", "Team Sync (GitHub)" },
-            { "上传参考资料", "Upload References" },
+            { "上传参考资料", "Upload refs" },
             { "上传个人研究", "Upload My Research" },
             { "参考文献与资料", "References & Materials" },
             { "本地进度", "Local Progress" },
@@ -254,36 +258,52 @@ namespace SRLogbook
             return r;
         }
 
+        /// <summary>界面统一中英双语并显：中文原文 + " / " + 英文。已含 " / " 的字符串原样返回，避免重复叠加。</summary>
         public static string T(string s)
         {
-            if (s == null) return s;
-            string v;
-            if (En)
-            {
-                if (exact.TryGetValue(s, out v)) return v;
-                for (int i = 0; i < subs.GetLength(0); i++)
-                    if (s.IndexOf(subs[i, 0], StringComparison.Ordinal) >= 0)
-                        s = s.Replace(subs[i, 0], subs[i, 1]);
-                return s;
-            }
-            if (rev.TryGetValue(s, out v)) return v;
+            if (string.IsNullOrEmpty(s)) return s;
+            if (s == "Quick Post") return s;   // 该栏目名按用户要求只保留英文
+            if (s.IndexOf(" / ", StringComparison.Ordinal) >= 0) return s;
+            string other;
+            if (exact.TryGetValue(s, out other)) return s + " / " + other;
+            if (rev.TryGetValue(s, out other)) return other + " / " + s;
+            string original = s;
+            for (int i = 0; i < subs.GetLength(0); i++)
+                if (s.IndexOf(subs[i, 0], StringComparison.Ordinal) >= 0)
+                    s = s.Replace(subs[i, 0], subs[i, 0] + " / " + subs[i, 1]);
+            if (!string.Equals(s, original, StringComparison.Ordinal)) return s;
             for (int i = 0; i < revSubs.GetLength(0); i++)
                 if (s.IndexOf(revSubs[i, 0], StringComparison.Ordinal) >= 0)
-                    s = s.Replace(revSubs[i, 0], revSubs[i, 1]);
+                    s = s.Replace(revSubs[i, 0], revSubs[i, 1] + " / " + revSubs[i, 0]);
             return s;
         }
 
         public static string HelpText()
         {
-            if (!En) return HelpZh;
-            return HelpEn;
+            return HelpBoth;
         }
 
 
 
-        private const string HelpZh = "SRPRecorder2027 · 0.1.1\r\n\r\n1. 登录\r\n在窗口左下角粘贴自己的 GitHub 访问密钥（classic PAT，勾选 repo），点“登录”。令牌只保存在内存，每次启动都要重新登录；未登录时团队研究与团队同步的按钮不可用。fine-grained 令牌无法访问他人账号的私有仓库。\r\n\r\n2. 团队研究\r\n登录后刷新即可看到全部项目成员；点“打开文件夹”查看已下载的成员内容。自己的卡片上可“撤除参考资料”，打开的是本机个人文件夹下的 references。\r\n\r\n3. 参考资料与本地进度\r\nReferences/Default 是团队默认资料库，登录后用“下载默认资料库”获取；本地进度请选择专用文件夹，可新建 Word 或直接编辑其中的文件。\r\n\r\n4. 团队同步（仓库已绑定 bacoyc0928-art/research-data · main）\r\n五个动作：下载他人内容、下载默认资料库、上传参考资料、上传本地进度、撤除我上传的参考资料。单个文件最大 50 MiB；下载先暂存、成功后才替换并保留旧副本；上传不自动删除远端旧文件。\r\n\r\n5. 活动日志\r\n登录、上传、下载、撤除都会写入 logs/public/activity.json（全体成员可见）与 logs/private/<账号>/activity.json（本人明细）。点“查看活动日志”查看。\r\n\r\n6. 使用说明本身\r\n本页可自由编辑；点“上传到 GitHub”写入 help/help.md，所有成员登录后读到同一份，并在 help/changelog.json 留下改动日志。点“恢复默认”回到自带文本，“读取云端版本”重新拉取。";
-
-        private const string HelpEn = "SRPRecorder2027 · 0.1.1\r\n\r\n1. Sign in\r\nPaste your own GitHub token (classic PAT with repo scope) at the bottom-left and press Sign In. The token stays in memory only; every launch needs a new sign-in. Team Research and Team Sync stay disabled until you sign in. Fine-grained tokens cannot reach another account's private repository.\r\n\r\n2. Team Research\r\nRefresh after signing in to list all project members; Open Folder shows the downloaded member files. On your own card you can Remove References, which opens your local personal references folder.\r\n\r\n3. References and Local Progress\r\nReferences/Default is the team library, downloaded with Download Default Library after signing in. Pick a dedicated progress folder and edit or create Word files there.\r\n\r\n4. Team Sync (bound to bacoyc0928-art/research-data · main)\r\nFive actions: Download Team Files, Download Default Library, Upload References, Upload Local Progress, Remove My Uploaded References. 50 MiB per file; downloads stage first and keep a backup; uploads never delete remote older files.\r\n\r\n5. Activity log\r\nSign-in, uploads, downloads and removals are written to logs/public/activity.json (visible to all members) and logs/private/<login>/activity.json (your own detail).\r\n\r\n6. This help page\r\nEdit freely, then Upload to GitHub to store help/help.md for every member; each upload adds an entry to help/changelog.json. Restore Default returns to the built-in text.";
+        private const string HelpBoth = "SRPRecorder2027 · 0.1.1 · 中英双语界面 / Bilingual UI\r\n\r\n" +
+            "1. 登录 / Sign in\r\n" +
+            "在窗口左下角粘贴自己的 GitHub 访问密钥，点“登录 / Sign In”。令牌只保存在内存，每次启动都要重新登录；未登录时不能进入参考文献页，也不能发起任何同步、发帖或改动。\r\n" +
+            "Paste your own GitHub token at the bottom-left of the window and press Sign In. The token stays in memory only, so every launch needs a fresh sign-in. While signed out you cannot open References or start any sync, post or edit.\r\n\r\n" +
+            "2. 团队研究 / Team Research\r\n" +
+            "登录后刷新即可看到全部项目成员；点“打开文件夹 / Open Folder”查看已下载的成员内容；自己的卡片上可撤除参考资料。\r\n" +
+            "Refresh after signing in to list every project member. Open Folder shows the downloaded member files; your own card can remove your uploaded references.\r\n\r\n" +
+            "3. 参考资料与本地进度 / References and Local Progress\r\n" +
+            "References/Default 是团队默认资料库；本地进度请先选一个专用文件夹，可新建 Word 或直接编辑其中的文件。\r\n" +
+            "References/Default is the team library. Pick a dedicated progress folder first, then create Word files or edit existing ones.\r\n\r\n" +
+            "4. 团队同步 / Team Sync（已绑定 / bound to bacoyc0928-art/research-data · main）\r\n" +
+            "五个动作：下载他人内容、下载默认资料库、上传参考资料、上传本地进度、撤除我上传的参考资料。每个动作都会先列出可下载或可上传的项目/文件，勾选后才会执行，不会整批覆盖。单个文件最大 50 MiB；下载先暂存，成功后替换并保留旧副本；上传不会自动删除远端旧文件。\r\n" +
+            "Five actions: Download Team Files, Download Default Library, Upload References, Upload Local Progress, Remove My Uploaded References. Each one first lists the items or files that can be transferred, and only the checked ones are processed. 50 MiB per file; downloads stage first and keep a backup; uploads never delete remote older files.\r\n\r\n" +
+            "5. 活动日志 / Activity log\r\n" +
+            "登录、上传、下载、撤除、发帖、删帖、改使用说明都会写入 logs/public/activity.json（全员可见）与 logs/private/<账号>/activity.json（本人明细）。\r\n" +
+            "Sign-in, uploads, downloads, removals, posts and help edits are written to logs/public/activity.json (visible to all) and logs/private/<login>/activity.json (your own detail).\r\n\r\n" +
+            "6. 本页 / This help page\r\n" +
+            "本页可自由编辑；点“上传到 GitHub / Upload to GitHub”写入 help/help.md，所有成员读到同一份，并在 help/changelog.json 留下改动日志。“恢复默认 / Restore Default”回到自带文本，“读取云端版本 / Load From GitHub”重新拉取。\r\n" +
+            "Edit this page freely, then Upload to GitHub to store help/help.md for everyone; each upload adds an entry to help/changelog.json. Restore Default returns to the built-in text, Load From GitHub re-fetches the cloud copy.";
 
         public static void Apply(Control root)
         {
@@ -311,7 +331,7 @@ namespace SRLogbook
         {
             Translation item = originals.GetOrCreateValue(c);
             if (item.Original == null || c.Text != item.Rendered) item.Original = c.Text;
-            item.Rendered = En ? T(item.Original) : item.Original;
+            item.Rendered = T(item.Original);
             c.Text = item.Rendered;
         }
 
@@ -320,20 +340,9 @@ namespace SRLogbook
             foreach (Form f in Application.OpenForms) Apply(f);
         }
 
-        public static void Load(string appDir)
-        {
-            try
-            {
-                string p = Path.Combine(appDir, "lang.txt");
-                if (File.Exists(p)) En = File.ReadAllText(p, Encoding.UTF8).Trim() == "en";
-            }
-            catch { }
-        }
+        /// <summary>界面固定中英并显，不再读取/保存语言偏好；保留方法仅为兼容旧调用。</summary>
+        public static void Load(string appDir) { En = false; }
 
-        public static void Save(string appDir)
-        {
-            try { File.WriteAllText(Path.Combine(appDir, "lang.txt"), En ? "en" : "zh", new UTF8Encoding(false)); }
-            catch { }
-        }
+        public static void Save(string appDir) { En = false; }
     }
 }
