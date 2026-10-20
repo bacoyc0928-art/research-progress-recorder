@@ -1,3 +1,3 @@
-cd45374ebd38d17905a4bcabc8a95182dee22c1be2b0df4b8eb5114653e03a7e  research-progress-recorder-0.1.1-macOS-arm64.dmg
-0656dd4e29a3a49e4286a337dc3632e149cca08400bddbb52e23472d7cc84887  research-progress-recorder-0.1.1-macOS-x64.dmg
-9a5b85c9b53185068599eaf3b2582acbd225a25551922fb80d9b3fb3d1c88729  research-progress-recorder-0.1.1-Windows.zip
+5a9f3105a571873077ce32a948065743bd7fafd44b7f3b144230b9b188074b8f  research-progress-recorder-0.1.1-macOS-arm64.dmg
+d9579e04d35350b581ec3af4827ac843a0bb04419625b5e52bf3900e9fd7dd24  research-progress-recorder-0.1.1-macOS-x64.dmg
+f6bbe68f4f1026428fddda3c42c7a17c12b077c66d99196be6ed2ba037be29b6  research-progress-recorder-0.1.1-Windows.zip
