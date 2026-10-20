@@ -52,6 +52,9 @@ jobs:
         run: |
           python -m pip install pyinstaller==6.22.3
           python -m PyInstaller --noconfirm --clean --windowed --name ResearchProgressRecorder --osx-bundle-identifier org.syncresearch.recorder mac-client.py
+          plutil -replace CFBundleShortVersionString -string 0.0.2 dist/ResearchProgressRecorder.app/Contents/Info.plist
+          plutil -insert CFBundleVersion -string 0.0.2 dist/ResearchProgressRecorder.app/Contents/Info.plist
+          codesign --force --deep --sign - dist/ResearchProgressRecorder.app
           dist/ResearchProgressRecorder.app/Contents/MacOS/ResearchProgressRecorder --smoke-test
           codesign --verify --deep --strict --verbose=2 dist/ResearchProgressRecorder.app
           cd dist
