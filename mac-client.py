@@ -208,8 +208,8 @@ def docx(folder, project, category, title, direct=False):
     target = folder/(safe+'.docx'); n=1
     while target.exists(): n+=1; target=folder/f'{safe} ({n}).docx'
     def para(text, bold=False):
-        return '<w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:eastAsia="楷体"/>'+('<w:b/>' if bold else '')+'</w:rPr><w:t xml:space="preserve">'+escape(text)+'</w:t></w:r></w:p>'
-    document = '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+para(title,True)+para(project+' / '+category+' / '+str(dt.date.today()))+para('研究进展 / Progress',True)+para('')+para('下一步 / Next steps',True)+para('')+'</w:body></w:document>'
+        return '<w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="楷体" w:hint="eastAsia"/>'+('<w:b/>' if bold else '')+'</w:rPr><w:t xml:space="preserve">'+escape(text)+'</w:t></w:r></w:p>'
+    document = '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+para(title,True)+para('项目 / Project：'+project)+para('日期 / Date：'+str(dt.date.today()))+para('')+para('此文档的目的 / Purpose',True)+para('')+''.join(para('') for _ in range(24))+'</w:body></w:document>'
     with zipfile.ZipFile(target,'x',zipfile.ZIP_DEFLATED) as z:
         z.writestr('[Content_Types].xml','<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')
         z.writestr('_rels/.rels','<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
@@ -329,7 +329,7 @@ class Client:
         self.config.setdefault('workspace',str(self.files_root)); atomic(self.configfile,self.config)
         root.title('SRPRecorder2027 · '+VERSION); root.geometry('1120x760'); root.minsize(940,640)
         self.build(); root.protocol('WM_DELETE_WINDOW',self.close); root.after(100,self.poll)
-    def tr(self,zh,en): return en if self.en else zh
+    def tr(self,zh,en): return zh+' / '+en
     def button(self,parent,zh,en,command):
         b=self.ttk.Button(parent,text=self.tr(zh,en),command=lambda:self.guarded(command)); b.pack(side='left',padx=4,pady=5); return b
     def guarded(self,fn):
@@ -371,12 +371,11 @@ class Client:
         header=ttk.Frame(self.root,padding=12); header.pack(fill='x')
         ttk.Label(header,text='SRPRecorder2027  '+VERSION,font=('',17,'bold')).pack(side='left')
         self.button(header,'更换工作文件夹','Change Workspace',self.choose_workspace)
-        self.button(header,'EN / 中文','中文 / EN',self.language)
         self.book=ttk.Notebook(self.root); self.book.pack(fill='both',expand=True,padx=12,pady=6)
         self.book.bind('<<NotebookTabChanged>>', lambda e:self.on_tab_changed(e))
         self.tabs=[]
-        for zh,en in [('团队研究','Team Research'),('快速发行','Quick Post'),('参考文献与资料','References'),('本地进度','Local Progress'),('团队同步','Team Sync'),('使用说明','Help')]:
-            panel=ttk.Frame(self.book,padding=16); self.book.add(panel,text=self.tr(zh,en)); self.tabs.append(panel)
+        for zh,en in [('团队研究','Team'),('Quick Post','Quick Post'),('参考资料','Refs'),('本地进度','Progress'),('团队同步','Sync'),('使用说明','Help')]:
+            panel=ttk.Frame(self.book,padding=16); self.book.add(panel,text=('Quick Post' if zh=='Quick Post' else self.tr(zh,en))); self.tabs.append(panel)
         self.build_login_bar()
         self.status=self.tk.StringVar(value=self.tr('就绪','Ready')); ttk.Label(self.root,textvariable=self.status,padding=8).pack(fill='x')
         self.build_team(); self.build_posts(); self.build_references(); self.build_progress(); self.build_sync(); self.build_help()
@@ -479,9 +478,9 @@ class Client:
         value=self.fd.askdirectory(initialdir=self.config.get('workspace',str(self.files_root)))
         if value: no_links(value); self.config['workspace']=value; atomic(self.configfile,self.config)
     def language(self):
-        self.en=not self.en; self.config['language']='en' if self.en else 'zh'; atomic(self.configfile,self.config)
-        for w in self.root.winfo_children(): w.destroy()
-        self.build()
+        # 界面固定中英并显，不再切换语言；保留方法仅为兼容旧调用。
+        self.en=False
+        self.status.set(self.tr('界面固定中英双语显示。','Interface is always bilingual; language switching was removed.'))
     def table(self,parent,columns):
         frame=self.ttk.Frame(parent); frame.pack(fill='both',expand=True)
         tree=self.ttk.Treeview(frame,columns=[str(i) for i in range(len(columns))],show='headings',selectmode='browse')
