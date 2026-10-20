@@ -373,9 +373,11 @@ class Client:
         self.button(header,'更换工作文件夹','Change Workspace',self.choose_workspace)
         self.book=ttk.Notebook(self.root); self.book.pack(fill='both',expand=True,padx=12,pady=6)
         self.book.bind('<<NotebookTabChanged>>', lambda e:self.on_tab_changed(e))
-        self.tabs=[]
+        self.tabs=[]; self.tab_base=[]
         for zh,en in [('团队研究','Team'),('Quick Post','Quick Post'),('参考资料','Refs'),('本地进度','Progress'),('团队同步','Sync'),('使用说明','Help')]:
-            panel=ttk.Frame(self.book,padding=16); self.book.add(panel,text=('Quick Post' if zh=='Quick Post' else self.tr(zh,en))); self.tabs.append(panel)
+            label=('Quick Post' if zh=='Quick Post' else self.tr(zh,en))
+            panel=ttk.Frame(self.book,padding=16); self.book.add(panel,text=label); self.tabs.append(panel); self.tab_base.append(label)
+        self.news_seen=dict(self.config.get('news') or {})
         self.build_login_bar()
         self.status=self.tk.StringVar(value=self.tr('就绪','Ready')); ttk.Label(self.root,textvariable=self.status,padding=8).pack(fill='x')
         self.build_team(); self.build_posts(); self.build_references(); self.build_progress(); self.build_sync(); self.build_help()
@@ -437,7 +439,7 @@ class Client:
                 self.mb.showerror('SRPRecorder2027',self.tr('登录失败：','Sign-in failed: ')+error,parent=self.root)
                 return
             self.session_login=login; self.session_token=token; self.login=login
-            self.login_token.set(''); self.update_login_ui(); self.team(); self.refresh_posts()
+            self.login_token.set(''); self.update_login_ui(); self.team(); self.refresh_posts(); self.update_news(); self._news_tick()
             self.status.set(self.tr('已登录 ','Signed in as ')+login)
         self.run(work,done)
     def sign_out(self):
@@ -453,10 +455,49 @@ class Client:
         except Exception: return
         if index==2 and not self.session_token:
             self.status.set(self.tr('请先登录后查看参考文献与资料。','Sign in to view References.'))
-            self.book.select(0)
+            self.book.select(0); return
+        self.mark_news_seen(index)
+    def news_state(self):
+        api=self.GitHub({'repo':DEFAULT_REPO,'branch':'main'}, self.session_token)
+        posts=list_posts(api); read=set(read_ids(api,self.session_login))
+        unread=len([p for p in posts if p.get('id') not in read])
+        members=','.join(sorted(FileChannels(api).members()))
+        acts=read_activity(api,'logs/public/activity.json')
+        last=acts[-1].get('time') if acts else '-'
+        return {0:'team:'+members, 1:'posts:%d'%unread, 4:'act:%d:%s'%(len(acts),last)}
+    def update_news(self):
+        """栏目未读红点：有新内容在标签后加一个红点，进入该栏目即清除。"""
+        if not self.session_token or not getattr(self,'tab_base',None): return
+        try: sig=self.news_state()
+        except Exception: return
+        current=self.book.index(self.book.select())
+        for idx,value in sig.items():
+            seen=self.news_seen.get(str(idx))
+            if seen is None:
+                self.news_seen[str(idx)]=value; continue
+            badge=(seen!=value and idx!=current)
+            try: self.book.tab(idx,text=self.tab_base[idx]+('  ●' if badge else ''))
+            except Exception: pass
+        self.config['news']=self.news_seen; atomic(self.configfile,self.config)
+    def mark_news_seen(self,idx):
+        if getattr(self,'tab_base',None):
+            try: self.book.tab(idx,text=self.tab_base[idx])
+            except Exception: pass
+        if not self.session_token: return
+        try: sig=self.news_state()
+        except Exception: return
+        if str(idx) in sig and self.news_seen.get(str(idx))!=sig[str(idx)]:
+            self.news_seen[str(idx)]=sig[str(idx)]; self.config['news']=self.news_seen; atomic(self.configfile,self.config)
+    def _news_tick(self):
+        try: self.update_news()
+        finally:
+            try: self.root.after(90000,self._news_tick)
+            except Exception: pass
     def log_activity(self,api,login,action,detail):
         try: append_activity(api,login,action,detail)
         except Exception as error: self.status.set(self.tr('活动日志写入失败：','Activity log failed: ')+str(error))
+        try: self.update_news()
+        except Exception: pass
     def view_activity(self):
         api,config=self.api()
         def work():
@@ -717,11 +758,39 @@ class Client:
         bar=self.ttk.Frame(p); bar.pack(fill='x',pady=10)
         self.button(bar,'选择文件夹','Choose Folder',self.choose_progress); self.button(bar,'新建文档','New Document',self.new_document)
         self.button(bar,'打开本地资料文件夹','Open Progress Folder',lambda:self.open_path(self.progress.get()))
+        self.button(bar,'刷新','Refresh',self.refresh_progress_files)
+        self.progress_tree=self.table(p,[self.tr('名称','Name'),self.tr('大小','Size'),self.tr('修改时间','Modified')])
+        self.progress_tree.column('0',width=420); self.progress_tree.column('1',width=140); self.progress_tree.column('2',width=200)
+        self.progress_tree.bind('<Double-1>',lambda _:self.open_progress_item())
         self.ttk.Label(p,text=self.tr('在此文件夹编辑文件，完成后到团队同步上传。本机自动保存不等于云端上传。','Edit files in this dedicated folder; upload them from Team Sync when ready. Local saves do not upload automatically.'),wraplength=980).pack(anchor='w',pady=12)
+        self.refresh_progress_files()
+    def refresh_progress_files(self):
+        tree=getattr(self,'progress_tree',None)
+        if tree is None: return
+        tree.delete(*tree.get_children())
+        folder=self.progress.get()
+        if not folder or not Path(folder).is_dir(): return
+        try:
+            root=Path(folder)
+            for d in sorted([x for x in root.iterdir() if x.is_dir()],key=lambda x:x.name.lower()):
+                tree.insert('','end',values=(d.name+'\\','<folder>',dt.datetime.fromtimestamp(d.stat().st_mtime).strftime('%Y-%m-%d %H:%M')),tags=(str(d),))
+            for f in sorted([x for x in root.iterdir() if x.is_file()],key=lambda x:x.name.lower()):
+                tree.insert('','end',values=(f.name,str(max(1,f.stat().st_size//1024))+' KB',dt.datetime.fromtimestamp(f.stat().st_mtime).strftime('%Y-%m-%d %H:%M')),tags=(str(f),))
+        except Exception as error:
+            self.status.set(self.tr('读取文件夹失败 / Failed to list folder: ')+str(error))
+    def open_progress_item(self):
+        tree=getattr(self,'progress_tree',None)
+        if tree is None: return
+        picked=tree.selection()
+        if not picked: return
+        tags=tree.item(picked[0],'tags')
+        if tags: self.open_path(tags[0])
     def choose_progress(self):
         if not self.require_login(): return
         value=self.fd.askdirectory(initialdir=self.progress.get())
-        if value: no_links(value); self.config['progress']=value; self.progress.set(value); atomic(self.configfile,self.config)
+        if value:
+            no_links(value); self.config['progress']=value; self.progress.set(value); atomic(self.configfile,self.config)
+            self.refresh_progress_files()
     def new_document(self):
         if not self.require_login(): return
         project=self.ask.askstring(self.tr('新建文档','New Document'),self.tr('项目名称','Project name'),parent=self.root)
