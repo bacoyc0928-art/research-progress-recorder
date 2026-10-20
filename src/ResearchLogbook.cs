@@ -892,6 +892,7 @@ namespace SRLogbook
             lblHeaderTitle.ForeColor = Theme.Navy;
             lblHeaderTitle.BackColor = Color.White;
             lblHeaderTitle.SetBounds(28, 16, 700, 30);
+            lblHeaderTitle.AutoEllipsis = true;
             header.Controls.Add(lblHeaderTitle);
 
             Button bWs = new Button();
@@ -921,6 +922,13 @@ namespace SRLogbook
             bOpen.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             bOpen.Click += delegate { OpenPath(projectRoot); };
             header.Controls.Add(bOpen);
+
+            // 窄窗口下标题不能压在右侧按钮下面：按剩余宽度收窄并省略。
+            header.Resize += delegate
+            {
+                int reserved = bWs.Width + bOpen.Width + Ui.S(28 + 14 + 26);
+                lblHeaderTitle.Width = Math.Max(Ui.S(120), header.Width - reserved);
+            };
         }
 
         private void BuildPages()
