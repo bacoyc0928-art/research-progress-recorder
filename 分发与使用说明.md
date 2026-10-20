@@ -1,4 +1,4 @@
-# Research Progress Recorder / SRPRecorder2027 · 0.1.1
+# Research Progress Recorder / SRPRecorder2027 · 0.1.0
 
 **公开测试版 / Public Test**
 
@@ -8,20 +8,27 @@
 
 安装文件统一位于 [最新发布页](https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest)，下载不需要 GitHub 登录或令牌。请勿使用仓库根目录历史遗留的 0.0.2 exe/ZIP。
 
-| 系统 | 0.1.1 下载 | 要求 |
+| 系统 | 0.1.0 下载 | 要求 |
 | --- | --- | --- |
-| Windows | [Windows ZIP](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.1.1/research-progress-recorder-0.1.1-Windows.zip) | Windows 10/11，.NET Framework 4.8 |
-| Apple Silicon / M 系列 | [arm64 DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.1.1/research-progress-recorder-0.1.1-macOS-arm64.dmg) | macOS 14+ |
-| Intel Mac | [x64 DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.1.1/research-progress-recorder-0.1.1-macOS-x64.dmg) | macOS 15+ |
+| Windows | [Windows ZIP](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.1.0/research-progress-recorder-0.1.0-Windows.zip) | Windows 10/11，.NET Framework 4.8 |
+| Apple Silicon / M 系列 | [arm64 DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.1.0/research-progress-recorder-0.1.0-macOS-arm64.dmg) | macOS 14+ |
+| Intel Mac | [x64 DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.1.0/research-progress-recorder-0.1.0-macOS-x64.dmg) | macOS 15+ |
+
+Windows：将 ZIP 完整解压到自己的可写文件夹，运行 SRCRec/SRPRecorder2027.exe。Mac：打开 DMG，将 ResearchProgressRecorder.app 拖到 Applications 后弹出镜像；无需另装 Python。Mac 目前只有临时签名，没有 Apple Developer ID 签名或公证，系统可能拦截首次运行；请核对来源及 SHA256SUMS.txt，并遵循所在单位安全政策。本程序不会修改系统安全设置。Windows 也未购买代码签名证书。
 
 ## 0.1.1 补丁 / Patch
 
-- **登录与仓库权限拆分**：先在 GitHub 校验令牌身份（GET /user）并立即保存，再单独检查仓库能否访问。以前两步必须同时成功才保存令牌，仓库检查失败（例如用了 fine-grained 令牌访问他人私有仓库，GitHub 返回 404）时令牌根本没有保存，团队页就永远显示“（未登录）”。现在账号一定先登录成功，仓库失败会单独提示原因。
-- 失败提示按 HTTP 状态码说明：401 令牌无效/过期，403 权限不足或频率限制，404 看不到仓库（并提示协作者必须用 classic PAT），网络错误单独提示。
-- 粘贴令牌时自动去掉换行与空格；团队研究页列出仓库全部协作者，未上传者标注“协作者（尚未上传）”。
-- Windows 与 macOS 同步修复；版本号 0.1.1。
+0.1.0 存在登录缺陷：程序要求“令牌身份”和“仓库访问”两步同时成功才保存令牌。仓库检查失败时（尤其是外部协作者用 fine-grained 令牌访问他人私有仓库，GitHub 一律返回 404）令牌根本没有保存，团队页就永远显示“（未登录）”。
 
-Windows：将 ZIP 完整解压到自己的可写文件夹，运行 SRCRec/SRPRecorder2027.exe。Mac：打开 DMG，将 ResearchProgressRecorder.app 拖到 Applications 后弹出镜像；无需另装 Python。Mac 目前只有临时签名，没有 Apple Developer ID 签名或公证，系统可能拦截首次运行；请核对来源及 SHA256SUMS.txt，并遵循所在单位安全政策。本程序不会修改系统安全设置。Windows 也未购买代码签名证书。
+0.1.1 是**补丁**，不是新版本：**版本仍是 0.1.0**，本补丁只替换程序本体，不改变数据结构、配置格式和文件位置。
+
+| 平台 | 0.1.1 补丁下载 | 覆盖方式 |
+| --- | --- | --- |
+| Windows | [Windows 补丁 ZIP](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/main/patches/0.1.1/research-progress-recorder-0.1.1-Windows.zip) | 解压后覆盖 SRCRec 内同名 exe 与 .exe.config |
+| Apple Silicon / M 系列 | [macOS arm64 补丁](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/main/patches/0.1.1/research-progress-recorder-0.1.1-macOS-arm64.dmg) | 打开 DMG，把 app 拖到 Applications 覆盖旧版 |
+| Intel Mac | [macOS x64 补丁](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/main/patches/0.1.1/research-progress-recorder-0.1.1-macOS-x64.dmg) | 同上 |
+
+补丁内容：登录与仓库权限拆成两步（先校验令牌身份并立即保存，再单独检查仓库）；失败提示按 HTTP 401/403/404 说明原因（404 明确提示协作者必须用 classic PAT）；令牌粘贴自动去空格换行；团队研究页列出仓库全部协作者，未上传者标注“协作者（尚未上传）”。
 
 ## 两个仓库
 
@@ -44,7 +51,7 @@ Windows 文件根为 `SRCRec`；默认进度 `PersonalWorkspaceSRRec`，默认�
 
 ## 从 0.0.2 升级与卸载
 
-升级前关闭软件并备份完整用户数据。Windows 建议解压到新目录，再按需迁移旧配置和专用资料目录；不要盲目覆盖或删除旧目录。Mac 替换 Applications 内的 app，保留 Application Support 数据。0.0.2 的日志 JSON 继续保留；0.1.x 当前界面以文件工作流为主，不会自动把旧日志转换成 Word，也不继续旧的共享日志合并界面。全员升级后使用新文件通道。
+升级前关闭软件并备份完整用户数据。Windows 建议解压到新目录，再按需迁移旧配置和专用资料目录；不要盲目覆盖或删除旧目录。Mac 替换 Applications 内的 app，保留 Application Support 数据。0.0.2 的日志 JSON 继续保留；0.1.0 当前界面以文件工作流为主，不会自动把旧日志转换成 Word，也不继续旧的共享日志合并界面。全员升级后使用新文件通道。
 
 Windows 运行“卸载SRPRecorder2027.exe”；默认保留研究文件，配置另存备份，只按程序清单删除，不删除外部自选文件夹。Mac DMG 中的 `uninstall-macos.command` 默认保留研究数据并将 app 移到废纸篓；可选的数据删除需用户明确确认。卸载不撤销 GitHub 令牌，请按需在 GitHub 撤销本人令牌。
 
@@ -52,10 +59,10 @@ Windows 运行“卸载SRPRecorder2027.exe”；默认保留研究文件，配�
 
 Windows：`./test-local.ps1 -TestDirectory <新建的独立测试目录>`；`./package-local.ps1 -Destination <新的输出目录>` 生成干净的 Windows ZIP。默认不打包任何真实默认资料，`-IncludePrivateDefault` 仅供私有本地用途，禁止将其输出作为公开安装包。
 
-Mac：`python -m unittest test_mac_client.py test_file_channels.py -v` 和 `python mac-client.py --smoke-test`。GitHub Actions `Build 0.1.1 packages` 只读权限、手动触发，在 Windows、Apple Silicon 和 Intel Mac 分别验证并打包。发布由维护者手动上传，流程没有数据仓库密钥。
+Mac：`python -m unittest test_mac_client.py test_file_channels.py -v` 和 `python mac-client.py --smoke-test`。GitHub Actions `Build 0.1.0 packages` 只读权限、手动触发，在 Windows、Apple Silicon 和 Intel Mac 分别验证并打包。发布由维护者手动上传，流程没有数据仓库密钥。
 
 仍需真实同僚完成两账号、两设备、首次安装、首次钥匙串授权验收。自动化检查不代表没有缺陷。反馈时附系统版本、芯片型号、软件版本、按钮名称和去除令牌/研究内容后的错误信息。404 下载问题请附完整下载 URL。
 
 ## English quick start
 
-Download your platform's 0.1.1 package from Releases (no sign-in required). Mac DMGs include the runtime; apps are ad-hoc signed, not Developer ID signed or notarized. Keep backups. Accept the private data-repository invitation, configure `bacoyc0928-art/research-data` / `main` using your own token and Validate & Save. Use Download Team Files and Download Default Library to receive files. Choose a dedicated progress folder before Upload Local Progress; Upload References transfers selected files. Transfers are manual, up to 50 MiB per file; remote deletions are not automatic. Downloads preserve previous folders as backups. Legacy 0.0.2 JSON is preserved; the 0.1.x UI uses file workflows. Do not share tokens or upload private files to the public program repository.
+Download your platform's 0.1.0 package from Releases (no sign-in required). Mac DMGs include the runtime; apps are ad-hoc signed, not Developer ID signed or notarized. Keep backups. Accept the private data-repository invitation, configure `bacoyc0928-art/research-data` / `main` using your own token and Validate & Save. Use Download Team Files and Download Default Library to receive files. Choose a dedicated progress folder before Upload Local Progress; Upload References transfers selected files. Transfers are manual, up to 50 MiB per file; remote deletions are not automatic. Downloads preserve previous folders as backups. Legacy 0.0.2 JSON is preserved; the 0.1.0 UI uses file workflows. Do not share tokens or upload private files to the public program repository.
