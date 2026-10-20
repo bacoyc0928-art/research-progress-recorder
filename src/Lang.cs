@@ -34,6 +34,8 @@ namespace SRLogbook
             { "发布", "Publish" },
             { "历史记录", "History" },
             { "已阅", "Mark Read" },
+            { "显示", "Show" },
+            { "隐藏", "Hide" },
             { "已登录 GitHub", "Signed in with GitHub" },
             { "本地进度文件夹", "Local Progress Folder" },
             { "打开本地资料文件夹", "Open Progress Folder" },
