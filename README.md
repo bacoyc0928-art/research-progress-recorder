@@ -9,11 +9,11 @@ Windows 和 macOS 桌面客户端，共用私有数据仓库 bacoyc0928-art/rese
 
 | 下载文件 | 平台 |
 | --- | --- |
-| research-progress-recorder-0.0.2-Windows.zip | Windows 10/11，.NET Framework 4.8；解压后运行 exe |
-| research-progress-recorder-0.0.2-macOS-arm64.zip | Apple Silicon M 系列，macOS 14+ |
-| research-progress-recorder-0.0.2-macOS-x64.zip | Intel Mac，macOS 15+ |
+| [Windows ZIP](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.0.2/research-progress-recorder-0.0.2-Windows.zip) | Windows 10/11，.NET Framework 4.8；解压后运行 exe |
+| [Apple Silicon / M 系列 DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.0.2/research-progress-recorder-0.0.2-macOS-arm64.dmg) | Apple Silicon M 系列，macOS 14+ |
+| [Intel Mac DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.0.2/research-progress-recorder-0.0.2-macOS-x64.dmg) | Intel Mac，macOS 15+ |
 
-Mac 包自带 Python/Tk，无需另装 Python。解压后将 ResearchProgressRecorder.app 放进 Applications。当前没有 Apple Developer ID 签名或公证，首次打开可能被系统拦截；接收者应核对来源和 SHA-256，并按单位安全政策决定是否运行。本项目不修改系统安全设置。
+Mac 包自带 Python/Tk，无需另装 Python。打开 DMG，将 ResearchProgressRecorder.app 拖到 Applications，再弹出磁盘映像。原 ZIP 仍保留为备用；DMG 摘要见 SHA256SUMS-DMG.txt。当前没有 Apple Developer ID 签名或公证，首次打开可能被系统拦截；接收者应核对来源和 SHA-256，并按单位安全政策决定是否运行。本项目不修改系统安全设置。
 
 ## 协作配置
 
@@ -44,5 +44,5 @@ Windows 在 PowerShell 执行 ./build.ps1。Mac 开发运行 python3 mac-client.
 
 ## English quick start
 
-Download the ZIP matching your platform from Releases. Mac bundles include their runtime; use arm64 for Apple Silicon, x64 for Intel. They are not Developer ID signed/notarized; follow your organization's installation policy.
+Download the Windows ZIP or the Mac DMG matching your platform from Releases. Open the DMG, drag the app to Applications, then eject the disk image. Mac bundles include their runtime; use arm64 for Apple Silicon, x64 for Intel. They are not Developer ID signed/notarized; follow your organization's installation policy.
 The program repository is public; downloading requires no sign-in, invitation, or token. Accept the private data repository invitation to join team sync, choose a workspace, configure bacoyc0928-art/research-data / main / sync/research_log.json, and use your own GitHub token. Tokens stay in Windows Credential Manager or macOS Keychain. Sync selected records/categories manually; unselected remote data is preserved and deletions propagate. Personal channels upload metadata under your own GitHub login. Files themselves are not transferred. Keep local backups and upgrade all team devices to 0.0.2.
