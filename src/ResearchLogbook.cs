@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
@@ -335,6 +336,15 @@ namespace SRLogbook
         public static bool StartupCancelled;
 
         private Panel sidebar;
+        private Panel loginPanel;
+        private Panel avatarPanel;
+        private Label loginNameLabel;
+        private Label loginHintLabel;
+        private TextBox loginTokenBox;
+        private Button loginButton;
+        private Button logoutButton;
+        private string sessionToken;
+        private string sessionLogin;
         private Panel header;
         private Panel pagesHost;
         private Label lblHeaderTitle;
@@ -396,6 +406,7 @@ namespace SRLogbook
 
             BuildHeader();
             BuildSidebar();
+            UpdateLoginUi();
             Ui.StaticBuild = true;
             BuildPages();
             Ui.StaticBuild = false;
@@ -680,6 +691,76 @@ namespace SRLogbook
                 sidebar.Controls.Add(navs[i]);
             }
 
+            loginPanel = new Panel();
+            loginPanel.BackColor = Theme.Navy;
+            loginPanel.SetBounds(Ui.S(14), 0, Ui.S(192), Ui.S(122));
+            sidebar.Controls.Add(loginPanel);
+
+            avatarPanel = new Panel();
+            avatarPanel.SetBounds(0, 0, Ui.S(40), Ui.S(40));
+            avatarPanel.BackColor = Theme.Navy;
+            avatarPanel.Paint += delegate(object s, PaintEventArgs e)
+            {
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                string initial = "?";
+                if (!string.IsNullOrEmpty(sessionLogin)) initial = sessionLogin.Substring(0, 1).ToUpperInvariant();
+                using (SolidBrush b = new SolidBrush(string.IsNullOrEmpty(sessionLogin) ? Color.FromArgb(64, 78, 104) : Theme.Accent))
+                    e.Graphics.FillEllipse(b, 0, 0, avatarPanel.Width - 1, avatarPanel.Height - 1);
+                using (StringFormat sf = new StringFormat())
+                {
+                    sf.Alignment = StringAlignment.Center;
+                    sf.LineAlignment = StringAlignment.Center;
+                    using (Font fnt = Theme.FB(13f))
+                        e.Graphics.DrawString(initial, fnt, Brushes.White, new RectangleF(0, 0, avatarPanel.Width, avatarPanel.Height), sf);
+                }
+            };
+            loginPanel.Controls.Add(avatarPanel);
+
+            loginNameLabel = new Label();
+            loginNameLabel.Font = Theme.FB(9.5f);
+            loginNameLabel.ForeColor = Color.White;
+            loginNameLabel.BackColor = Theme.Navy;
+            loginNameLabel.SetBounds(Ui.S(50), Ui.S(2), Ui.S(142), Ui.S(20));
+            loginPanel.Controls.Add(loginNameLabel);
+
+            loginHintLabel = new Label();
+            loginHintLabel.Font = Theme.F(7.6f);
+            loginHintLabel.ForeColor = Color.FromArgb(150, 166, 190);
+            loginHintLabel.BackColor = Theme.Navy;
+            loginHintLabel.SetBounds(Ui.S(50), Ui.S(22), Ui.S(142), Ui.S(18));
+            loginPanel.Controls.Add(loginHintLabel);
+
+            loginTokenBox = new TextBox();
+            loginTokenBox.Font = Theme.F(8.8f);
+            loginTokenBox.UseSystemPasswordChar = true;
+            loginTokenBox.SetBounds(0, Ui.S(50), Ui.S(192), Ui.S(26));
+            loginPanel.Controls.Add(loginTokenBox);
+
+            loginButton = new Button();
+            loginButton.Text = "登录";
+            loginButton.Font = Theme.F(9f);
+            loginButton.FlatStyle = FlatStyle.Flat;
+            loginButton.FlatAppearance.BorderSize = 0;
+            loginButton.BackColor = Theme.Accent;
+            loginButton.ForeColor = Color.White;
+            loginButton.Cursor = Cursors.Hand;
+            loginButton.SetBounds(0, Ui.S(82), Ui.S(92), Ui.S(28));
+            loginButton.Click += delegate { SignIn(); };
+            loginPanel.Controls.Add(loginButton);
+
+            logoutButton = new Button();
+            logoutButton.Text = "退出";
+            logoutButton.Font = Theme.F(9f);
+            logoutButton.FlatStyle = FlatStyle.Flat;
+            logoutButton.FlatAppearance.BorderColor = Color.FromArgb(90, 106, 134);
+            logoutButton.FlatAppearance.BorderSize = 1;
+            logoutButton.BackColor = Color.FromArgb(48, 62, 92);
+            logoutButton.ForeColor = Color.White;
+            logoutButton.Cursor = Cursors.Hand;
+            logoutButton.SetBounds(Ui.S(100), Ui.S(82), Ui.S(92), Ui.S(28));
+            logoutButton.Click += delegate { SignOut(); };
+            loginPanel.Controls.Add(logoutButton);
+
             Label foot = new Label();
             foot.Text = "Synchrotron Radiation\r\nProject 2027";
             foot.Font = Theme.F(8f);
@@ -692,7 +773,61 @@ namespace SRLogbook
             sidebar.Resize += delegate
             {
                 foot.Top = sidebar.Height - Ui.S(62);
+                loginPanel.Top = Math.Max(Ui.S(320), foot.Top - loginPanel.Height - Ui.S(10));
             };
+        }
+
+        private void UpdateLoginUi()
+        {
+            if (loginNameLabel == null) return;
+            bool signed = !string.IsNullOrEmpty(sessionLogin);
+            loginNameLabel.Text = signed ? sessionLogin : (Lang.En ? "Not signed in" : "未登录");
+            loginHintLabel.Text = signed
+                ? (Lang.En ? "Signed in with GitHub" : "已登录 GitHub")
+                : (Lang.En ? "Enter token, then Sign In" : "输入密钥后登录");
+            if (loginTokenBox != null) loginTokenBox.Visible = !signed;
+            if (loginButton != null) loginButton.Visible = !signed;
+            if (logoutButton != null) logoutButton.Visible = signed;
+            if (avatarPanel != null) avatarPanel.Invalidate();
+            UpdateSyncActionState();
+        }
+
+        private async void SignIn()
+        {
+            if (loginButton == null || !loginButton.Enabled) return;
+            string token = CleanToken(loginTokenBox.Text);
+            if (token.Length == 0)
+            {
+                Msg.Show(Lang.En ? "Paste your GitHub token first." : "请先粘贴你的 GitHub 访问密钥。", "登录");
+                return;
+            }
+            loginButton.Enabled = false;
+            loginHintLabel.Text = Lang.En ? "Checking…" : "正在验证…";
+            try
+            {
+                string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
+                sessionToken = token;
+                sessionLogin = login;
+                loginTokenBox.Text = "";
+                UpdateLoginUi();
+                RefreshTeamPage();
+            }
+            catch (Exception ex)
+            {
+                sessionToken = null;
+                sessionLogin = null;
+                UpdateLoginUi();
+                Msg.Show((Lang.En ? "Sign-in failed: " : "登录失败：") + ex.Message, "登录", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally { loginButton.Enabled = true; Lang.Apply(this); }
+        }
+
+        private void SignOut()
+        {
+            sessionToken = null;
+            sessionLogin = null;
+            UpdateLoginUi();
+            RefreshTeamPage();
         }
 
         private void BuildHeader()
