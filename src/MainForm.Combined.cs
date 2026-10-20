@@ -9,6 +9,9 @@ namespace SRLogbook
 {
     public partial class MainForm
     {
+        /* ---------- 本地进度页的文件夹内容列表 ---------- */
+        private ListView progList;
+
         /* ---------- 参考文献与资料（仅参考资料） ---------- */
 
         private Panel BuildRefsAndCategoriesPage()
@@ -61,7 +64,7 @@ namespace SRLogbook
             Panel page = new Panel();
             page.BackColor = Color.White;
             Panel card = new Panel();
-            card.SetBounds(0, 0, 860, 300);
+            card.SetBounds(0, 0, 880, 570);
             card.BackColor = Color.White;
             card.Paint += delegate(object s, PaintEventArgs e)
             {
@@ -129,11 +132,93 @@ namespace SRLogbook
             bOpen.Click += delegate { OpenProgressFolder(); };
             card.Controls.Add(bOpen);
 
+            Label fh = new Label();
+            fh.Text = "文件夹内容 / Files";
+            fh.Font = Theme.FB(10.5f);
+            fh.ForeColor = Theme.Navy;
+            fh.BackColor = Color.White;
+            fh.SetBounds(Ui.S(24), Ui.S(204), Ui.S(320), Ui.S(24));
+            card.Controls.Add(fh);
+
+            Button bRefresh = new Button();
+            bRefresh.Text = "刷新";
+            bRefresh.Font = Theme.F(8.8f);
+            bRefresh.FlatStyle = FlatStyle.Flat;
+            bRefresh.FlatAppearance.BorderSize = 1;
+            bRefresh.FlatAppearance.BorderColor = Theme.CardBorder;
+            bRefresh.BackColor = Color.White;
+            bRefresh.ForeColor = Theme.TextMain;
+            bRefresh.Cursor = Cursors.Hand;
+            bRefresh.SetBounds(Ui.S(744), Ui.S(200), Ui.S(112), Ui.S(30));
+            bRefresh.Click += delegate { RefreshProgressFiles(); };
+            card.Controls.Add(bRefresh);
+
+            progList = new ListView();
+            progList.View = View.Details;
+            progList.FullRowSelect = true;
+            progList.GridLines = false;
+            progList.HideSelection = false;
+            progList.Font = Theme.F(9f);
+            progList.BackColor = Color.White;
+            progList.Columns.Add("名称 / Name", Ui.S(380), HorizontalAlignment.Left);
+            progList.Columns.Add("大小 / Size", Ui.S(150), HorizontalAlignment.Left);
+            progList.Columns.Add("修改时间 / Modified", Ui.S(230), HorizontalAlignment.Left);
+            progList.SetBounds(Ui.S(24), Ui.S(234), Ui.S(832), Ui.S(300));
+            progList.DoubleClick += delegate { OpenProgressListItem(); };
+            card.Controls.Add(progList);
+
             page.Resize += delegate
             {
                 card.Width = Math.Min(Ui.S(880), page.ClientSize.Width - Ui.S(2));
+                if (progList != null) progList.Width = Math.Max(Ui.S(300), card.Width - Ui.S(48));
             };
             return page;
+        }
+
+        /// <summary>列出本地进度文件夹里的文件与子文件夹（用户要求：选定文件夹后在软件内直接看到内容）。</summary>
+        private void RefreshProgressFiles()
+        {
+            if (progList == null) return;
+            string folder = LoadProgressFolder();
+            progList.BeginUpdate();
+            progList.Items.Clear();
+            if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder))
+            {
+                try
+                {
+                    foreach (string dir in Directory.GetDirectories(folder))
+                    {
+                        DirectoryInfo di = new DirectoryInfo(dir);
+                        ListViewItem item = new ListViewItem(di.Name + "\\");
+                        item.SubItems.Add("<文件夹 / folder>");
+                        item.SubItems.Add(di.LastWriteTime.ToString("yyyy-MM-dd HH:mm"));
+                        item.Tag = dir;
+                        item.ForeColor = Theme.Navy;
+                        progList.Items.Add(item);
+                    }
+                    foreach (string file in Directory.GetFiles(folder))
+                    {
+                        FileInfo fi = new FileInfo(file);
+                        ListViewItem item = new ListViewItem(fi.Name);
+                        item.SubItems.Add(Math.Max(1, fi.Length / 1024) + " KB");
+                        item.SubItems.Add(fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm"));
+                        item.Tag = file;
+                        progList.Items.Add(item);
+                    }
+                }
+                catch (Exception ex) { Log("读取进度文件夹失败 / Failed to list folder: " + ex.Message); }
+            }
+            progList.EndUpdate();
+        }
+
+        private void OpenProgressListItem()
+        {
+            if (progList == null || progList.SelectedItems.Count == 0) return;
+            string path = progList.SelectedItems[0].Tag as string;
+            if (string.IsNullOrEmpty(path)) return;
+            if (Directory.Exists(path)) { OpenPath(path); return; }
+            if (File.Exists(path)) { OpenPath(path); return; }
+            Msg.Show("文件不存在，可能已被移动或删除 / File not found.", "本地进度");
         }
 
         private void ChooseProgressFolder()
@@ -148,6 +233,7 @@ namespace SRLogbook
                 try { Directory.CreateDirectory(d.SelectedPath); } catch { }
                 SaveProgressFolder(d.SelectedPath);
                 txtProgPath.Text = d.SelectedPath;
+                RefreshProgressFiles();
             }
         }
 
@@ -163,6 +249,7 @@ namespace SRLogbook
             try
             {
                 string path = LocalDocs.CreateDocxIn(folder, project, title);
+                RefreshProgressFiles();
                 Msg.Show("文档已创建：" + path, "本地进度");
                 OpenPath(path);
             }
