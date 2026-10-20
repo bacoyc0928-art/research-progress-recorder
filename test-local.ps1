@@ -1,4 +1,4 @@
-param([string]$TestDirectory)
+﻿param([string]$TestDirectory)
 $ErrorActionPreference = 'Stop'
 if (-not $TestDirectory) { throw 'Specify a new isolated -TestDirectory.' }
 if (Test-Path -LiteralPath $TestDirectory) { throw 'Choose a fresh directory for isolated tests.' }
