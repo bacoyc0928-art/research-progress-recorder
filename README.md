@@ -1,37 +1,47 @@
-# 研究进展记录器（Windows 桌面版）
+# Research Progress Recorder 0.0.2 / 研究进展记录器
 
-此仓库提供桌面程序、完整 C# 源码和构建脚本。程序文件与团队进度数据分别存放：
+Windows 和 macOS 桌面客户端，共用私有数据仓库 bacoyc0928-art/research-data。
 
-- 程序仓库：`bacoyc0928-art/research-progress-recorder`（本仓库，私有）
-- 数据仓库：`bacoyc0928-art/research-data`（私有），共享记录位于 `sync/research_log.json`
+## 下载与启动
 
-**仓库中没有个人访问令牌、本机 `research_log.json`、Word 文档或私人本地路径。**
+从本仓库 Releases 下载。程序仓库邀请用于下载，数据仓库邀请用于同步，两份邀请均需接受。
 
-## 下载和运行
+| 下载文件 | 平台 |
+| --- | --- |
+| research-progress-recorder-0.0.2-Windows.zip | Windows 10/11，.NET Framework 4.8；解压后运行 exe |
+| research-progress-recorder-0.0.2-macOS-arm64.zip | Apple Silicon M 系列，macOS 14+ |
+| research-progress-recorder-0.0.2-macOS-x64.zip | Intel Mac，macOS 15+ |
 
-1. 仓库所有者将同僚的 GitHub 用户名加入**程序仓库和数据仓库**的 Collaborators；同僚接受两份邀请。
-2. 从本仓库下载 `研究进展记录器-Windows.zip` 并解压到个人有写权限的目录，运行其中的 `研究进展记录器.exe`。需要 Windows 10/11 和 .NET Framework 4.8。
-3. 首次运行会在 exe 同目录创建本机 `research_log.json`。这个文件是个人本地缓存，不要提交到程序仓库。
-4. 打开「团队同步」。仓库应为 `bacoyc0928-art/research-data`，路径为 `sync/research_log.json`，分支为 `main`。
-5. 每人输入**自己的** GitHub 访问令牌，点「保存配置」「测试连接」，再点「一键同步」。此后编辑记录后再次点「一键同步」，其他人点「一键同步」读取新进度。目前不是后台自动同步。
+Mac 包自带 Python/Tk，无需另装 Python。解压后将 ResearchProgressRecorder.app 放进 Applications。当前没有 Apple Developer ID 签名或公证，首次打开可能被系统拦截；接收者应核对来源和 SHA-256，并按单位安全政策决定是否运行。本项目不修改系统安全设置。
 
-## 各自的访问令牌
+## 协作配置
 
-仓库所有者可使用仅选中 `research-data`、授予 Contents 读写权限的 fine-grained PAT。GitHub 当前不支持个人仓库的协作者用 fine-grained PAT 提交，所以同僚需使用各自账号创建有 `repo` 权限、设有到期日的 classic PAT。**不要把所有者的令牌发给同僚，也不要把任何令牌放入仓库或聊天。**classic PAT 权限较广；建议使用专门用于本项目的 GitHub 账号，或以后将仓库迁入组织并改用更细的权限方案。
+1. 首次启动选择自己的工作文件夹，用于资料和 Word 文档。
+2. 团队同步填写仓库 bacoyc0928-art/research-data、分支 main、路径 sync/research_log.json。
+3. 输入自己的 GitHub PAT。仓库所有者可使用限选数据仓库、Contents 读写权限的 fine-grained PAT；个人仓库协作者目前需 classic PAT 的 repo 权限，建议设置到期日。不要分享令牌。
+4. 验证并保存配置，勾选记录/类别，点击一键同步。上传前合并远端，保留未选频道的远端数据，冲突会重试。同条记录按 UTC 更新时间取较新版本，请保持系统时钟准确。
+5. 研究记录与类别的删除标记均同步。所有协作者应升级至 0.0.2。
+6. 团队研究页选择个人文件夹后，可上传参考资料、个人研究和文档清单到 team/<GitHub登录名>/，并查看成员研究。这里只上传 JSON 元数据，PDF、DOCX、附件文件本身不会上传。
 
-令牌只保存在各自电脑的 Windows 凭据管理器。`sync_config.json` 只包含仓库地址、文件路径和分支。
+team/<login>/ 是应用选择的上传路径，不是 GitHub 权限边界；整个仓库的写入者仍可通过 GitHub 修改其他人的目录。同步由按钮触发，无后台常驻服务。
 
-## 同步范围与冲突
+## 本机数据与升级
 
-- 同步研究记录和类别名称、任务数、已完成数及预计工时。
-- 同一条记录或类别发生并行修改时，最后更新时间较新的版本生效；上传前会读取远端并合并，提交冲突会重试。
-- 删除类别会同步到其他成员；删除单条研究记录仍不会同步为远端删除。
-- 类别中的相关材料**链接和路径文字**会同步，但它们指向的本地文件不会上传。其他成员的电脑上可能无法打开这些路径。参考资料库和本地 DOCX 文件也不会上传；Word 文档需另行共享时请使用双方都能访问的文件服务。
+Windows 日志保存在 exe 同目录 research_log.json；令牌只存 Windows 凭据管理器。
+Mac 日志保存在 ~/Library/Application Support/ResearchProgressRecorder/research_log.json；令牌只存 macOS 钥匙串。
+原子保存保留 .bak 供恢复。更换工作目录保留现有日志，只改变后续资料和文档目录。
 
-## 从源码构建
+升级 Windows 前备份并保留 research_log.json、workspace.json、sync_config.json、personal.json、localrefs.json、lang.txt，替换程序即可。不要把个人 JSON 文件提交到程序仓库。
 
-在 Windows PowerShell 中运行 `./build.ps1`。脚本用系统 .NET Framework C# 编译器生成 exe，不下载依赖。源码位于 `src/`。
+六个栏目：概览、团队研究、参考文献与资料、本地进度、团队同步、帮助。支持中英文、研究日志自动保存与搜索、可编辑类别和附件链接、本地 Word 文档、参考资料。删除磁盘文件先确认并移到系统回收站/废纸篓；工作目录、程序目录及其父目录受保护。来自其他电脑的路径可能需要重新定位。
 
-## 维护
+## 构建与验证
 
-升级时仅替换 exe；保留个人电脑上的 `research_log.json` 和 `sync_config.json`。发布包中不应包含这些个人文件。此程序当前未签名，安装前可核对仓库内容和下载包的 SHA-256。
+Windows 在 PowerShell 执行 ./build.ps1。Mac 开发运行 python3 mac-client.py；在 macOS 用 PyInstaller 构建 .app。
+.github/workflows/release.yml 在 Windows、Apple Silicon macOS 和 Intel macOS 上分别测试和打包。测试覆盖合并、删除、范围、时区、子秒精度、损坏数据保护、备份、Word XML、冲突重试和界面启动。
+仍需团队实际双账号/双设备验收同步、首次安装和钥匙串授权；自动化检查不保证没有缺陷。
+
+## English quick start
+
+Download the ZIP matching your platform from Releases. Mac bundles include their runtime; use arm64 for Apple Silicon, x64 for Intel. They are not Developer ID signed/notarized; follow your organization's installation policy.
+Accept both private repository invitations, choose a workspace, configure bacoyc0928-art/research-data / main / sync/research_log.json, and use your own GitHub token. Tokens stay in Windows Credential Manager or macOS Keychain. Sync selected records/categories manually; unselected remote data is preserved and deletions propagate. Personal channels upload metadata under your own GitHub login. Files themselves are not transferred. Keep local backups and upgrade all team devices to 0.0.2.
