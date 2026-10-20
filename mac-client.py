@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.1.0. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.1.1. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -23,7 +23,7 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.1.0'
+VERSION = '0.1.1'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
@@ -219,6 +219,19 @@ def docx(folder, project, category, title, direct=False):
 def within(path, root):
     try: Path(path).resolve().relative_to(Path(root).resolve()); return True
     except ValueError: return False
+
+def repo_problem_text(error, en):
+    code=getattr(error,'code',None)
+    if code==401:
+        return ('GitHub rejected the token (HTTP 401): it is invalid, expired or revoked.\n\nCreate a new token: Settings -> Developer settings -> Personal access tokens -> Tokens (classic), tick the repo scope, then paste it here.'
+                if en else 'GitHub 拒绝了该令牌（HTTP 401）：令牌无效、已过期或被撤销。\n\n请到 GitHub -> Settings -> Developer settings -> Personal access tokens -> Tokens (classic) 重新生成，勾选 repo 权限，再粘贴到这里。')
+    if code==403:
+        return ('GitHub refused access (HTTP 403): the token most likely lacks write access to this repository.\n\nA classic PAT needs the repo scope; fine-grained tokens are not supported for repositories owned by another account.'
+                if en else 'GitHub 拒绝访问（HTTP 403）：令牌很可能没有该仓库的写入权限。\n\nclassic PAT 请勾选 repo；他人账号下的私有仓库不支持 fine-grained 令牌。')
+    if code==404:
+        return ('GitHub returned 404: this token cannot see the repository.\n\n1. Is the collaborator invitation accepted? Open the repository in a browser as yourself.\n2. Fine-grained tokens cannot access a repository owned by another account - external collaborators need a classic PAT with the repo scope.\n3. Is the repository name exactly owner/repo?\n4. Is the token unexpired?'
+                if en else 'GitHub 返回 404：这个令牌看不到该仓库。\n\n1. 协作者邀请是否已接受？用本人账号在浏览器能打开该仓库才算生效。\n2. fine-grained 令牌无法访问他人账号的私有仓库，外部协作者必须用 classic PAT 并勾选 repo。\n3. 仓库名是否完全等于 owner/repo？\n4. 令牌是否已过期？')
+    return str(error)
 
 class Client:
     def __init__(self, root, home=None, smoke=False):
@@ -432,8 +445,28 @@ class Client:
         self.ttk.Label(p,text=self.tr('个人仓库协作者使用 classic PAT 的 repo 权限。不要共享令牌。','Personal-repository collaborators use a classic PAT with repo scope. Never share tokens.'),wraplength=980).pack(anchor='w')
     def save_sync(self):
         api,config=self.api()
-        def work(): api.login_cached=self.channels(api).identity()
-        self.run(work,lambda _:self.finish(api,config,self.tr('配置已验证并保存。','Configuration validated and saved.')))
+        def work():
+            # Identity first: a valid token is kept even when the repository is not reachable,
+            # so a wrong repository or a fine-grained token no longer looks like "not signed in".
+            login=api.login()
+            api.login_cached=login
+            try:
+                self.channels(api).identity()
+                api.repo_problem=None
+            except Exception as error:
+                api.repo_problem=error
+            return login
+        def done(login):
+            self.remember(api,config)
+            problem=getattr(api,'repo_problem',None)
+            if problem is None:
+                self.status.set(self.tr('配置已验证并保存。','Configuration validated and saved.'))
+                return
+            self.status.set(self.tr('账号已登录，但访问仓库失败。','Signed in, but the repository is not reachable.'))
+            self.mb.showwarning('SRPRecorder2027',self.tr('账号 ','Signed in as ')+login
+                +self.tr(' 已登录，但访问仓库失败：\n\n',' but the repository is not reachable:\n\n')
+                +repo_problem_text(problem,self.en),parent=self.root)
+        self.run(work,done)
     def pull_others(self):
         api,config=self.api()
         def work():
@@ -476,8 +509,8 @@ class Client:
         else: subprocess.Popen(['xdg-open',str(path)])
     def build_help(self):
         text=self.tk.Text(self.tabs[4],wrap='word',padx=16,pady=16); text.pack(fill='both',expand=True)
-        zh='SRPRecorder2027 0.1.0 公开测试版\n\n五栏与 Windows 一致：团队研究、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证保存配置。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。旧 0.0.2 的研究 JSON 和配置保留。升级退出后替换 .app 即可。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
-        en='SRPRecorder2027 0.1.0 Public Test\n\nFive pages match Windows: Team Research, References, Local Progress, Team Sync, Help.\n\nAccept the private research-data invitation, then validate your own classic PAT (repo scope). Refresh only reads; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. Legacy 0.0.2 JSON and settings are preserved. Quit before replacing the .app to upgrade.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
+        zh='SRPRecorder2027 0.1.1 公开测试版\n\n五栏与 Windows 一致：团队研究、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证保存配置。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。旧 0.0.2 的研究 JSON 和配置保留。升级退出后替换 .app 即可。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
+        en='SRPRecorder2027 0.1.1 Public Test\n\nFive pages match Windows: Team Research, References, Local Progress, Team Sync, Help.\n\nAccept the private research-data invitation, then validate your own classic PAT (repo scope). Refresh only reads; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. Legacy 0.0.2 JSON and settings are preserved. Quit before replacing the .app to upgrade.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
         text.insert('1.0',en if self.en else zh); text.configure(state='disabled')
 
 def main():
@@ -492,7 +525,7 @@ def main():
                 for index in range(5): client.book.select(index); root.update()
                 client.language(); root.update()
                 for index in range(5): client.book.select(index); root.update()
-                root.destroy(); print('SRPRecorder2027 0.1.0: five pages and both languages passed')
+                root.destroy(); print('SRPRecorder2027 0.1.1: five pages and both languages passed')
         else:
             Client(root); root.deiconify(); root.mainloop()
     except Exception as error:
