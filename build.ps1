@@ -1,4 +1,4 @@
-param([string]$OutputDirectory)
+﻿param([string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $sourceRoot = $PSScriptRoot
 if (-not $OutputDirectory) { $OutputDirectory = $sourceRoot }
