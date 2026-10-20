@@ -342,6 +342,7 @@ namespace SRLogbook
         private Label loginHintLabel;
         private TextBox loginTokenBox;
         private Button loginButton;
+        private Button loginShowButton;
         private Button logoutButton;
         private string sessionToken;
         private string sessionLogin;
@@ -733,8 +734,37 @@ namespace SRLogbook
             loginTokenBox = new TextBox();
             loginTokenBox.Font = Theme.F(8.8f);
             loginTokenBox.UseSystemPasswordChar = true;
-            loginTokenBox.SetBounds(0, 50, 192, 26);
+            loginTokenBox.ShortcutsEnabled = true;
+            loginTokenBox.SetBounds(0, 50, 148, 26);
+            // WinForms blocks Ctrl+C on password fields; copy the selection ourselves.
+            loginTokenBox.KeyDown += delegate(object s, KeyEventArgs e)
+            {
+                if (e.Control && e.KeyCode == Keys.C)
+                {
+                    e.SuppressKeyPress = true;
+                    string picked = loginTokenBox.SelectedText;
+                    if (string.IsNullOrEmpty(picked)) return;
+                    try { Clipboard.SetText(picked); } catch { }
+                }
+            };
             loginPanel.Controls.Add(loginTokenBox);
+
+            loginShowButton = new Button();
+            loginShowButton.Text = "显示";
+            loginShowButton.Font = Theme.F(7.6f);
+            loginShowButton.FlatStyle = FlatStyle.Flat;
+            loginShowButton.FlatAppearance.BorderColor = Color.FromArgb(90, 106, 134);
+            loginShowButton.FlatAppearance.BorderSize = 1;
+            loginShowButton.BackColor = Color.FromArgb(48, 62, 92);
+            loginShowButton.ForeColor = Color.White;
+            loginShowButton.Cursor = Cursors.Hand;
+            loginShowButton.SetBounds(152, 50, 40, 26);
+            loginShowButton.Click += delegate
+            {
+                loginTokenBox.UseSystemPasswordChar = !loginTokenBox.UseSystemPasswordChar;
+                loginShowButton.Text = loginTokenBox.UseSystemPasswordChar ? "显示" : "隐藏";
+            };
+            loginPanel.Controls.Add(loginShowButton);
 
             loginButton = new Button();
             loginButton.Text = "登录";
