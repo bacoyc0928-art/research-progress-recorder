@@ -36,7 +36,7 @@ namespace SRLogbook
             top.Controls.Add(h);
 
             Label hint = new Label();
-            hint.Text = "每个类别可以设置任务数量、预计时间与相关材料；进度按“已完成 / 任务总数”计算。";
+            hint.Text = "类别可自行添加、编辑、删除，并可设置任务数量、预计时间与相关材料。";
             hint.Font = Theme.F(8.8f);
             hint.ForeColor = Theme.TextMuted;
             hint.BackColor = Color.White;
@@ -56,6 +56,19 @@ namespace SRLogbook
             top.Controls.Add(add);
             catsTop = top;
             btnAddCat = add;
+
+            Button clear = new Button();
+            clear.Text = "删除全部类别";
+            clear.Font = Theme.F(8.8f);
+            clear.FlatStyle = FlatStyle.Flat;
+            clear.FlatAppearance.BorderSize = 1;
+            clear.FlatAppearance.BorderColor = Color.FromArgb(238, 215, 213);
+            clear.BackColor = Color.White;
+            clear.ForeColor = Color.FromArgb(179, 69, 63);
+            clear.Cursor = Cursors.Hand;
+            clear.SetBounds(Ui.S(200), Ui.S(22), Ui.S(150), Ui.S(34));
+            clear.Click += delegate { ClearAllCategories(); };
+            top.Controls.Add(clear);
 
             catsFlow = new FlowLayoutPanel();
             catsFlow.Dock = DockStyle.Fill;
@@ -86,6 +99,7 @@ namespace SRLogbook
             if (keepY > 0) catsFlow.AutoScrollPosition = new Point(0, keepY);
             if (btnAddCat != null && catsTop != null)
                 btnAddCat.Left = Math.Max(Ui.S(0), catsTop.Width - btnAddCat.Width - Ui.S(22));
+            if (Lang.En) Lang.Apply(catsFlow);
         }
 
         private void OpenLinkSafe(Category c, CatLink l)
@@ -101,7 +115,7 @@ namespace SRLogbook
                 OpenPath(p);
                 return;
             }
-            if (MessageBox.Show("找不到文件：\n" + p + "\n\n是否重新定位？（其他人同步过来的本机路径通常需要重新指定）", "文件不存在", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (Msg.Show("找不到文件：\n" + p + "\n\n是否重新定位？（其他人同步过来的路径在你的电脑上可能不存在）", "文件不存在", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             OpenFileDialog d = new OpenFileDialog();
             d.Filter = "所有文件|*.*";
             if (d.ShowDialog(this) != DialogResult.OK) return;
@@ -191,19 +205,6 @@ namespace SRLogbook
             }
             card.Controls.Add(links);
 
-            Button edit = new Button();
-            edit.Text = "编辑";
-            edit.Font = Theme.F(8.8f);
-            edit.FlatStyle = FlatStyle.Flat;
-            edit.FlatAppearance.BorderSize = 1;
-            edit.FlatAppearance.BorderColor = Theme.CardBorder;
-            edit.BackColor = Color.White;
-            edit.ForeColor = Theme.TextMain;
-            edit.Cursor = Cursors.Hand;
-            edit.SetBounds(w - Ui.S(178), Ui.S(12), Ui.S(72), Ui.S(30));
-            edit.Click += delegate { EditCategory(c); };
-            card.Controls.Add(edit);
-
             Button del = new Button();
             del.Text = "删除";
             del.Font = Theme.F(8.8f);
@@ -217,6 +218,19 @@ namespace SRLogbook
             del.Click += delegate { DeleteCategory(c); };
             card.Controls.Add(del);
 
+            Button edit = new Button();
+            edit.Text = "编辑";
+            edit.Font = Theme.F(8.8f);
+            edit.FlatStyle = FlatStyle.Flat;
+            edit.FlatAppearance.BorderSize = 1;
+            edit.FlatAppearance.BorderColor = Theme.CardBorder;
+            edit.BackColor = Color.White;
+            edit.ForeColor = Theme.TextMain;
+            edit.Cursor = Cursors.Hand;
+            edit.SetBounds(w - Ui.S(178), Ui.S(12), Ui.S(72), Ui.S(30));
+            edit.Click += delegate { EditCategory(c); };
+            card.Controls.Add(edit);
+
             return card;
         }
 
@@ -224,7 +238,11 @@ namespace SRLogbook
         {
             using (CategoryForm f = new CategoryForm(src))
             {
-                if (f.ShowDialog(this) != DialogResult.OK || f.Result == null) return;
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+                if (f.DeleteRequested) { if (src != null) DeleteCategory(src); return; }
+                if (f.Result == null) return;
+                if (store.Categories.Exists(c => c.Id != f.Result.Id && string.Equals(c.Name, f.Result.Name, StringComparison.OrdinalIgnoreCase)))
+                { Msg.Show("Category name already exists.", "Category"); return; }
                 if (src == null)
                 {
                     f.Result.Updated = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ");
@@ -241,8 +259,10 @@ namespace SRLogbook
                     src.Updated = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ");
                     if (oldName != src.Name)
                     {
-                        foreach (Entry e in store.Entries) if (e.Category == oldName) e.Category = src.Name;
+                        foreach (Entry e in store.Entries) if (e.Category == oldName) { e.Category = src.Name; e.Updated = SyncData.Now(); }
+                        foreach (LocalDoc d in store.Documents) if (d.Category == oldName) { d.Category = src.Name; d.Updated = SyncData.Now(); }
                     }
+                    if (current != null) LoadEntry(current);
                 }
                 Persist();
                 RebuildCategories();
@@ -253,28 +273,54 @@ namespace SRLogbook
 
         private void DeleteCategory(Category c)
         {
-            if (MessageBox.Show("删除类别“" + c.Name + "”？该类别下的记录不会被删除，会变为未归类。", "删除类别", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            foreach (Entry e in store.Entries) if (e.Category == c.Name) e.Category = "";
+            if (Msg.Show("删除类别“" + c.Name + "”？该类别下的记录不会被删除，会变为未归类。", "删除类别", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            foreach (Entry e in store.Entries) if (e.Category == c.Name) { e.Category = ""; e.Updated = SyncData.Now(); }
             foreach (LocalDoc d in store.Documents) if (d.Category == c.Name) d.Category = "";
             store.Categories.Remove(c);
             store.DeletedCategories.Add(new DeletedCategory { Id = c.Id, At = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") });
             Persist();
             RebuildCategories();
             RefreshCategoryCombo();
+            if (current != null) LoadEntry(current);
+            RefreshOverview2();
+        }
+
+        private void ClearAllCategories()
+        {
+            if (store.Categories.Count == 0)
+            {
+                Msg.Show("当前没有类别。", "提示");
+                return;
+            }
+            if (Msg.Show("删除全部 " + store.Categories.Count + " 个类别？记录会变为未归类，且不可恢复。", "删除全部类别", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            foreach (Category c in store.Categories)
+            {
+                foreach (Entry e in store.Entries) if (e.Category == c.Name) { e.Category = ""; e.Updated = SyncData.Now(); }
+                foreach (LocalDoc d in store.Documents) if (d.Category == c.Name) d.Category = "";
+                store.DeletedCategories.Add(new DeletedCategory { Id = c.Id, At = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") });
+            }
+            store.Categories.Clear();
+            Persist();
+            RebuildCategories();
+            RefreshCategoryCombo();
+            if (current != null) LoadEntry(current);
             RefreshOverview2();
         }
 
         private void RefreshCategoryCombo()
         {
             if (cbCat == null) return;
+            bool wasLoading = loading; loading = true;
             string cur = cbCat.SelectedItem as string;
             if (cur == null && current != null) cur = current.Category;
             cbCat.BeginUpdate();
             cbCat.Items.Clear();
+            cbCat.Items.Add("");
             foreach (Category c in store.Categories) cbCat.Items.Add(c.Name);
             cbCat.EndUpdate();
             if (cur != null && cbCat.Items.Contains(cur)) cbCat.SelectedItem = cur;
-            else if (cbCat.Items.Count > 0) cbCat.SelectedIndex = 0;
+            else cbCat.SelectedIndex = 0;
+            loading = wasLoading;
         }
 
         /* ---------------- 概览 ---------------- */
@@ -316,7 +362,7 @@ namespace SRLogbook
             bAddCat.ForeColor = Theme.TextMain;
             bAddCat.Cursor = Cursors.Hand;
             bAddCat.SetBounds(Ui.S(130), Ui.S(120), Ui.S(100), Ui.S(26));
-            bAddCat.Click += delegate { EditCategory(null); };
+            bAddCat.Visible = true;
             p3.Controls.Add(bAddCat);
 
             int y = Ui.S(160);
@@ -368,7 +414,7 @@ namespace SRLogbook
             p3.Controls.Add(lr);
 
             List<Entry> sorted = new List<Entry>(store.Entries);
-            sorted.Sort(delegate(Entry a, Entry b) { return string.Compare(b.Updated, a.Updated); });
+            sorted.Sort(delegate(Entry a, Entry b) { return SyncData.Compare(b.Updated, a.Updated); });
             int yy = Ui.S(160);
             int shown = 0;
             foreach (Entry e in sorted)
@@ -383,7 +429,7 @@ namespace SRLogbook
                 lt.AutoEllipsis = true;
                 lt.SetBounds(Ui.S(540), yy, Ui.S(340), Ui.S(20));
                 lt.Cursor = Cursors.Hand;
-                lt.Click += delegate { SetPage(0); };
+                lt.Click += delegate { ShowResearchEntry(e); };
                 p3.Controls.Add(lt);
                 Label ld = new Label();
                 ld.Text = (e.Updated == null ? "" : e.Updated) + "  ·  " + (e.Category == null ? "" : e.Category) + "  ·  " + e.Progress + "%";
@@ -395,6 +441,7 @@ namespace SRLogbook
                 shown++;
             }
             p3.ResumeLayout();
+            if (Lang.En) Lang.Apply(p3);
         }
 
 
@@ -423,7 +470,7 @@ namespace SRLogbook
             page.Controls.Add(card);
 
             Label h = new Label();
-            h.Text = "新建本地文档";
+            h.Text = "本地进度";
             h.Font = Theme.FB(13f);
             h.ForeColor = Theme.Navy;
             h.BackColor = Color.White;
@@ -431,7 +478,7 @@ namespace SRLogbook
             card.Controls.Add(h);
 
             Label hint = new Label();
-            hint.Text = "文档保存在项目内的“本地文档”文件夹，命名为“日期 + 项目名称”，并归入所选研究类别；不连接任何网络服务。";
+            hint.Text = "文档保存在工作文件夹内的“本地文档”文件夹，命名为“日期 + 项目名称”，并归入所选研究类别。";
             hint.Font = Theme.F(8.8f);
             hint.ForeColor = Theme.TextMuted;
             hint.BackColor = Color.White;
@@ -458,7 +505,7 @@ namespace SRLogbook
             card.Controls.Add(txtDTitle);
 
             Button create = new Button();
-            create.Text = "新建本地文档";
+            create.Text = "新建文档";
             create.Font = Theme.FB(9.5f);
             create.FlatStyle = FlatStyle.Flat;
             create.FlatAppearance.BorderSize = 0;
@@ -501,7 +548,7 @@ namespace SRLogbook
             docListPanel = listCard;
 
             Label dh = new Label();
-            dh.Text = "本地文档清单";
+            dh.Text = "文档清单";
             dh.Font = Theme.FB(12f);
             dh.ForeColor = Theme.Navy;
             dh.BackColor = Color.White;
@@ -509,7 +556,7 @@ namespace SRLogbook
             listCard.Controls.Add(dh);
 
             Label dsub = new Label();
-            dsub.Text = "记录通过本程序创建的文档；可直接打开、归入类别或从清单移除（不会删除文件）。";
+            dsub.Text = "文档可打开或归入类别；移除会将磁盘文件移入回收站。";
             dsub.Font = Theme.F(8.4f);
             dsub.ForeColor = Theme.TextMuted;
             dsub.BackColor = Color.White;
@@ -576,6 +623,7 @@ namespace SRLogbook
             txtDProject.Text = store.DocProject;
             cbDCat.BeginUpdate();
             cbDCat.Items.Clear();
+            cbDCat.Items.Add("");
             foreach (Category c in store.Categories) cbDCat.Items.Add(c.Name);
             cbDCat.EndUpdate();
             if (cbDCat.Items.Count > 0) cbDCat.SelectedIndex = 0;
@@ -617,13 +665,17 @@ namespace SRLogbook
             string catName = cbDCat.SelectedItem == null ? "" : cbDCat.SelectedItem.ToString();
             if (catName.Length == 0) return;
             LocalDoc d = store.Documents[lstDocs.SelectedIndex];
-            d.Category = catName;
+            foreach (Category old in store.Categories)
+            {
+                if (old.Links.RemoveAll(l => l.Url == d.Path) > 0) old.Updated = SyncData.Now();
+            }
+            d.Category = catName; d.Updated = SyncData.Now();
             foreach (Category c in store.Categories)
             {
                 if (c.Name != catName) continue;
                 bool exists = false;
                 foreach (CatLink l in c.Links) if (l.Url == d.Path) exists = true;
-                if (!exists) c.Links.Add(new CatLink { Title = d.Name, Url = d.Path, Kind = "file" });
+                if (!exists) { c.Links.Add(new CatLink { Title = d.Name, Url = d.Path, Kind = "file" }); c.Updated = SyncData.Now(); }
                 break;
             }
             Persist();
@@ -636,8 +688,19 @@ namespace SRLogbook
         {
             if (lstDocs == null || lstDocs.SelectedIndex < 0 || lstDocs.SelectedIndex >= store.Documents.Count) return;
             LocalDoc d = store.Documents[lstDocs.SelectedIndex];
-            if (MessageBox.Show("从清单移除“" + d.Name + "”？（不会删除本地文件）", "移除记录", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (Msg.Show("删除“" + d.Name + "”？\r\n这会将该文档移入回收站。", "删除文档", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            try
+            {
+                if (!string.IsNullOrEmpty(d.Path) && File.Exists(d.Path)) Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(d.Path, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("删除失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            foreach (Category c in store.Categories) if (c.Links.RemoveAll(l => l.Url == d.Path) > 0) c.Updated = SyncData.Now();
             store.Documents.RemoveAt(lstDocs.SelectedIndex);
+            RebuildCategories();
             Persist();
             RefreshDocList();
         }
@@ -659,26 +722,28 @@ namespace SRLogbook
                     Name = title,
                     Path = path,
                     Category = catName,
-                    Updated = DateTime.Now.ToString("yyyy-MM-dd HH:mm")
+                    Updated = SyncData.Now()
                 });
                 foreach (Category c in store.Categories)
                 {
                     if (c.Name == catName)
                     {
                         c.Links.Add(new CatLink { Title = title, Url = path, Kind = "file" });
+                        c.Updated = SyncData.Now();
                         break;
                     }
                 }
                 Persist();
+                RebuildCategories();
                 RefreshDocList();
                 lblDStatus.Text = "已创建：" + path;
-                if (MessageBox.Show("文档已创建，是否现在打开？", "本地文档", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                if (Msg.Show("文档已创建，是否现在打开？", "本地进度", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     OpenPath(path);
             }
             catch (Exception ex)
             {
                 lblDStatus.Text = "创建失败：" + ex.Message;
-                MessageBox.Show("创建失败：" + ex.Message, "本地文档", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Msg.Show("创建失败：" + ex.Message, "本地进度", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
     }
@@ -688,6 +753,7 @@ namespace SRLogbook
     public class CategoryForm : Form
     {
         public Category Result;
+        public bool DeleteRequested;
         private TextBox txtName;
         private NumericUpDown numTotal, numDone, numHours;
         private ListBox lstLinks;
@@ -705,6 +771,7 @@ namespace SRLogbook
             this.Font = Theme.F(9.5f);
 
             id = src == null ? Guid.NewGuid().ToString("N") : src.Id;
+            bool isNew = src == null;
             links = new List<CatLink>();
             if (src != null) foreach (CatLink l in src.Links) links.Add(l);
 
@@ -763,6 +830,22 @@ namespace SRLogbook
                 if (lstLinks.SelectedIndex >= 0) { links.RemoveAt(lstLinks.SelectedIndex); RefreshLinks(); }
             };
 
+            if (!isNew)
+            {
+                Button delBtn = new Button();
+                delBtn.Text = "删除此类别";
+                delBtn.Font = Theme.F(8.8f);
+                delBtn.FlatStyle = FlatStyle.Flat;
+                delBtn.FlatAppearance.BorderSize = 1;
+                delBtn.FlatAppearance.BorderColor = Color.FromArgb(238, 215, 213);
+                delBtn.BackColor = Color.White;
+                delBtn.ForeColor = Color.FromArgb(179, 69, 63);
+                delBtn.Cursor = Cursors.Hand;
+                delBtn.SetBounds(Ui.S(20), Ui.S(496), Ui.S(120), Ui.S(38));
+                delBtn.Click += delegate { DeleteRequested = true; DialogResult = DialogResult.OK; Close(); };
+                Controls.Add(delBtn);
+            }
+
             Button ok = new Button();
             ok.Text = "保存";
             ok.Font = Theme.FB(9.5f);
@@ -784,6 +867,7 @@ namespace SRLogbook
             cancel.SetBounds(Ui.S(458), Ui.S(496), Ui.S(100), Ui.S(38));
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             Controls.Add(cancel);
+            if (Lang.En) Lang.Apply(this);
         }
 
         private void AddLabel(string text, int x, int y)
@@ -854,16 +938,16 @@ namespace SRLogbook
             if (l.Kind == "url" || (l.Url != null && (l.Url.StartsWith("http://") || l.Url.StartsWith("https://"))))
             {
                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = l.Url, UseShellExecute = true }); }
-                catch (Exception ex) { MessageBox.Show("无法打开链接：" + ex.Message, "提示"); }
+                catch (Exception ex) { Msg.Show("无法打开链接：" + ex.Message, "提示"); }
                 return;
             }
             if (File.Exists(l.Url) || Directory.Exists(l.Url))
             {
                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = l.Url, UseShellExecute = true }); }
-                catch (Exception ex) { MessageBox.Show("无法打开文件：" + ex.Message, "提示"); }
+                catch (Exception ex) { Msg.Show("无法打开文件：" + ex.Message, "提示"); }
                 return;
             }
-            if (MessageBox.Show("找不到文件：\n" + l.Url + "\n\n是否重新定位？", "文件不存在", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (Msg.Show("找不到文件：\n" + l.Url + "\n\n是否重新定位？", "文件不存在", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             OpenFileDialog d = new OpenFileDialog();
             d.Filter = "所有文件|*.*";
             if (d.ShowDialog(this) != DialogResult.OK) return;
@@ -884,7 +968,7 @@ namespace SRLogbook
         private void Save()
         {
             string name = txtName.Text.Trim();
-            if (name.Length == 0) { MessageBox.Show("请填写类别名称。", "提示"); return; }
+            if (name.Length == 0) { Msg.Show("请填写类别名称。", "提示"); return; }
             Category c = new Category();
             c.Id = id;
             c.Name = name;

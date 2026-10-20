@@ -77,6 +77,7 @@ namespace SRLogbook
         public List<Category> Categories { get; set; }
         public List<LocalDoc> Documents { get; set; }
         public List<DeletedCategory> DeletedCategories { get; set; }
+        public List<DeletedCategory> DeletedEntries { get; set; }
         public bool CategoriesInitialized { get; set; }
         public string DocProject { get; set; }
 
@@ -87,6 +88,7 @@ namespace SRLogbook
             Categories = new List<Category>();
             Documents = new List<LocalDoc>();
             DeletedCategories = new List<DeletedCategory>();
+            DeletedEntries = new List<DeletedCategory>();
         }
     }
 
@@ -319,13 +321,14 @@ namespace SRLogbook
         private string appDir;
         private string dataPath;
         private string projectRoot;
+        private string workspaceFolder;
         private Store store;
+        public static bool StartupCancelled;
 
         private Panel sidebar;
         private Panel header;
         private Panel pagesHost;
         private Label lblHeaderTitle;
-        private Label lblHeaderSub;
         private SideButton[] navs;
         private Panel[] pages;
         private int pageIndex;
@@ -354,10 +357,30 @@ namespace SRLogbook
         {
             Ui.Init();
             appDir = Path.GetDirectoryName(Application.ExecutablePath);
+            Lang.Load(appDir);
+            workspaceFolder = LoadWorkspace();
+            if (!Directory.Exists(workspaceFolder))
+            {
+                using (FolderBrowserDialog dlg = new FolderBrowserDialog())
+                {
+                    dlg.Description = "请选择你的工作文件夹（存放本项目资料）。不选择将无法运行。";
+                    string seed = Directory.Exists(workspaceFolder) ? workspaceFolder : ComputeProjectRoot();
+                    if (Directory.Exists(seed)) dlg.SelectedPath = seed;
+                    if (dlg.ShowDialog() != DialogResult.OK)
+                    {
+                        Msg.Show("未选择工作文件夹，程序将退出。", "需要工作文件夹", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        StartupCancelled = true;
+                        return;
+                    }
+                    workspaceFolder = dlg.SelectedPath;
+                    SaveWorkspace(workspaceFolder);
+                }
+            }
+            projectRoot = workspaceFolder;
             dataPath = Path.Combine(appDir, "research_log.json");
             store = LoadStore();
 
-            this.Text = "研究进展记录器 · Synchrotron Radiation Project 2027";
+            this.Text = "研究进展记录器 · Synchrotron Radiation Project 2027 · 0.0.2";
             this.ClientSize = new Size(1180, 730);
             this.MinimumSize = new Size(1020, 680);
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -382,7 +405,8 @@ namespace SRLogbook
             {
                 lstEntries.SelectedIndex = 0;
             }
-            FormClosing += delegate { saveTimer.Stop(); SaveCurrent(); };
+            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (syncBusy) { e.Cancel = true; return; } saveTimer.Stop(); SaveCurrent(); };
+            if (Lang.En) Lang.Apply(this);
         }
 
         private string ComputeProjectRoot()
@@ -399,6 +423,39 @@ namespace SRLogbook
             return appDir;
         }
 
+        private string WorkspacePath() { return Path.Combine(appDir, "workspace.json"); }
+
+        private string LoadWorkspace()
+        {
+            try
+            {
+                if (File.Exists(WorkspacePath()))
+                {
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    Dictionary<string, object> d = ser.Deserialize<Dictionary<string, object>>(File.ReadAllText(WorkspacePath(), Encoding.UTF8));
+                    if (d != null && d.ContainsKey("folder"))
+                    {
+                        string f = Convert.ToString(d["folder"]);
+                        if (!string.IsNullOrEmpty(f) && Directory.Exists(f)) return f;
+                    }
+                }
+            }
+            catch { }
+            return "";
+        }
+
+        private void SaveWorkspace(string folder)
+        {
+            try
+            {
+                JavaScriptSerializer ser = new JavaScriptSerializer();
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                d["folder"] = folder;
+                File.WriteAllText(WorkspacePath(), ser.Serialize(d), new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
         private Store LoadStore()
         {
             JavaScriptSerializer ser = new JavaScriptSerializer();
@@ -408,37 +465,33 @@ namespace SRLogbook
                 if (File.Exists(dataPath))
                 {
                     string json = File.ReadAllText(dataPath, Encoding.UTF8);
-                    Store s = ser.Deserialize<Store>(json);
+                    Store s = SyncData.Read(json);
                     if (s != null)
                     {
-                        if (s.Entries == null) s.Entries = new List<Entry>();
-                        if (s.Refs == null) s.Refs = new List<RefItem>();
-                        if (s.Categories == null) s.Categories = new List<Category>();
-                        if (s.Documents == null) s.Documents = new List<LocalDoc>();
-                        if (s.DeletedCategories == null) s.DeletedCategories = new List<DeletedCategory>();
-                        foreach (Category c in s.Categories)
+                        SyncData.Normalize(s);
+                        foreach (Entry e in s.Entries)
                         {
-                            if (c.Links == null) c.Links = new List<CatLink>();
-                            for (int i = c.Links.Count - 1; i >= 0; i--)
-                            {
-                                string u = c.Links[i].Url == null ? "" : c.Links[i].Url;
-                                if (u.IndexOf("docs.google.com", StringComparison.OrdinalIgnoreCase) >= 0) c.Links.RemoveAt(i);
-                            }
+                            if (string.IsNullOrEmpty(e.Id)) e.Id = Guid.NewGuid().ToString("N");
+                            DateTime date;
+                            e.Date = DateTime.TryParse(e.Date, out date) ? date.ToString("yyyy-MM-dd") : DateTime.Today.ToString("yyyy-MM-dd");
                         }
                         if (s.Categories.Count == 0 && !s.CategoriesInitialized) MigrateCategories(s);
                         s.CategoriesInitialized = true;
-                        projectRoot = (s.ProjectRoot != null && Directory.Exists(s.ProjectRoot)) ? s.ProjectRoot : ComputeProjectRoot();
+                        projectRoot = !string.IsNullOrEmpty(workspaceFolder) && Directory.Exists(workspaceFolder)
+                            ? workspaceFolder
+                            : ((s.ProjectRoot != null && Directory.Exists(s.ProjectRoot)) ? s.ProjectRoot : ComputeProjectRoot());
                         s.ProjectRoot = projectRoot;
                         return s;
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { throw new InvalidDataException("Cannot read research_log.json. The original file was preserved; restore research_log.json.bak if needed.", ex); }
             Store ns = new Store();
-            projectRoot = ComputeProjectRoot();
+            projectRoot = workspaceFolder;
             ns.ProjectRoot = projectRoot;
             ns.CategoriesInitialized = true;
-            Seed(ns);
+            // Start empty on a new installation; no personal sample data.
+
             return ns;
         }
 
@@ -471,6 +524,33 @@ namespace SRLogbook
                 s.Categories.Add(new Category { Id = Guid.NewGuid().ToString("N"), Name = "文献阅读", TaskTotal = 5, TaskDone = 0, Hours = 10 });
                 s.Categories.Add(new Category { Id = Guid.NewGuid().ToString("N"), Name = "其他", TaskTotal = 3, TaskDone = 0, Hours = 4 });
             }
+        }
+
+        private void ApplyFixedCategories(Store s)
+        {
+            string user = Environment.UserName;
+            string personal = "其他个人材料 -- " + user;
+            for (int i = s.Categories.Count - 1; i >= 0; i--)
+            {
+                string n = s.Categories[i].Name ?? "";
+                if (n.StartsWith("其他个人材料", StringComparison.Ordinal))
+                {
+                    s.Categories[i].Name = personal;
+                    continue;
+                }
+                if (n != "文献" && n != "文献总结" && n != "个人总结" && n != "协作工作栏")
+                    s.Categories.RemoveAt(i);
+            }
+            string[] base4 = new string[] { "文献", "文献总结", "个人总结", "协作工作栏" };
+            foreach (string n in base4)
+            {
+                bool exists = false;
+                foreach (Category c in s.Categories) if (c.Name == n) { exists = true; break; }
+                if (!exists) s.Categories.Add(new Category { Id = Guid.NewGuid().ToString("N"), Name = n, Updated = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") });
+            }
+            bool hasPersonal = false;
+            foreach (Category c in s.Categories) if (c.Name == personal) { hasPersonal = true; break; }
+            if (!hasPersonal) s.Categories.Add(new Category { Id = Guid.NewGuid().ToString("N"), Name = personal, Updated = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") });
         }
 
         private void AddDefaultCategory(Store s, string name, int total, int done, double hours)
@@ -531,11 +611,11 @@ namespace SRLogbook
                 ser.MaxJsonLength = 20000000;
                 store.ProjectRoot = projectRoot;
                 string json = ser.Serialize(store);
-                File.WriteAllText(dataPath, json, new UTF8Encoding(false));
+                SyncData.WriteAtomic(dataPath, json);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("保存失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Msg.Show("保存失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -557,27 +637,19 @@ namespace SRLogbook
 
             Label title = new Label();
             title.Text = "研究进展记录器";
-            title.Font = Theme.FB(13.5f);
+            title.Font = Theme.FB(11f);
             title.ForeColor = Color.White;
             title.BackColor = Theme.Navy;
-            title.SetBounds(22, 62, 190, 26);
+            title.SetBounds(22, 62, 190, 48);
             sidebar.Controls.Add(title);
-
-            Label sub = new Label();
-            sub.Text = "Research Logbook";
-            sub.Font = Theme.F(8.3f);
-            sub.ForeColor = Color.FromArgb(150, 168, 198);
-            sub.BackColor = Theme.Navy;
-            sub.SetBounds(22, 88, 190, 18);
-            sidebar.Controls.Add(sub);
 
             Panel divider = new Panel();
             divider.BackColor = Color.FromArgb(48, 62, 92);
             divider.SetBounds(22, 118, 188, 1);
             sidebar.Controls.Add(divider);
 
-            navs = new SideButton[7];
-            string[] texts = new string[] { "研究日志", "参考文献与资料", "研究类别", "项目概览", "本地文档", "团队同步", "使用说明" };
+            navs = new SideButton[6];
+            string[] texts = new string[] { "项目概览", "团队研究", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
             for (int i = 0; i < texts.Length; i++)
             {
                 int idx = i;
@@ -591,22 +663,13 @@ namespace SRLogbook
             foot.Font = Theme.F(8f);
             foot.ForeColor = Color.FromArgb(120, 136, 164);
             foot.BackColor = Theme.Navy;
-            foot.SetBounds(22, 0, 190, 42);
+            foot.SetBounds(22, 620, 190, 42);
             foot.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
             sidebar.Controls.Add(foot);
 
-            Label foot2 = new Label();
-            foot2.Text = "数据保存在本机 · research_log.json";
-            foot2.Font = Theme.F(7.6f);
-            foot2.ForeColor = Color.FromArgb(100, 116, 144);
-            foot2.BackColor = Theme.Navy;
-            foot2.SetBounds(22, 0, 200, 18);
-            foot2.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
-            sidebar.Controls.Add(foot2);
             sidebar.Resize += delegate
             {
                 foot.Top = sidebar.Height - Ui.S(62);
-                foot2.Top = sidebar.Height - Ui.S(26);
             };
         }
 
@@ -633,16 +696,42 @@ namespace SRLogbook
             lblHeaderTitle.SetBounds(28, 16, 520, 30);
             header.Controls.Add(lblHeaderTitle);
 
-            lblHeaderSub = new Label();
-            lblHeaderSub.Text = "";
-            lblHeaderSub.Font = Theme.F(9.2f);
-            lblHeaderSub.ForeColor = Theme.TextMuted;
-            lblHeaderSub.BackColor = Color.White;
-            lblHeaderSub.SetBounds(30, 50, 620, 20);
-            header.Controls.Add(lblHeaderSub);
+            Button bLang = new Button();
+            bLang.Text = Lang.En ? "中文" : "EN";
+            bLang.Font = Theme.F(8.8f);
+            bLang.FlatStyle = FlatStyle.Flat;
+            bLang.FlatAppearance.BorderSize = 1;
+            bLang.FlatAppearance.BorderColor = Theme.CardBorder;
+            bLang.BackColor = Color.White;
+            bLang.ForeColor = Theme.TextMain;
+            bLang.Cursor = Cursors.Hand;
+            bLang.SetBounds(header.Width - 240, 24, 56, 40);
+            bLang.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            bLang.Click += delegate
+            {
+                Lang.En = !Lang.En;
+                Lang.Save(appDir);
+                Lang.ApplyAll();
+                bLang.Text = Lang.En ? "中文" : "EN";
+            };
+            header.Controls.Add(bLang);
+
+            Button bWs = new Button();
+            bWs.Text = "更换工作文件夹";
+            bWs.Font = Theme.F(8.8f);
+            bWs.FlatStyle = FlatStyle.Flat;
+            bWs.FlatAppearance.BorderSize = 1;
+            bWs.FlatAppearance.BorderColor = Theme.CardBorder;
+            bWs.BackColor = Color.White;
+            bWs.ForeColor = Theme.TextMain;
+            bWs.Cursor = Cursors.Hand;
+            bWs.SetBounds(header.Width - 430, 24, 180, 40);
+            bWs.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            bWs.Click += delegate { ChangeWorkspace(); };
+            header.Controls.Add(bWs);
 
             Button bOpen = new Button();
-            bOpen.Text = "打开项目文件夹";
+            bOpen.Text = "打开工作文件夹";
             bOpen.Font = Theme.F(8.8f);
             bOpen.FlatStyle = FlatStyle.Flat;
             bOpen.FlatAppearance.BorderSize = 1;
@@ -650,7 +739,7 @@ namespace SRLogbook
             bOpen.BackColor = Color.White;
             bOpen.ForeColor = Theme.TextMain;
             bOpen.Cursor = Cursors.Hand;
-            bOpen.SetBounds(header.Width - 168, 28, 140, 32);
+            bOpen.SetBounds(header.Width - 176, 24, 166, 40);
             bOpen.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             bOpen.Click += delegate { OpenPath(projectRoot); };
             header.Controls.Add(bOpen);
@@ -664,15 +753,14 @@ namespace SRLogbook
             pagesHost.Padding = new Padding(18);
             Controls.Add(pagesHost);
 
-            pages = new Panel[7];
-            pages[0] = BuildLogPage();
-            pages[1] = BuildRefPage();
-            pages[2] = BuildCategoryPage();
-            pages[3] = BuildOverviewPage();
-            pages[4] = BuildDocPage();
-            pages[5] = BuildSyncPage();
-        pages[6] = BuildHelpPage();
-            for (int i = 0; i < 6; i++)
+            pages = new Panel[6];
+            pages[0] = BuildOverviewPage();
+            pages[1] = BuildTeamPage();
+            pages[2] = BuildRefsAndCategoriesPage();
+            pages[3] = BuildLocalProgressPage();
+            pages[4] = BuildSyncPage();
+            pages[5] = BuildHelpPage();
+            for (int i = 0; i < pages.Length; i++)
             {
                 pages[i].Dock = DockStyle.Fill;
                 pages[i].BackColor = Color.White;
@@ -929,6 +1017,12 @@ namespace SRLogbook
             h.SetBounds(0, 14, 200, 26);
             top.Controls.Add(h);
 
+            Button bHist = MakeTopButton("改动记录", 130);
+            bHist.SetBounds(top.Width - 424, 22, 130, 32);
+            bHist.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            bHist.Click += delegate { ShowChangeHistory(); };
+            top.Controls.Add(bHist);
+
             Button bFile = MakeTopButton("添加文件", 120);
             bFile.SetBounds(top.Width - 274, 22, 120, 32);
             bFile.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -991,62 +1085,57 @@ namespace SRLogbook
             rtb.ScrollBars = ScrollBars.Vertical;
             rtb.WordWrap = true;
             rtb.ForeColor = Theme.TextMain;
+            rtb.Name = "helpText";
             rtb.Text = "使用说明\r\n\r\n" +
                 "一、研究日志\r\n" +
                 "· 左侧列出全部记录，点击即可切换；右侧编辑标题、日期、类别、状态、进度与正文。\r\n" +
-                "· 输入内容后会自动保存（约 0.7 秒后写入 research_log.json），也可以点击“保存”。\r\n" +
+                "· 输入内容后会自动保存，也可以点击“保存”。\r\n" +
                 "· “＋ 新建记录”创建一条新记录；右上角的搜索框可按标题或内容筛选。\r\n" +
                 "· 进度条用于标记每条记录完成到哪一步，便于回顾整体进展。\r\n\r\n" +
                 "二、参考文献与资料\r\n" +
                 "· 每张卡片对应一个实际存在的文件或文件夹，点击“打开”或双击卡片，即用系统默认程序打开。\r\n" +
                 "· “定位”会在资源管理器中选中该文件；“移除”只是从列表中删除，不会删除原文件。\r\n" +
                 "· 通过“添加文件 / 添加文件夹”可以把新的书籍、数据或文献目录加入资料库。\r\n" +
-                "· 初始资料已包含：项目根目录、Willmott 的同步辐射教材、Bambi 的广义相对论教材、相对论基础笔记、本专题文档与本文件夹。\r\n\r\n" +
+                "· 初始资料来自你的工作文件夹中的书籍、笔记与文档。\r\n\r\n" +
                 "三、项目概览\r\n" +
                 "· 显示记录总数、平均进度、资料条目数、类别分布与最近更新，便于快速了解项目状态。\r\n\r\n" +
-                "四、数据存放\r\n" +
-                "· 所有记录保存在本软件同目录下的 research_log.json 中（UTF-8 编码）。\r\n" +
-                "· 备份时复制该文件即可；换电脑时连同本文件夹一起复制，路径失效的资料卡片可用“移除”后重新添加。\r\n\r\n" +
+                "四、工作文件夹\r\n" +
+                "· 首次启动时选择工作文件夹，程序从中读取书籍、文档与资料。\r\n" +
+                "· 记录随团队同步保存到共享仓库。\r\n\r\n" +
                 "五、提示\r\n" +
                 "· 若卡片指向的文件被移动，点击“打开”会提示找不到；此时请移除后重新添加。\r\n" +
-                "· 软件为绿色版，不写注册表，也不联网。\r\n\r\n" +
+                "· 软件为绿色版，无需安装。\r\n\r\n" +
                 "六、研究类别\r\n" +
                 "· “研究类别”页可以添加、编辑、删除类别；每个类别可设置任务总数、已完成数、预计小时数，并挂接相关材料（文件、文件夹或链接）。\r\n" +
                 "· 类别进度 = 已完成任务 / 任务总数；项目概览的总体进度按所有类别汇总。\r\n" +
                 "· 修改类别名称会同步更新已有记录的类别；删除类别不会删除记录，记录会归入“未分类”。\r\n\r\n" +
-                "七、本地文档\r\n" +
-                "· “本地文档”页填写项目名称（默认 Untitled）与归属类别，点“新建本地文档”：程序在项目内的“本地文档”文件夹创建“日期 + 项目名称”的 .docx，并把文件路径加入该类别的相关材料。\r\n" +
+                "七、本地进度\r\n" +
+                "· “本地进度”页填写项目名称（默认 Untitled）与归属类别，点“新建文档”：程序在工作文件夹内创建“日期 + 项目名称”的 .docx，并把文件路径加入该类别的相关材料。\r\n" +
                 "· 文档清单记录所有通过本程序创建的文档，可打开、归入类别或移除记录（不会删除文件）。\r\n" +
-                "· 全程离线，不连接 Google 或其他网络服务。";
+                "· 团队同步通过 GitHub 私有仓库进行。";
+            rtb.Text = Lang.HelpText();
             page.Controls.Add(rtb);
             return page;
         }
 
         private void SetPage(int idx)
         {
+            if (saveTimer != null && saveTimer.Enabled) { saveTimer.Stop(); SaveCurrent(); }
             pageIndex = idx;
             for (int i = 0; i < pages.Length; i++)
             {
                 pages[i].Visible = (i == idx);
                 navs[i].SetSelected(i == idx);
             }
-            string[] titles = new string[] { "研究日志", "参考文献与资料", "研究类别", "项目概览", "本地文档", "团队同步", "使用说明" };
-            string[] subs = new string[] {
-                "记录每一次阅读、实验与思考；内容会自动保存。",
-                "点击卡片即可打开对应的书籍、文档或文件夹。",
-                "自定义研究类别、任务数量、预计时间与相关材料。",
-                "按类别查看任务进度、预计工时与最近更新。",
-                "在项目内创建本地 Word 文档，并归入研究类别。",
-                "通过 GitHub 私有仓库与同组使用者共享同一份研究进度。",
-                "软件功能、数据位置与常见问题。" };
+            string[] titles = new string[] { "项目概览", "团队研究", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
             lblHeaderTitle.Text = titles[idx];
-            lblHeaderSub.Text = subs[idx];
-            if (idx == 3) RefreshOverview2();
-            if (idx == 1) RebuildRefs();
-            if (idx == 2) RebuildCategories();
-            if (idx == 4) RefreshDocPage();
-            if (idx == 5) RefreshSyncPage();
+            if (idx == 0) RefreshOverview2();
+            if (idx == 1) RefreshTeamPage();
+            if (idx == 2) { RebuildRefs(); RebuildCategories(); }
+            if (idx == 3) { RefreshList(); RefreshDocPage(); RefreshLocalRefs(); }
+            if (idx == 4) RefreshSyncPage();
             if (idx == 0 && lstEntries != null) lstEntries.Focus();
+            Lang.Apply(this);
         }
 
         private void RefreshList()
@@ -1057,6 +1146,7 @@ namespace SRLogbook
         private void RefreshList(bool keepQuery)
         {
             if (lstEntries == null) return;
+            if (saveTimer != null && saveTimer.Enabled) { saveTimer.Stop(); SaveCurrent(); }
             loading = true;
             string q = (txtSearch.Text == "搜索标题或内容") ? "" : txtSearch.Text.Trim().ToLower();
             string selId = current == null ? null : current.Id;
@@ -1085,6 +1175,7 @@ namespace SRLogbook
             lstEntries.SelectedIndex = sel;
             loading = false;
             if (sel >= 0) LoadEntry(lstEntries.Items[sel] as Entry);
+            else { current = null; loading = true; txtTitle.Clear(); txtContent.Clear(); loading = false; }
         }
 
         private void LstEntries_DrawItem(object sender, DrawItemEventArgs e)
@@ -1141,7 +1232,7 @@ namespace SRLogbook
             txtContent.Text = e.Content == null ? "" : e.Content;
             try { dtDate.Value = DateTime.Parse(e.Date); } catch { dtDate.Value = DateTime.Now; }
             cbCat.SelectedItem = e.Category;
-            if (cbCat.SelectedIndex < 0 && cbCat.Items.Count > 0) cbCat.SelectedIndex = 0;
+            if (cbCat.SelectedIndex < 0) cbCat.SelectedIndex = 0;
             cbStatus.SelectedItem = e.Status;
             if (cbStatus.SelectedIndex < 0) cbStatus.SelectedIndex = 0;
             tbProg.Value = Math.Max(0, Math.Min(100, e.Progress));
@@ -1153,14 +1244,15 @@ namespace SRLogbook
         private void NewEntry()
         {
             SaveCurrent();
+            txtSearch.Text = "搜索标题或内容"; txtSearch.ForeColor = Theme.TextFaint;
             Entry e = new Entry();
             e.Id = Guid.NewGuid().ToString("N");
             e.Title = "新记录";
             e.Date = DateTime.Now.ToString("yyyy-MM-dd");
-            e.Category = "文献阅读";
+            e.Category = "";
             e.Status = "进行中";
             e.Progress = 0;
-            e.Updated = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            e.Updated = SyncData.Now();
             e.Content = "";
             store.Entries.Insert(0, e);
             Persist();
@@ -1174,7 +1266,9 @@ namespace SRLogbook
         private void DeleteCurrent()
         {
             if (current == null) return;
-            if (MessageBox.Show("确定删除这条记录吗？该操作不可撤销。", "删除记录", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (Msg.Show("确定删除这条记录吗？该操作不可撤销。", "删除记录", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            saveTimer.Stop();
+            store.DeletedEntries.Add(new DeletedCategory { Id = current.Id, At = SyncData.Now() });
             store.Entries.Remove(current);
             current = null;
             Persist();
@@ -1213,8 +1307,9 @@ namespace SRLogbook
 
         private void LayoutRefsPage()
         {
-            if (flow == null || refsTop == null || pages == null || pages.Length < 2) return;
-            Panel p = pages[1];
+            if (flow == null || refsTop == null) return;
+            Control p = flow.Parent;
+            if (p == null) return;
             flow.SetBounds(0, refsTop.Height, p.ClientSize.Width, Math.Max(Ui.S(80), p.ClientSize.Height - refsTop.Height));
             RebuildRefs();
         }
@@ -1258,7 +1353,7 @@ namespace SRLogbook
             string p = Resolve(r);
             if (p == null || (!File.Exists(p) && !Directory.Exists(p)))
             {
-                MessageBox.Show("找不到该文件：\r\n" + r.Path + "\r\n\r\n它可能已被移动或删除。可以移除这张卡片后重新添加。", "文件不存在", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Msg.Show("找不到该文件：\r\n" + r.Path + "\r\n\r\n它可能已被移动或删除。可以移除这张卡片后重新添加。", "文件不存在", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             OpenPath(p);
@@ -1272,7 +1367,7 @@ namespace SRLogbook
             }
             catch (Exception ex)
             {
-                MessageBox.Show("无法打开：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Msg.Show("无法打开：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -1291,7 +1386,7 @@ namespace SRLogbook
                 }
                 else
                 {
-                    MessageBox.Show("找不到该文件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Msg.Show("找不到该文件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
             catch { }
@@ -1299,7 +1394,27 @@ namespace SRLogbook
 
         private void RemoveRef(RefItem r)
         {
-            if (MessageBox.Show("从资料库中移除“" + r.Title + "”？\r\n（不会删除原文件）", "移除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            string p = Resolve(r);
+            if (Msg.Show("删除“" + r.Title + "”？\r\n这会将该文件或文件夹移入回收站。", "删除", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            if (!string.IsNullOrEmpty(p) && (SyncData.IsWithin(projectRoot, p) || SyncData.IsWithin(appDir, p)))
+            {
+                Msg.Show("不能删除工作文件夹本身。", "提示");
+                return;
+            }
+            try
+            {
+                if (File.Exists(p)) Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(p, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                else if (Directory.Exists(p))
+                {
+                    if ((File.GetAttributes(p) & FileAttributes.ReparsePoint) != 0) throw new IOException("Cannot delete a linked folder.");
+                    Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(p, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                }
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("删除失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             store.Refs.Remove(r);
             Persist();
             RebuildRefs();
@@ -1321,7 +1436,7 @@ namespace SRLogbook
                 string rel = "";
                 try
                 {
-                    if (f.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase))
+                    if (SyncData.IsWithin(f, projectRoot))
                     {
                         rel = f.Substring(projectRoot.Length).TrimStart('\\');
                     }
@@ -1343,7 +1458,7 @@ namespace SRLogbook
             string rel = "";
             try
             {
-                if (f.StartsWith(projectRoot, StringComparison.OrdinalIgnoreCase)) rel = f.Substring(projectRoot.Length).TrimStart('\\');
+                if (SyncData.IsWithin(f, projectRoot)) rel = f.Substring(projectRoot.Length).TrimStart('\\');
             }
             catch { }
             store.Refs.Add(new RefItem { Title = new DirectoryInfo(f).Name, Path = f, RelPath = rel, Kind = "folder" });
@@ -1566,7 +1681,7 @@ namespace SRLogbook
             {
                 if (!firstInstance)
                 {
-                    MessageBox.Show("研究进展记录器已经打开。请切换到现有窗口，避免同时修改研究数据。", "研究进展记录器", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Msg.Show("研究进展记录器已经打开。请切换到现有窗口，避免同时修改研究数据。", "研究进展记录器", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
             Application.EnableVisualStyles();
@@ -1581,6 +1696,7 @@ namespace SRLogbook
                 try { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup_error.txt"), ex.ToString()); } catch { }
                 return;
             }
+            if (MainForm.StartupCancelled) return;
             for (int i = 0; i < args.Length - 1; i++)
             {
                 if (args[i] == "--page") f.SetPagePublic(int.Parse(args[i + 1]));

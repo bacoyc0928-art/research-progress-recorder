@@ -19,6 +19,11 @@ namespace SRLogbook
         private Label lblSStatus;
         private Panel syncCard;
         private bool syncBusy;
+        private CheckBox chkSyncEntries;
+        private CheckBox chkSyncCategories;
+        
+        
+        private string syncScope = "entries,categories";
 
         private Panel BuildSyncPage()
         {
@@ -26,7 +31,7 @@ namespace SRLogbook
             page.BackColor = Color.White;
 
             Panel card = new Panel();
-            card.SetBounds(0, 0, 860, 470);
+            card.SetBounds(0, 0, 860, 520);
             syncCard = card;
             card.BackColor = Color.White;
             card.Paint += delegate(object s, PaintEventArgs e)
@@ -76,24 +81,40 @@ namespace SRLogbook
             txtSToken.SetBounds(24, 182, 620, 30);
             card.Controls.Add(txtSToken);
 
-            Button bSave = SButton("保存配置", 24, 232, 110);
-            bSave.Click += delegate { SaveSyncConfig(); };
-            Button bTest = SButton("测试连接", 144, 232, 110);
+            Label sc = new Label();
+            sc.Text = "同步内容：";
+            sc.Font = Theme.F(8.6f);
+            sc.ForeColor = Theme.TextMuted;
+            sc.BackColor = Color.White;
+            sc.SetBounds(24, 220, 80, 24);
+            card.Controls.Add(sc);
+            chkSyncEntries = Chk("记录", 100, 220);
+            chkSyncCategories = Chk("类别", 170, 220);
+
+
+            Button bSave = SButton("保存配置", 24, 254, 110);
+            bSave.Click += delegate { ValidateAndSaveSyncConfig(); };
+            Button bTest = SButton("测试连接", 144, 254, 110);
             bTest.Click += delegate { TestSyncConnection(); };
-            Button bPull = SButton("从 GitHub 合并", 264, 232, 130);
+            Button bPull = SButton("从 GitHub 合并", 264, 254, 130);
             bPull.Click += delegate { PullSync(); };
-            Button bPush = SButton("合并后上传", 404, 232, 130);
+            Button bPush = SButton("合并后上传", 404, 254, 130);
             bPush.Click += delegate { UploadSync(); };
-            Button bAll = SButton("一键同步", 544, 232, 110);
+            Button bAll = SButton("一键同步", 544, 254, 110);
             bAll.Click += delegate { SyncAll(); };
             bAll.BackColor = Theme.Accent;
             bAll.ForeColor = Color.White;
+
+            Button bRefs = SButton("上传参考资料", 24, 294, 130);
+            bRefs.Click += delegate { UploadRefsChannel(); };
+            Button bMine = SButton("上传个人研究", 164, 294, 130);
+            bMine.Click += delegate { UploadMyResearch(); };
 
             lblSStatus = new Label();
             lblSStatus.Font = Theme.F(8.6f);
             lblSStatus.ForeColor = Theme.TextMuted;
             lblSStatus.BackColor = Color.White;
-            lblSStatus.SetBounds(24, 284, 800, 40);
+            lblSStatus.SetBounds(24, 334, 800, 40);
             card.Controls.Add(lblSStatus);
 
             Label logLabel = new Label();
@@ -101,7 +122,7 @@ namespace SRLogbook
             logLabel.Font = Theme.FB(10.5f);
             logLabel.ForeColor = Theme.Navy;
             logLabel.BackColor = Color.White;
-            logLabel.SetBounds(24, 330, 200, 24);
+            logLabel.SetBounds(24, 380, 200, 24);
             card.Controls.Add(logLabel);
 
             txtSLog = new TextBox();
@@ -110,7 +131,7 @@ namespace SRLogbook
             txtSLog.ScrollBars = ScrollBars.Vertical;
             txtSLog.Font = Theme.F(8.6f);
             txtSLog.BackColor = Color.White;
-            txtSLog.SetBounds(24, 358, 800, 92);
+            txtSLog.SetBounds(24, 408, 800, 92);
             card.Controls.Add(txtSLog);
 
             page.Resize += delegate
@@ -148,6 +169,48 @@ namespace SRLogbook
             return b;
         }
 
+        private CheckBox Chk(string text, int x, int y)
+        {
+            CheckBox c = new CheckBox();
+            c.Text = text;
+            c.Font = Theme.F(8.6f);
+            c.ForeColor = Theme.TextMain;
+            c.BackColor = Color.White;
+            c.AutoSize = true;
+            c.SetBounds(Ui.S(x), Ui.S(y), Ui.S(70), Ui.S(24));
+            c.Checked = true;
+            syncCard.Controls.Add(c);
+            return c;
+        }
+
+        private string ScopeString()
+        {
+            List<string> s = new List<string>();
+            if (chkSyncEntries != null && chkSyncEntries.Checked) s.Add("entries");
+            if (chkSyncCategories != null && chkSyncCategories.Checked) s.Add("categories");
+
+            return s.Count == 0 ? "none" : string.Join(",", s.ToArray());
+        }
+
+        private void ApplyScope(string scope)
+        {
+            if (chkSyncEntries == null) return;
+            chkSyncEntries.Checked = chkSyncCategories.Checked = false;
+            if (string.IsNullOrEmpty(scope) || scope == "all") { chkSyncEntries.Checked = chkSyncCategories.Checked = true; return; }
+            foreach (string p in scope.Split(','))
+            {
+                string q = p.Trim();
+                if (q == "entries") chkSyncEntries.Checked = true;
+                else if (q == "categories") chkSyncCategories.Checked = true;
+
+            }
+        }
+
+        private bool Sc(string scope, string part)
+        {
+            return string.IsNullOrEmpty(scope) || scope == "all" || ("," + scope + ",").IndexOf("," + part + ",", StringComparison.Ordinal) >= 0;
+        }
+
         private void RefreshSyncPage()
         {
             if (txtSRepo == null) return;
@@ -156,6 +219,7 @@ namespace SRLogbook
             txtSPath.Text = string.IsNullOrEmpty(c.path) ? "sync/research_log.json" : c.path;
             txtSBranch.Text = string.IsNullOrEmpty(c.branch) ? "main" : c.branch;
             txtSToken.Text = GitHubSync.HasToken() ? "********" : "";
+            ApplyScope(c.scope);
             if (string.IsNullOrEmpty(txtSLog.Text))
                 txtSLog.Text = "提示：仓库需为私有仓库；每人使用自己的令牌。个人仓库的协作者目前需使用 classic PAT（repo 权限）。";
         }
@@ -165,9 +229,9 @@ namespace SRLogbook
             owner = repo = path = branch = token = "";
             string full = txtSRepo.Text.Trim();
             int slash = full.IndexOf('/');
-            if (slash <= 0 || slash == full.Length - 1)
+            if (slash <= 0 || slash == full.Length - 1 || full.LastIndexOf('/') != slash)
             {
-                MessageBox.Show("仓库请填写为 owner/repo，例如 yourname/research-data。", "团队同步");
+                Msg.Show("仓库请填写为 owner/repo，例如 yourname/research-data。", "团队同步");
                 return false;
             }
             owner = full.Substring(0, slash).Trim();
@@ -180,7 +244,7 @@ namespace SRLogbook
             if (token == "********") token = SecretStore.Load(GitHubSync.TokenTarget);
             if (string.IsNullOrEmpty(token))
             {
-                MessageBox.Show("请填写 GitHub 访问密钥（fine-grained PAT）。", "团队同步");
+                Msg.Show("请填写你自己的 GitHub 访问密钥。", "团队同步");
                 return false;
             }
             return true;
@@ -190,7 +254,8 @@ namespace SRLogbook
         {
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
-            SyncConfig c = new SyncConfig { owner = owner, repo = repo, path = path, branch = branch };
+            SyncConfig c = new SyncConfig { owner = owner, repo = repo, path = path, branch = branch, scope = ScopeString() };
+            syncScope = ScopeString();
             GitHubSync.SaveConfig(appDir, c);
             GitHubSync.SetToken(token);
             txtSToken.Text = "********";
@@ -227,7 +292,8 @@ namespace SRLogbook
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             syncBusy = true;
-            SaveSyncConfig();
+            syncCard.Enabled = false;
+            syncScope = ScopeString();
             lblSStatus.Text = "正在从 GitHub 读取…";
             try
             {
@@ -240,7 +306,9 @@ namespace SRLogbook
                     lblSStatus.Text = "远程文件不存在。";
                     return;
                 }
+                SavePending();
                 int n = MergeStore(remote);
+                SaveSyncConfig();
                 Log("合并完成：远程记录已并入，新增/更新 " + n + " 条。");
                 lblSStatus.Text = "合并完成，新增/更新 " + n + " 条。";
             }
@@ -249,7 +317,7 @@ namespace SRLogbook
                 Log("拉取失败：" + ex.Message);
                 lblSStatus.Text = "拉取失败，详见日志。";
             }
-            finally { syncBusy = false; }
+            finally { syncBusy = false; syncCard.Enabled = true; Lang.Apply(this); }
         }
 
         private async void SyncAll()
@@ -258,7 +326,9 @@ namespace SRLogbook
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             syncBusy = true;
-            SaveSyncConfig();
+            syncCard.Enabled = false;
+            syncScope = ScopeString();
+            if (syncScope == "none") { syncBusy = false; syncCard.Enabled = true; Msg.Show("Select records or categories to sync.", "Team Sync"); return; }
             lblSStatus.Text = "正在同步…";
             try
             {
@@ -267,12 +337,18 @@ namespace SRLogbook
                 {
                     string sha = null;
                     string remote = await Task.Run(() => GitHubSync.GetFile(owner, repo, path, branch, token, out sha));
+                    SavePending();
                     if (!string.IsNullOrEmpty(remote)) MergeStore(remote);
-                    string json = SerializeSyncStore();
+                    string json = SyncData.Payload(store, string.IsNullOrEmpty(remote) ? null : SyncData.Read(remote), syncScope);
                     try
                     {
                         await Task.Run(() => GitHubSync.PutFile(owner, repo, path, branch, token, json,
                             string.IsNullOrEmpty(sha) ? null : sha));
+                        SaveSyncConfig();
+                        try {
+                            string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
+                            await Task.Run(() => GitHubSync.AppendHistory(owner, repo, branch, token, login, syncScope));
+                        } catch (Exception historyError) { Log("Data uploaded; history update failed: " + historyError.Message); }
                         Log("同步完成：" + DateTime.Now.ToString("HH:mm:ss"));
                         lblSStatus.Text = "同步完成。";
                         return;
@@ -294,146 +370,151 @@ namespace SRLogbook
                 Log("同步失败：" + ex.Message);
                 lblSStatus.Text = "同步失败，详见日志。";
             }
-            finally { syncBusy = false; }
+            finally { syncBusy = false; syncCard.Enabled = true; Lang.Apply(this); }
         }
 
-        private string SerializeSyncStore()
+        private void SavePending()
         {
-            // 不上传个人资料库和文档文件；类别里的相关材料链接是团队数据的一部分。
-            Store shared = new Store();
-            shared.Entries = store.Entries;
-            shared.CategoriesInitialized = true;
-            shared.DeletedCategories = store.DeletedCategories;
-            foreach (Category c in store.Categories)
-            {
-                if (c == null) continue;
-                shared.Categories.Add(new Category
-                {
-                    Id = c.Id, Name = c.Name, Updated = c.Updated,
-                    TaskTotal = c.TaskTotal, TaskDone = c.TaskDone, Hours = c.Hours,
-                    Links = c.Links == null ? new List<CatLink>() : c.Links
-                });
-            }
-            JavaScriptSerializer ser = new JavaScriptSerializer();
-            ser.MaxJsonLength = 20000000;
-            return ser.Serialize(shared);
+            if (saveTimer.Enabled) saveTimer.Stop();
+            SaveCurrent();
         }
 
-        private static int CompareUpdated(string a, string b)
+        private async void ValidateAndSaveSyncConfig()
         {
-            DateTimeOffset da, db;
-            bool aOk = DateTimeOffset.TryParse(a, out da);
-            bool bOk = DateTimeOffset.TryParse(b, out db);
-            if (aOk && bOk) return da.CompareTo(db);
-            if (aOk) return 1;
-            if (bOk) return -1;
-            return string.CompareOrdinal(a ?? "", b ?? "");
+            if (syncBusy) return;
+            string owner, repo, path, branch, token;
+            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
+            syncBusy = true; syncCard.Enabled = false;
+            try { await Task.Run(() => GitHubSync.Test(owner, repo, token)); SaveSyncConfig(); }
+            catch (Exception ex) { Log(ex.Message); lblSStatus.Text = "Validation failed; previous saved token was preserved."; }
+            finally { syncBusy = false; syncCard.Enabled = true; Lang.Apply(this); }
         }
 
-        private int MergeStore(string remoteJson)
+        private string SerializeSyncStore() { return SyncData.Payload(store, null, ScopeString()); }
+        private static int CompareUpdated(string a, string b) { return SyncData.Compare(a, b); }
+        private int MergeStore(string json)
         {
-            Store remote;
-            try { remote = new JavaScriptSerializer().Deserialize<Store>(remoteJson); }
-            catch (Exception ex) { throw new InvalidDataException("仓库中的进度 JSON 无法读取，已停止上传以保护远端数据。", ex); }
-            if (remote == null) throw new InvalidDataException("仓库中的进度 JSON 为空，已停止上传以保护远端数据。");
-            int changed = 0;
-            bool currentChanged = false;
+            string id = current == null ? null : current.Id;
+            int n = SyncData.Merge(store, SyncData.Read(json), syncScope);
+            if (n > 0)
+            {
+                current = store.Entries.Find(e => e.Id == id);
+                Persist(); RefreshCategoryCombo(); RefreshList(); RebuildCategories();
+                RebuildRefs(); RefreshOverview2(); RefreshDocPage();
+            }
+            return n;
+        }
 
-            if (remote.Entries != null)
+        public async void ShowChangeHistory()
+        {
+            SyncConfig c = GitHubSync.LoadConfig(appDir);
+            string token = SecretStore.Load(GitHubSync.TokenTarget);
+            if (string.IsNullOrEmpty(c.owner) || string.IsNullOrEmpty(token))
             {
-                foreach (Entry r in remote.Entries)
+                Msg.Show("请先在“团队同步”页填写仓库并保存配置。", "改动记录");
+                return;
+            }
+            try
+            {
+                string sha;
+                string hist = await Task.Run(() => GitHubSync.GetHistory(c.owner, c.repo, c.branch, token, out sha));
+                if (string.IsNullOrEmpty(hist)) { Msg.Show("暂无改动记录。", "改动记录"); return; }
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                JavaScriptSerializer ser = SyncData.Serializer();
+                object[] arr = ser.Deserialize<object[]>(hist);
+                if (arr != null)
                 {
-                    if (r == null || string.IsNullOrEmpty(r.Id)) continue;
-                    Entry l = store.Entries.Find(x => x.Id == r.Id);
-                    if (l == null)
+                    foreach (object o in arr)
                     {
-                        store.Entries.Add(r);
-                        changed++;
-                    }
-                    else if (CompareUpdated(r.Updated, l.Updated) > 0)
-                    {
-                        l.Title = r.Title; l.Date = r.Date; l.Category = r.Category;
-                        l.Status = r.Status; l.Progress = r.Progress; l.Content = r.Content; l.Updated = r.Updated;
-                        if (current != null && current.Id == l.Id) currentChanged = true;
-                        changed++;
+                        Dictionary<string, object> d = o as Dictionary<string, object>;
+                        if (d == null) continue;
+                        sb.Append(Convert.ToString(d.ContainsKey("time") ? d["time"] : "")).Append("  ·  ")
+                          .Append(Convert.ToString(d.ContainsKey("user") ? d["user"] : "")).Append("  ·  ")
+                          .Append(Convert.ToString(d.ContainsKey("scope") ? d["scope"] : "")).Append(Environment.NewLine);
                     }
                 }
+                Msg.Show(sb.Length == 0 ? "暂无改动记录。" : sb.ToString(), "改动记录");
             }
-            if (remote.DeletedCategories != null)
+            catch (Exception ex)
             {
-                foreach (DeletedCategory d in remote.DeletedCategories)
+                Msg.Show("读取改动记录失败：" + ex.Message, "改动记录");
+            }
+        }
+
+        private void UploadRefsChannel() { UploadPersonal(false); }
+        private void UploadMyResearch() { UploadPersonal(true); }
+        private async void UploadPersonal(bool research)
+        {
+            if (syncBusy) return;
+            string owner, repo, path, branch, token;
+            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
+            string folder = LoadPersonalFolder();
+            if (!Directory.Exists(folder)) { Msg.Show("请先在“团队研究”页选择个人文件夹；未选择时上传会失败。", "团队研究"); return; }
+            syncBusy = true; syncCard.Enabled = false;
+            try
+            {
+                string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
+                SavePending();
+                var files = new Dictionary<string, string>();
+                var ser = SyncData.Serializer();
+                if (research) { files["research.json"] = ser.Serialize(store.Entries); files["documents.json"] = ser.Serialize(store.Documents); }
+                else files["references.json"] = ser.Serialize(store.Refs);
+                // Write the local export first, so an unwritable folder cannot report a successful upload.
+                foreach (var f in files) SyncData.WriteAtomic(Path.Combine(folder, f.Key), f.Value);
+                await Task.Run(() => GitHubSync.EnsureProfile(owner, repo, branch, token, login));
+                foreach (var f in files)
                 {
-                    if (d == null || string.IsNullOrEmpty(d.Id)) continue;
-                    DeletedCategory localDel = store.DeletedCategories.Find(x => x.Id == d.Id);
-                    if (localDel == null)
+                    string remotePath = "team/" + login + "/" + f.Key;
+                    string sha = null;
+                    await Task.Run(() => GitHubSync.GetFile(owner, repo, remotePath, branch, token, out sha));
+                    await Task.Run(() => GitHubSync.PutFile(owner, repo, remotePath, branch, token, f.Value, sha));
+                    Log("Uploaded " + remotePath);
+                }
+                SaveSyncConfig();
+                lblSStatus.Text = research ? "个人研究上传完成。" : "参考资料上传完成。";
+            }
+            catch (Exception ex) { Log("Upload failed: " + ex.Message); lblSStatus.Text = "上传失败，详见日志。"; }
+            finally { syncBusy = false; syncCard.Enabled = true; Lang.Apply(this); }
+        }
+
+        private async void MergeTeamRefs()
+        {
+            SyncConfig cfg = GitHubSync.LoadConfig(appDir);
+            string token = SecretStore.Load(GitHubSync.TokenTarget);
+            if (string.IsNullOrEmpty(cfg.owner) || string.IsNullOrEmpty(token))
+            {
+                Msg.Show("请先在“团队同步”页配置仓库和访问密钥。", "团队同步");
+                return;
+            }
+            try
+            {
+                List<string> members = await Task.Run(() => GitHubSync.ListDir(cfg.owner, cfg.repo, "team", cfg.branch, token));
+                int added = 0;
+                JavaScriptSerializer ser = SyncData.Serializer();
+                foreach (string m in members)
+                {
+                    string sha;
+                    string json = null;
+                    try { json = await Task.Run(() => GitHubSync.GetFile(cfg.owner, cfg.repo, "team/" + m + "/references.json", cfg.branch, token, out sha)); }
+                    catch { continue; }
+                    if (string.IsNullOrEmpty(json)) continue;
+                    List<RefItem> list = null;
+                    try { list = ser.Deserialize<List<RefItem>>(json); } catch { continue; }
+                    if (list == null) continue;
+                    foreach (RefItem r in list)
                     {
-                        store.DeletedCategories.Add(d);
-                        changed++;
-                    }
-                    else if (CompareUpdated(d.At, localDel.At) > 0)
-                    {
-                        localDel.At = d.At;
-                        changed++;
+                        if (r == null || string.IsNullOrEmpty(r.Path)) continue;
+                        if (store.Refs.Find(x => x.Path == r.Path) == null) { store.Refs.Add(r); added++; }
                     }
                 }
-            }
-            for (int i = store.Categories.Count - 1; i >= 0; i--)
-            {
-                Category c = store.Categories[i];
-                DeletedCategory d = store.DeletedCategories.Find(x => x.Id == c.Id);
-                if (d != null && (string.IsNullOrEmpty(c.Updated) || CompareUpdated(d.At, c.Updated) > 0))
-                {
-                    foreach (Entry e in store.Entries) if (e.Category == c.Name) e.Category = "";
-                    foreach (LocalDoc doc in store.Documents) if (doc.Category == c.Name) doc.Category = "";
-                    store.Categories.RemoveAt(i);
-                    changed++;
-                }
-            }
-            if (remote.Categories != null)
-            {
-                foreach (Category r in remote.Categories)
-                {
-                    if (r == null || string.IsNullOrEmpty(r.Id)) continue;
-                    DeletedCategory d = store.DeletedCategories.Find(x => x.Id == r.Id);
-                    if (d != null && (string.IsNullOrEmpty(r.Updated) || CompareUpdated(d.At, r.Updated) > 0)) continue;
-                    Category l = store.Categories.Find(x => x.Id == r.Id);
-                    if (l == null) l = store.Categories.Find(x => x.Name == r.Name);
-                    if (l == null)
-                    {
-                        Category add = new Category
-                        {
-                            Id = r.Id, Name = r.Name, Updated = r.Updated,
-                            TaskTotal = r.TaskTotal, TaskDone = r.TaskDone, Hours = r.Hours
-                        };
-                        if (r.Links != null) add.Links = r.Links;
-                        store.Categories.Add(add);
-                        changed++;
-                    }
-                    else
-                    {
-                        if (l.Id != r.Id) { l.Id = r.Id; changed++; }
-                        if (CompareUpdated(r.Updated, l.Updated) > 0 ||
-                            (string.IsNullOrEmpty(r.Updated) && string.IsNullOrEmpty(l.Updated)))
-                        {
-                            l.Name = r.Name; l.TaskTotal = r.TaskTotal; l.TaskDone = r.TaskDone;
-                            l.Hours = r.Hours; l.Updated = r.Updated;
-                            if (r.Links != null) l.Links = r.Links;
-                            changed++;
-                        }
-                    }
-                }
-            }
-            if (changed > 0)
-            {
                 Persist();
-                RefreshCategoryCombo();
-                if (currentChanged) LoadEntry(current);
-                RefreshList();
-                RebuildCategories();
-                RefreshOverview2();
-                RefreshDocPage();
+                RebuildRefs();
+                Msg.Show("已合并团队成员参考资料，新增 " + added + " 条。", "团队信息");
             }
-            return changed;
+            catch (Exception ex)
+            {
+                Msg.Show("合并失败：" + ex.Message, "团队信息");
+            }
         }
 
         private void Log(string text)

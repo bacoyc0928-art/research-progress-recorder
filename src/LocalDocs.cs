@@ -31,7 +31,7 @@ namespace SRLogbook
                 n++;
                 path = Path.Combine(dir, safe + " (" + n + ").docx");
             }
-            if (File.Exists(path)) File.Delete(path);
+
 
             using (FileStream fs = new FileStream(path, FileMode.CreateNew))
             using (ZipArchive zip = new ZipArchive(fs, ZipArchiveMode.Create))
@@ -94,7 +94,10 @@ namespace SRLogbook
         private static string Sanitize(string name)
         {
             foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-            return name.Trim();
+            name = name.Trim().TrimEnd('.');
+            if (name.Length == 0) name = "Untitled";
+            if (name.Length > 100) name = name.Substring(0, 100);
+            return "Document_" + name;
         }
 
         private static void Write(ZipArchive zip, string name, string content)

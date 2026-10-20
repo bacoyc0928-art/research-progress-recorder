@@ -7,12 +7,18 @@ using System.Web.Script.Serialization;
 
 namespace SRLogbook
 {
+    public class GitHubApiException : Exception
+    {
+        public int StatusCode { get; private set; }
+        public GitHubApiException(int code, string message) : base("GitHub HTTP " + code + ": " + message) { StatusCode = code; }
+    }
     public class SyncConfig
     {
         public string owner { get; set; }
         public string repo { get; set; }
         public string path { get; set; }
         public string branch { get; set; }
+        public string scope { get; set; }
     }
 
     /// <summary>
@@ -38,24 +44,24 @@ namespace SRLogbook
             {
                 if (File.Exists(ConfigPath(appDir)))
                 {
-                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    JavaScriptSerializer ser = SyncData.Serializer();
                     SyncConfig c = ser.Deserialize<SyncConfig>(File.ReadAllText(ConfigPath(appDir), Encoding.UTF8));
                     if (c != null) return c;
                 }
             }
             catch { }
-            return new SyncConfig { owner = "", repo = "", path = "sync/research_log.json", branch = "main" };
+            return new SyncConfig { owner = "bacoyc0928-art", repo = "research-data", path = "sync/research_log.json", branch = "main", scope = "entries,categories" };
         }
 
         public static void SaveConfig(string appDir, SyncConfig c)
         {
-            JavaScriptSerializer ser = new JavaScriptSerializer();
-            File.WriteAllText(ConfigPath(appDir), ser.Serialize(c), new UTF8Encoding(false));
+            JavaScriptSerializer ser = SyncData.Serializer();
+            SyncData.WriteAtomic(ConfigPath(appDir), ser.Serialize(c));
         }
 
         public static bool HasToken() { return !string.IsNullOrEmpty(SecretStore.Load(TokenTarget)); }
 
-        public static void SetToken(string token) { SecretStore.Save(TokenTarget, token); }
+        public static void SetToken(string token) { if (!SecretStore.Save(TokenTarget, token)) throw new IOException("Cannot save token to Windows Credential Manager."); }
 
         public static void ClearToken() { SecretStore.Delete(TokenTarget); }
 
@@ -75,14 +81,113 @@ namespace SRLogbook
             try { json = Request("GET", url, token, null); }
             catch (Exception ex)
             {
-                if (ex.Message.IndexOf("404", StringComparison.Ordinal) >= 0) return null;
+                if (ex is GitHubApiException && ((GitHubApiException)ex).StatusCode == 404) return null;
                 throw;
             }
             Dictionary<string, object> d = Parse(json);
-            if (!d.ContainsKey("content")) return null;
             sha = d.ContainsKey("sha") ? Convert.ToString(d["sha"]) : null;
+            if (d.ContainsKey("encoding") && Convert.ToString(d["encoding"]) == "none")
+                return Request("GET", url, token, null, "application/vnd.github.raw+json");
+            if (!d.ContainsKey("content") || string.IsNullOrEmpty(sha)) throw new InvalidDataException("GitHub did not return a readable file.");
             string b64 = Convert.ToString(d["content"]).Replace("\n", "").Replace("\r", "");
             return Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+        }
+
+        public static string GetUserLogin(string token)
+        {
+            string json = Request("GET", API + "/user", token, null);
+            Dictionary<string, object> d = Parse(json);
+            return d.ContainsKey("login") ? Convert.ToString(d["login"]) : "";
+        }
+
+        public static List<string> ListDir(string owner, string repo, string path, string branch, string token)
+        {
+            List<string> names = new List<string>();
+            string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                + "/contents/" + EncodePath(path) + "?ref=" + Uri.EscapeDataString(branch);
+            string json;
+            try { json = Request("GET", url, token, null); }
+            catch (Exception ex)
+            {
+                if (ex is GitHubApiException && ((GitHubApiException)ex).StatusCode == 404) return names;
+                throw;
+            }
+            JavaScriptSerializer ser = SyncData.Serializer();
+            object[] arr = ser.Deserialize<object[]>(json);
+            if (arr != null)
+            {
+                foreach (object o in arr)
+                {
+                    Dictionary<string, object> d = o as Dictionary<string, object>;
+                    if (d == null) continue;
+                    if (d.ContainsKey("type") && Convert.ToString(d["type"]) == "dir")
+                        names.Add(Convert.ToString(d["name"]));
+                }
+            }
+            return names;
+        }
+
+        public static bool EnsureProfile(string owner, string repo, string branch, string token, string login)
+        {
+            string sha = null;
+            string path = "team/" + login + "/profile.json";
+            GetFile(owner, repo, path, branch, token, out sha);
+            if (!string.IsNullOrEmpty(sha)) return false;
+            string json = "{\"login\":\"" + login + "\",\"joined\":\"" + DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "\"}";
+            try { PutFile(owner, repo, path, branch, token, json, null); }
+            catch (GitHubApiException ex) { if (ex.StatusCode != 409 && ex.StatusCode != 422) throw; GetFile(owner, repo, path, branch, token, out sha); if (string.IsNullOrEmpty(sha)) throw; return false; }
+            return true;
+        }
+
+        public static string GetHistory(string owner, string repo, string branch, string token, out string sha)
+        {
+            sha = null;
+            try
+            {
+                return GetFile(owner, repo, "sync/history.json", branch, token, out sha);
+            }
+            catch (Exception ex)
+            {
+                if (ex is GitHubApiException && ((GitHubApiException)ex).StatusCode == 404) return null;
+                throw;
+            }
+        }
+
+        public static void AppendHistory(string owner, string repo, string branch, string token, string user, string scope)
+        {
+            for (int i = 0; ; i++)
+            {
+                try { AppendHistoryOnce(owner, repo, branch, token, user, scope); return; }
+                catch (GitHubApiException ex) { if (i >= 2 || (ex.StatusCode != 409 && ex.StatusCode != 422)) throw; }
+            }
+        }
+
+        private static void AppendHistoryOnce(string owner, string repo, string branch, string token, string user, string scope)
+        {
+            string sha;
+            string existing = GetHistory(owner, repo, branch, token, out sha);
+            List<Dictionary<string, object>> list = new List<Dictionary<string, object>>();
+            if (!string.IsNullOrEmpty(existing))
+            {
+                JavaScriptSerializer ser = SyncData.Serializer();
+                object[] arr = ser.Deserialize<object[]>(existing);
+                if (arr != null)
+                {
+                    foreach (object o in arr)
+                    {
+                        Dictionary<string, object> d = o as Dictionary<string, object>;
+                        if (d != null) list.Add(d);
+                    }
+                }
+            }
+            Dictionary<string, object> e = new Dictionary<string, object>();
+            e["time"] = SyncData.Now();
+            e["user"] = user;
+            e["scope"] = scope;
+            list.Add(e);
+            if (list.Count > 500) list.RemoveRange(0, list.Count - 500);
+            JavaScriptSerializer s2 = SyncData.Serializer();
+            PutFile(owner, repo, "sync/history.json", branch, token, s2.Serialize(list), sha);
         }
 
         public static void PutFile(string owner, string repo, string path, string branch, string token, string content, string sha)
@@ -92,7 +197,7 @@ namespace SRLogbook
             body["content"] = Convert.ToBase64String(new UTF8Encoding(false).GetBytes(content));
             body["branch"] = branch;
             if (!string.IsNullOrEmpty(sha)) body["sha"] = sha;
-            JavaScriptSerializer ser = new JavaScriptSerializer();
+            JavaScriptSerializer ser = SyncData.Serializer();
             Request("PUT", API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
                 + "/contents/" + EncodePath(path), token, ser.Serialize(body));
         }
@@ -104,12 +209,12 @@ namespace SRLogbook
             return string.Join("/", parts);
         }
 
-        private static string Request(string method, string url, string token, string body)
+        private static string Request(string method, string url, string token, string body, string accept = "application/vnd.github+json")
         {
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
             req.Method = method;
             req.UserAgent = "SRLogbook";
-            req.Accept = "application/vnd.github+json";
+            req.Accept = accept;
             if (!string.IsNullOrEmpty(token)) req.Headers.Add("Authorization", "token " + token);
             req.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
             req.Timeout = 20000;
@@ -134,13 +239,13 @@ namespace SRLogbook
                     using (StreamReader sr = new StreamReader(ex.Response.GetResponseStream(), Encoding.UTF8))
                         detail = sr.ReadToEnd();
                 }
-                throw new Exception("GitHub 返回 " + (ex.Response == null ? ex.Message : ((HttpWebResponse)ex.Response).StatusCode.ToString()) + "：" + detail);
+                throw new GitHubApiException(ex.Response == null ? 0 : (int)((HttpWebResponse)ex.Response).StatusCode, detail.Length == 0 ? ex.Message : detail);
             }
         }
 
         private static Dictionary<string, object> Parse(string json)
         {
-            JavaScriptSerializer ser = new JavaScriptSerializer();
+            JavaScriptSerializer ser = SyncData.Serializer();
             Dictionary<string, object> d = ser.Deserialize<Dictionary<string, object>>(json);
             return d == null ? new Dictionary<string, object>() : d;
         }
