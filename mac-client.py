@@ -251,6 +251,62 @@ def read_activity(api, path):
     data, sha = api.get(path)
     return data if isinstance(data, list) else []
 
+def post_parse(name):
+    if not name.endswith('.txt'): return None
+    pid=name[:-4]
+    if len(pid)<20 or not pid[:14].isdigit() or pid[14]!='-': return None
+    rest=pid[15:]; dash=rest.rfind('-')
+    if dash<=0: return None
+    ts=pid[:14]
+    return dict(id=pid,author=rest[:dash],time=f'{ts[:4]}-{ts[4:6]}-{ts[6:8]} {ts[8:10]}:{ts[10:12]}')
+
+def list_posts(api):
+    try: rows=api.request('GET',api.endpoint('posts')+'?ref='+urllib.parse.quote(api.branch,safe=''))
+    except urllib.error.HTTPError as error:
+        if error.code==404: return []
+        raise
+    out=[]
+    for row in rows:
+        if row.get('type')!='file' or not row.get('name','').endswith('.txt'): continue
+        item=post_parse(row['name'])
+        if not item: continue
+        try: item['body']=api.request('GET',api.endpoint('posts/'+row['name'])+'?ref='+urllib.parse.quote(api.branch,safe=''),raw=True)
+        except urllib.error.HTTPError: item['body']=''
+        out.append(item)
+    out.sort(key=lambda x:x['id'],reverse=True)
+    return out
+
+def read_ids(api,login):
+    data,sha=api.get(f'posts/read/{login}.json')
+    return set(data) if isinstance(data,list) else set()
+
+def mark_read(api,login,pid):
+    for attempt in range(3):
+        data,sha=api.get(f'posts/read/{login}.json')
+        ids=list(data) if isinstance(data,list) else []
+        if pid not in ids: ids.append(pid)
+        try: api.put(f'posts/read/{login}.json',ids[-2000:],sha); return
+        except urllib.error.HTTPError as error:
+            if attempt==2 or error.code not in (409,422): raise
+
+def put_text(api,path,text):
+    endpoint=api.endpoint(path); sha=None
+    try: sha=api.request('GET',endpoint+'?ref='+urllib.parse.quote(api.branch,safe=''))['sha']
+    except urllib.error.HTTPError as error:
+        if error.code!=404: raise
+    body={'message':'post: SRPRecorder2027 '+VERSION,'branch':api.branch,'content':base64.b64encode(text.encode()).decode()}
+    if sha: body['sha']=sha
+    api.request('PUT',endpoint,body)
+
+def publish_post(api,login,body):
+    pid=dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')+'-'+login+'-'+uuid.uuid4().hex[:4]
+    put_text(api,'posts/'+pid+'.txt',body); return pid
+
+def delete_post(api,pid):
+    endpoint=api.endpoint('posts/'+pid+'.txt')
+    info=api.request('GET',endpoint+'?ref='+urllib.parse.quote(api.branch,safe=''))
+    api.request('DELETE',endpoint,{'message':'post: delete','branch':api.branch,'sha':info['sha']})
+
 class Client:
     def __init__(self, root, home=None, smoke=False):
         import tkinter as tk
@@ -318,11 +374,11 @@ class Client:
         self.button(header,'EN / 中文','中文 / EN',self.language)
         self.book=ttk.Notebook(self.root); self.book.pack(fill='both',expand=True,padx=12,pady=6)
         self.tabs=[]
-        for zh,en in [('团队研究','Team Research'),('参考文献与资料','References'),('本地进度','Local Progress'),('团队同步','Team Sync'),('使用说明','Help')]:
+        for zh,en in [('团队研究','Team Research'),('快速发行','Quick Post'),('参考文献与资料','References'),('本地进度','Local Progress'),('团队同步','Team Sync'),('使用说明','Help')]:
             panel=ttk.Frame(self.book,padding=16); self.book.add(panel,text=self.tr(zh,en)); self.tabs.append(panel)
         self.build_login_bar()
         self.status=self.tk.StringVar(value=self.tr('就绪','Ready')); ttk.Label(self.root,textvariable=self.status,padding=8).pack(fill='x')
-        self.build_team(); self.build_references(); self.build_progress(); self.build_sync(); self.build_help()
+        self.build_team(); self.build_posts(); self.build_references(); self.build_progress(); self.build_sync(); self.build_help()
         self.update_login_ui()
     def build_login_bar(self):
         bar=self.ttk.Frame(self.root,padding=(12,6)); bar.pack(fill='x')
@@ -376,7 +432,7 @@ class Client:
                 self.mb.showerror('SRPRecorder2027',self.tr('登录失败：','Sign-in failed: ')+error,parent=self.root)
                 return
             self.session_login=login; self.session_token=token; self.login=login
-            self.login_token.set(''); self.update_login_ui(); self.team()
+            self.login_token.set(''); self.update_login_ui(); self.team(); self.refresh_posts()
             self.status.set(self.tr('已登录 ','Signed in as ')+login)
         self.run(work,done)
     def sign_out(self):
@@ -487,8 +543,135 @@ class Client:
             if selected: self.open_path(paths[selected[0]])
         self.button(bar,'打开文件','Open File',open_selected); self.button(bar,'打开文件夹','Open Folder',lambda:self.open_path(folder))
         self.button(bar,'关闭','Close',dialog.destroy); tree.bind('<Double-1>',lambda _:self.guarded(open_selected))
+    def build_posts(self):
+        p=self.tabs[1]
+        self.post_text=self.tk.Text(p,height=4,wrap='word')
+        self.post_text.pack(fill='x')
+        bar=self.ttk.Frame(p); bar.pack(fill='x',pady=6)
+        self.button(bar,'发布','Publish',self.publish_post)
+        self.button(bar,'历史记录','History',self.show_post_history)
+        self.button(bar,'刷新','Refresh',self.refresh_posts)
+        self.post_status=self.ttk.Label(p,text=self.tr('登录后查看帖子。','Sign in to see posts.'))
+        self.post_status.pack(anchor='w')
+        wrap=self.ttk.Frame(p); wrap.pack(fill='both',expand=True)
+        self.post_canvas=self.tk.Canvas(wrap,highlightthickness=0)
+        sb=self.ttk.Scrollbar(wrap,orient='vertical',command=self.post_canvas.yview)
+        self.post_canvas.configure(yscrollcommand=sb.set)
+        sb.pack(side='right',fill='y'); self.post_canvas.pack(side='left',fill='both',expand=True)
+        self.post_inner=self.ttk.Frame(self.post_canvas)
+        self.post_canvas.create_window((0,0),window=self.post_inner,anchor='nw')
+        self.post_inner.bind('<Configure>',lambda e:self.post_canvas.configure(scrollregion=self.post_canvas.bbox('all')))
+        self._history_posts={}
+    def refresh_posts(self):
+        if not hasattr(self,'post_inner'): return
+        for w in self.post_inner.winfo_children(): w.destroy()
+        if not self.session_token:
+            self.post_status.configure(text=self.tr('请先在窗口底部登录。','Sign in at the bottom first.')); return
+        api,config=self.api()
+        def work():
+            login=api.login(); api.login_cached=login
+            return login,list_posts(api),read_ids(api,login)
+        def done(result):
+            login,posts,read=result
+            self.remember(api,config)
+            for w in self.post_inner.winfo_children(): w.destroy()
+            shown=0
+            for post in posts:
+                if post['id'] in read: continue
+                self.add_post_card(post,login); shown+=1
+            if shown:
+                self.post_status.configure(text=self.tr('共 %d 条未读帖子' % shown,'%d unread post(s)' % shown))
+            else:
+                self.post_status.configure(text=self.tr('暂无未读帖子；已阅的在“历史记录”里。','No unread posts; see History for read ones.'))
+            self.post_inner.update_idletasks(); self.post_canvas.configure(scrollregion=self.post_canvas.bbox('all'))
+        self.run(work,done)
+    def add_post_card(self,post,login):
+        card=self.ttk.Frame(self.post_inner,relief='solid',borderwidth=1,padding=8)
+        card.pack(fill='x',pady=4,padx=2)
+        head=self.ttk.Label(card,text=post['author']+'  ·  '+post['time'],font=('',11,'bold'))
+        head.pack(anchor='w')
+        preview=' '.join(str(post.get('body','')).split())[:140]
+        body=self.ttk.Label(card,text=preview or '(空)',wraplength=760,foreground='#5e697a')
+        body.pack(anchor='w',pady=(2,6))
+        bar=self.ttk.Frame(card); bar.pack(fill='x')
+        self.ttk.Button(bar,text=self.tr('查看','Open'),command=lambda:self.view_post(post,login)).pack(side='left')
+        self.ttk.Button(bar,text=self.tr('已阅','Mark Read'),command=lambda:self.mark_post_read(post,login)).pack(side='left',padx=4)
+        if post['author'].lower()==login.lower():
+            self.ttk.Button(bar,text=self.tr('删除','Delete'),command=lambda:self.delete_post(post,login)).pack(side='left',padx=4)
+        for w in (card,head,body):
+            w.bind('<Button-1>',lambda e,p=post:self.view_post(p,login))
+    def publish_post(self):
+        api,config=self.api()
+        text=self.post_text.get('1.0','end-1c').strip()
+        if not text:
+            self.mb.showinfo('SRPRecorder2027',self.tr('请先写点内容。','Write something first.'),parent=self.root); return
+        def work():
+            login=api.login(); api.login_cached=login
+            publish_post(api,login,text)
+            try: append_activity(api,login,'发布快速发行',str(len(text))+' 字符')
+            except Exception: pass
+            return True
+        def done(_):
+            self.post_text.delete('1.0','end')
+            self.finish(api,config,self.tr('已发布。','Published.'))
+            self.refresh_posts()
+        self.run(work,done)
+    def view_post(self,post,login):
+        win=self.tk.Toplevel(self.root); win.title(post['author']+' · '+post['time'])
+        win.geometry('720x520'); win.transient(self.root); win.grab_set()
+        box=self.tk.Text(win,wrap='word',padx=12,pady=12); box.pack(fill='both',expand=True)
+        box.insert('1.0',post.get('body','')); box.configure(state='disabled')
+        bar=self.ttk.Frame(win); bar.pack(fill='x',pady=6)
+        self.ttk.Button(bar,text=self.tr('已阅','Mark Read'),command=lambda:(win.destroy(),self.mark_post_read(post,login))).pack(side='right',padx=6)
+        self.ttk.Button(bar,text=self.tr('关闭','Close'),command=win.destroy).pack(side='right')
+    def mark_post_read(self,post,login):
+        api,config=self.api()
+        def work():
+            mark_read(api,login,post['id']); return True
+        def done(_):
+            self.remember(api,config); self.refresh_posts()
+        self.run(work,done)
+    def delete_post(self,post,login):
+        if post['author'].lower()!=login.lower():
+            self.mb.showinfo('SRPRecorder2027',self.tr('只能删除自己的帖子。','You can only delete your own posts.'),parent=self.root); return
+        if not self.mb.askyesno('SRPRecorder2027',self.tr('确定删除这条帖子？','Delete this post?'),parent=self.root): return
+        api,config=self.api()
+        def work():
+            delete_post(api,post['id'])
+            try: append_activity(api,login,'删除快速发行',post['time'])
+            except Exception: pass
+            return True
+        def done(_):
+            self.remember(api,config); self.refresh_posts()
+        self.run(work,done)
+    def show_post_history(self):
+        api,config=self.api()
+        def work():
+            login=api.login(); api.login_cached=login
+            return login,list_posts(api),read_ids(api,login)
+        def done(result):
+            login,posts,read=result
+            self.remember(api,config)
+            seen=[post for post in posts if post['id'] in read]
+            if not seen:
+                self.mb.showinfo('SRPRecorder2027',self.tr('还没有已阅的帖子。','No read posts yet.'),parent=self.root); return
+            win=self.tk.Toplevel(self.root); win.title(self.tr('历史记录（已阅）','History (read posts)'))
+            win.geometry('820x480'); win.transient(self.root); win.grab_set()
+            tree=self.table(win,[self.tr('作者','Author'),self.tr('时间','Time'),self.tr('内容','Content')])
+            self._history_posts={}
+            for post in seen:
+                iid=tree.insert('','end',values=(post['author'],post['time'],' '.join(str(post.get('body','')).split())[:120]))
+                self._history_posts[iid]=post
+            tree.bind('<Double-1>',lambda e:self.open_history_item(tree,login))
+            self.ttk.Button(win,text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
+        self.run(work,done)
+    def open_history_item(self,tree,login):
+        selection=tree.selection()
+        if not selection: return
+        post=self._history_posts.get(selection[0])
+        if post: self.view_post(post,login)
     def build_references(self):
-        p=self.tabs[1]; self.ttk.Label(p,text=self.tr('参考资料只读。默认库需登录私有团队仓库后下载；个人资料在团队同步上传。','Read-only references. Download the default library after joining the private data repository; upload personal files on Team Sync.'),wraplength=980).pack(anchor='w',pady=8)
+        p=self.tabs[2]; self.ttk.Label(p,text=self.tr('参考资料只读。默认库需登录私有团队仓库后下载；个人资料在团队同步上传。','Read-only references. Download the default library after joining the private data repository; upload personal files on Team Sync.'),wraplength=980).pack(anchor='w',pady=8)
         bar=self.ttk.Frame(p); bar.pack(fill='x'); self.button(bar,'刷新本地资料','Refresh Local Files',self.refresh_references)
         self.button(bar,'打开文件','Open File',self.open_reference); self.button(bar,'打开默认资料库','Open Default Library',lambda:self.open_path(self.default))
         self.ref_tree=self.table(p,[self.tr('文件','File'),self.tr('位置','Location')]); self.ref_tree.bind('<Double-1>',lambda _:self.guarded(self.open_reference))
@@ -513,7 +696,7 @@ class Client:
         selected=self.ref_tree.selection()
         if selected: self.open_path(self.ref_paths[selected[0]])
     def build_progress(self):
-        p=self.tabs[2]; self.progress=self.tk.StringVar(value=self.config['progress'])
+        p=self.tabs[3]; self.progress=self.tk.StringVar(value=self.config['progress'])
         self.ttk.Label(p,text=self.tr('本地进度文件夹','Local Progress Folder'),font=('',14,'bold')).pack(anchor='w',pady=12)
         self.ttk.Entry(p,textvariable=self.progress,state='readonly').pack(fill='x')
         bar=self.ttk.Frame(p); bar.pack(fill='x',pady=10)
@@ -530,7 +713,7 @@ class Client:
             target=docx(self.progress.get(),project,'',title,direct=True)
             self.open_path(target)
     def build_sync(self):
-        p=self.tabs[3]
+        p=self.tabs[4]
         self.ttk.Label(p,text=self.tr('已绑定仓库：','Bound repository: ')+DEFAULT_REPO+' · main',font=('',11,'bold')).pack(anchor='w')
         self.ttk.Label(p,text=self.tr('登录后在下方直接操作，无需填写任何配置。','Sign in first; no configuration needed below.'),foreground='#c47a2a').pack(anchor='w',pady=(4,10))
         downloads=self.ttk.Frame(p); downloads.pack(fill='x',pady=(8,0))
@@ -646,7 +829,7 @@ class Client:
         elif sys.platform=='win32': os.startfile(path)
         else: subprocess.Popen(['xdg-open',str(path)])
     def build_help(self):
-        panel=self.tabs[4]
+        panel=self.tabs[5]
         bar=self.ttk.Frame(panel); bar.pack(fill='x')
         self.button(bar,'上传到 GitHub','Upload to GitHub',self.upload_help)
         self.button(bar,'读取云端版本','Load From GitHub',self.load_help)
@@ -727,11 +910,11 @@ def main():
         if smoke:
             with tempfile.TemporaryDirectory() as tmp:
                 client=Client(root,tmp,smoke=True); root.update()
-                assert len(client.tabs)==5
-                for index in range(5): client.book.select(index); root.update()
+                assert len(client.tabs)==6
+                for index in range(6): client.book.select(index); root.update()
                 client.language(); root.update()
-                for index in range(5): client.book.select(index); root.update()
-                root.destroy(); print('SRPRecorder2027 0.1.1: five pages and both languages passed')
+                for index in range(6): client.book.select(index); root.update()
+                root.destroy(); print('SRPRecorder2027 0.1.1: six pages and both languages passed')
         else:
             Client(root); root.deiconify(); root.mainloop()
     except Exception as error:
