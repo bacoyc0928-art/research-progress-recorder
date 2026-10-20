@@ -441,6 +441,8 @@ class Client:
         self.button(downloads,'从 GitHub 下载默认资料库','Download Default Library',self.pull_default)
         uploads=self.ttk.Frame(p); uploads.pack(fill='x')
         self.button(uploads,'上传参考资料','Upload References',self.upload_references); self.button(uploads,'上传本地进度','Upload Local Progress',self.upload_progress)
+        removals=self.ttk.Frame(p); removals.pack(fill='x')
+        self.button(removals,'撤除我上传的参考资料','Remove My Uploaded References',self.remove_my_references)
         self.ttk.Label(p,text=self.tr('每个上传文件最大 50 MiB；不自动删除远端旧文件。下载成功后替换并保留旧副本；部分上传失败时请重试。','Maximum 50 MiB per uploaded file. Remote old files are not deleted. Downloads replace only after success and keep backups. Retry after partial upload failures.'),wraplength=980).pack(anchor='w',pady=16)
         self.ttk.Label(p,text=self.tr('个人仓库协作者使用 classic PAT 的 repo 权限。不要共享令牌。','Personal-repository collaborators use a classic PAT with repo scope. Never share tokens.'),wraplength=980).pack(anchor='w')
     def save_sync(self):
@@ -500,6 +502,34 @@ class Client:
             files=self.channels(api); login=files.identity(); api.login_cached=login
             return files.upload_references(selected,self.personal_folder(login))
         self.run(work,lambda _:self.finish(api,config,self.tr('参考资料已上传，旧清单保留。','References uploaded; earlier manifest entries preserved.')))
+    def remove_my_references(self):
+        api,config=self.api()
+        def work():
+            files=self.channels(api); login,remote=files.remote_references(); return login,sorted(remote)
+        def done(result):
+            login,names=result
+            if not names:
+                self.status.set(self.tr('团队区里没有你上传的参考资料。','You have not uploaded any references.'))
+                self.mb.showinfo('SRPRecorder2027',self.tr('团队区里没有你上传的参考资料。','You have not uploaded any references.'),parent=self.root); return
+            self.choose_references_to_remove(api,config,login,names)
+        self.run(work,done)
+    def choose_references_to_remove(self,api,config,login,names):
+        win=self.tk.Toplevel(self.root); win.title(self.tr('撤除我上传的参考资料','Remove My Uploaded References'))
+        win.geometry('560x420'); win.transient(self.root); win.grab_set()
+        self.ttk.Label(win,text=self.tr('选择要从团队区永久删除的参考资料（其他人将无法再下载）：','Select uploaded references to remove permanently from the team area:'),wraplength=520).pack(anchor='w',padx=12,pady=8)
+        box=self.tk.Listbox(win,selectmode='extended',height=12); box.pack(fill='both',expand=True,padx=12)
+        for name in names: box.insert('end',name)
+        bar=self.ttk.Frame(win); bar.pack(fill='x',pady=8)
+        def confirm():
+            picked=[box.get(i) for i in box.curselection()]
+            if not picked: return
+            if not self.mb.askyesno('SRPRecorder2027',self.tr('将从团队区永久删除 %d 个参考资料。继续？' % len(picked),'Permanently remove %d uploaded reference(s)?' % len(picked)),parent=win): return
+            win.destroy()
+            def work():
+                count=self.channels(api).remove_references(picked,self.personal_folder(login)); return count
+            self.run(work,lambda count:self.finish(api,config,self.tr('已撤除 %d 个参考资料。' % count,'Removed %d uploaded reference(s).' % count)))
+        self.ttk.Button(bar,text=self.tr('撤除所选','Remove Selected'),command=confirm).pack(side='right',padx=4)
+        self.ttk.Button(bar,text=self.tr('取消','Cancel'),command=win.destroy).pack(side='right',padx=4)
     def open_path(self,path):
         path=no_links(path)
         if not path.exists(): raise FileNotFoundError(str(path))
