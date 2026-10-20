@@ -8,6 +8,7 @@ namespace SRLogbook
     {
         private void ChangeWorkspace()
         {
+            if (!RequireLogin("工作文件夹")) return;
             using (FolderBrowserDialog d = new FolderBrowserDialog())
             {
                 d.Description = "选择工作文件夹（程序将从中读取资料并保存本地文档）";
