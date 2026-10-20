@@ -693,11 +693,11 @@ namespace SRLogbook
 
             loginPanel = new Panel();
             loginPanel.BackColor = Theme.Navy;
-            loginPanel.SetBounds(Ui.S(14), 0, Ui.S(192), Ui.S(122));
+            loginPanel.SetBounds(14, 0, 192, 122);
             sidebar.Controls.Add(loginPanel);
 
             avatarPanel = new Panel();
-            avatarPanel.SetBounds(0, 0, Ui.S(40), Ui.S(40));
+            avatarPanel.SetBounds(0, 0, 40, 40);
             avatarPanel.BackColor = Theme.Navy;
             avatarPanel.Paint += delegate(object s, PaintEventArgs e)
             {
@@ -720,20 +720,20 @@ namespace SRLogbook
             loginNameLabel.Font = Theme.FB(9.5f);
             loginNameLabel.ForeColor = Color.White;
             loginNameLabel.BackColor = Theme.Navy;
-            loginNameLabel.SetBounds(Ui.S(50), Ui.S(2), Ui.S(142), Ui.S(20));
+            loginNameLabel.SetBounds(50, 2, 142, 20);
             loginPanel.Controls.Add(loginNameLabel);
 
             loginHintLabel = new Label();
             loginHintLabel.Font = Theme.F(7.6f);
             loginHintLabel.ForeColor = Color.FromArgb(150, 166, 190);
             loginHintLabel.BackColor = Theme.Navy;
-            loginHintLabel.SetBounds(Ui.S(50), Ui.S(22), Ui.S(142), Ui.S(18));
+            loginHintLabel.SetBounds(50, 22, 142, 18);
             loginPanel.Controls.Add(loginHintLabel);
 
             loginTokenBox = new TextBox();
             loginTokenBox.Font = Theme.F(8.8f);
             loginTokenBox.UseSystemPasswordChar = true;
-            loginTokenBox.SetBounds(0, Ui.S(50), Ui.S(192), Ui.S(26));
+            loginTokenBox.SetBounds(0, 50, 192, 26);
             loginPanel.Controls.Add(loginTokenBox);
 
             loginButton = new Button();
@@ -744,7 +744,7 @@ namespace SRLogbook
             loginButton.BackColor = Theme.Accent;
             loginButton.ForeColor = Color.White;
             loginButton.Cursor = Cursors.Hand;
-            loginButton.SetBounds(0, Ui.S(82), Ui.S(92), Ui.S(28));
+            loginButton.SetBounds(0, 82, 92, 28);
             loginButton.Click += delegate { SignIn(); };
             loginPanel.Controls.Add(loginButton);
 
@@ -757,7 +757,7 @@ namespace SRLogbook
             logoutButton.BackColor = Color.FromArgb(48, 62, 92);
             logoutButton.ForeColor = Color.White;
             logoutButton.Cursor = Cursors.Hand;
-            logoutButton.SetBounds(Ui.S(100), Ui.S(82), Ui.S(92), Ui.S(28));
+            logoutButton.SetBounds(100, 82, 92, 28);
             logoutButton.Click += delegate { SignOut(); };
             loginPanel.Controls.Add(logoutButton);
 
@@ -773,7 +773,7 @@ namespace SRLogbook
             sidebar.Resize += delegate
             {
                 foot.Top = sidebar.Height - Ui.S(62);
-                loginPanel.Top = Math.Max(Ui.S(320), foot.Top - loginPanel.Height - Ui.S(10));
+                loginPanel.Top = Math.Max(320, foot.Top - loginPanel.Height - 10);
             };
         }
 
