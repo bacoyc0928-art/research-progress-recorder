@@ -48,14 +48,14 @@ public class Verify002
         using(var f=new MainForm())
         {
             f.Show(); Application.DoEvents();
-            for(int i=0;i<5;i++) { f.SetPagePublic(i); Application.DoEvents(); }
+            for(int i=0;i<6;i++) { f.SetPagePublic(i); Application.DoEvents(); }
             Lang.En=true; Lang.Apply(f); f.SetPagePublic(3); Application.DoEvents(); f.CaptureTo(Path.Combine(root,"windows-en.png"));
             Lang.En=false; Lang.Apply(f); f.SetPagePublic(0); Application.DoEvents(); f.CaptureTo(Path.Combine(root,"windows-zh.png"));
             var sf=typeof(MainForm).GetField("store",BindingFlags.NonPublic|BindingFlags.Instance); var data=(Store)sf.GetValue(f);
             Check(data.Entries.Count==0 && data.Categories.Count==0,"fresh install has no personal seed data");
             f.Close();
         }
-        Check(true,"all five Windows pages and language switch render");
+        Check(true,"all six Windows pages and language switch render");
         Console.WriteLine("TOTAL " + count + " checks passed");
     }
 }
