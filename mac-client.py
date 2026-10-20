@@ -646,10 +646,78 @@ class Client:
         elif sys.platform=='win32': os.startfile(path)
         else: subprocess.Popen(['xdg-open',str(path)])
     def build_help(self):
-        text=self.tk.Text(self.tabs[4],wrap='word',padx=16,pady=16); text.pack(fill='both',expand=True)
+        panel=self.tabs[4]
+        bar=self.ttk.Frame(panel); bar.pack(fill='x')
+        self.button(bar,'上传到 GitHub','Upload to GitHub',self.upload_help)
+        self.button(bar,'读取云端版本','Load From GitHub',self.load_help)
+        self.button(bar,'恢复默认','Restore Default',self.default_help)
+        self.button(bar,'改动日志','Change Log',self.show_help_changelog)
+        self.help_text=self.tk.Text(panel,wrap='word',padx=16,pady=16); self.help_text.pack(fill='both',expand=True)
+        self.help_text.bind('<<Modified>>',self.help_modified)
+        text=self.help_text
+        self.help_dirty=False
         zh='SRPRecorder2027 0.1.1 公开测试版\n\n五栏与 Windows 一致：团队研究、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证保存配置。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。旧 0.0.2 的研究 JSON 和配置保留。升级退出后替换 .app 即可。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
         en='SRPRecorder2027 0.1.1 Public Test\n\nFive pages match Windows: Team Research, References, Local Progress, Team Sync, Help.\n\nAccept the private research-data invitation, then validate your own classic PAT (repo scope). Refresh only reads; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. Legacy 0.0.2 JSON and settings are preserved. Quit before replacing the .app to upgrade.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
-        text.insert('1.0',en if self.en else zh); text.configure(state='disabled')
+        self._help_zh=zh; self._help_en=en
+        text.insert('1.0',en if self.en else zh); text.edit_modified(False)
+
+    def help_modified(self,event=None):
+        try:
+            if self.help_text.edit_modified():
+                self.help_dirty=True; self.help_text.edit_modified(False)
+        except Exception: pass
+    def default_help_text(self):
+        return self._help_en if self.en else self._help_zh
+    def default_help(self):
+        self.help_text.delete('1.0','end'); self.help_text.insert('1.0',self.default_help_text()); self.help_dirty=False
+        self.status.set(self.tr('已恢复软件自带的使用说明。','Restored built-in help.'))
+    def upload_help(self):
+        api,config=self.api()
+        text=self.help_text.get('1.0','end-1c')
+        if not text.strip():
+            self.mb.showinfo('SRPRecorder2027',self.tr('使用说明不能为空。','Help text cannot be empty.'),parent=self.root); return
+        def work():
+            login=api.login(); api.login_cached=login
+            endpoint=api.endpoint('help/help.md'); sha=None
+            try: sha=api.request('GET',endpoint+'?ref='+urllib.parse.quote(api.branch,safe=''))['sha']
+            except urllib.error.HTTPError as error:
+                if error.code!=404: raise
+            body={'message':'help: SRPRecorder2027 '+VERSION,'branch':api.branch,'content':base64.b64encode(text.encode()).decode()}
+            if sha: body['sha']=sha
+            api.request('PUT',endpoint,body)
+            try: append_activity(api,login,'更新使用说明',str(len(text))+' 字符')
+            except Exception: pass
+            return len(text)
+        self.run(work,lambda _:self.finish(api,config,self.tr('使用说明已上传，所有成员登录后都能读到。','Help uploaded for every member.')))
+    def load_help(self,quiet=False):
+        api,config=self.api()
+        def work():
+            endpoint=api.endpoint('help/help.md')+'?ref='+urllib.parse.quote(api.branch,safe='')
+            try: return api.request('GET',endpoint,raw=True)
+            except urllib.error.HTTPError as error:
+                if error.code==404: return None
+                raise
+        def done(text):
+            self.remember(api,config)
+            if text is None:
+                if not quiet: self.mb.showinfo('SRPRecorder2027',self.tr('云端还没有上传过使用说明。','No uploaded help yet.'),parent=self.root)
+                return
+            self.help_text.delete('1.0','end'); self.help_text.insert('1.0',text); self.help_dirty=False
+            self.status.set(self.tr('已读取云端使用说明。','Help loaded from GitHub.'))
+        self.run(work,done)
+    def show_help_changelog(self):
+        api,config=self.api()
+        def work():
+            rows,sha=api.get('help/changelog.json')
+            return rows if isinstance(rows,list) else []
+        def done(rows):
+            self.remember(api,config)
+            win=self.tk.Toplevel(self.root); win.title(self.tr('改动日志','Change Log')); win.geometry('760x420'); win.transient(self.root); win.grab_set()
+            tree=self.table(win,[self.tr('时间','Time'),self.tr('用户','User'),self.tr('说明','Detail')])
+            for row in reversed(rows):
+                tree.insert('','end',values=(row.get('time',''),row.get('user',''),row.get('detail','')))
+            self.ttk.Button(win,text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
+        self.run(work,done)
 
 def main():
     import tkinter as tk
