@@ -11,14 +11,20 @@ $buildDirectory = Join-Path $OutputDirectory ('.build-' + [Guid]::NewGuid().ToSt
 New-Item -ItemType Directory -Path $buildDirectory | Out-Null
 $appTemporary = Join-Path $buildDirectory 'SRPRecorder2027.exe'
 $uninstallTemporary = Join-Path $buildDirectory '卸载SRPRecorder2027.exe'
-& $compiler /nologo /target:winexe /main:SRLogbook.Program "/out:$appTemporary" "/win32icon:$sourceRoot\app.ico" "/win32manifest:$sourceRoot\app.manifest" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:Microsoft.VisualBasic.dll $sources
-if ($LASTEXITCODE -ne 0) { throw 'Main application compilation failed.' }
-& $compiler /nologo /target:winexe /main:SRUninstall.Program "/out:$uninstallTemporary" /r:System.Windows.Forms.dll /r:System.Drawing.dll (Join-Path $sourceRoot 'src\Uninstaller.cs') (Join-Path $sourceRoot 'src\Version.cs')
-if ($LASTEXITCODE -ne 0) { throw 'Uninstaller compilation failed.' }
-Copy-Item -LiteralPath $appTemporary -Destination (Join-Path $OutputDirectory 'SRPRecorder2027.exe') -Force
-Copy-Item -LiteralPath $uninstallTemporary -Destination (Join-Path $OutputDirectory '卸载SRPRecorder2027.exe') -Force
-foreach ($name in @('SRPRecorder2027.exe.config','卸载SRPRecorder2027.exe.config')) {
-    Copy-Item -LiteralPath (Join-Path $sourceRoot 'app.config') -Destination (Join-Path $OutputDirectory $name) -Force
+try {
+    & $compiler /nologo /target:winexe /main:SRLogbook.Program "/out:$appTemporary" "/win32icon:$sourceRoot\app.ico" "/win32manifest:$sourceRoot\app.manifest" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:Microsoft.VisualBasic.dll $sources
+    if ($LASTEXITCODE -ne 0) { throw 'Main application compilation failed.' }
+    & $compiler /nologo /target:winexe /main:SRUninstall.Program "/out:$uninstallTemporary" /r:System.Windows.Forms.dll /r:System.Drawing.dll (Join-Path $sourceRoot 'src\Uninstaller.cs') (Join-Path $sourceRoot 'src\Version.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Uninstaller compilation failed.' }
+    Copy-Item -LiteralPath $appTemporary -Destination (Join-Path $OutputDirectory 'SRPRecorder2027.exe') -Force
+    Copy-Item -LiteralPath $uninstallTemporary -Destination (Join-Path $OutputDirectory '卸载SRPRecorder2027.exe') -Force
+    foreach ($name in @('SRPRecorder2027.exe.config','卸载SRPRecorder2027.exe.config')) {
+        Copy-Item -LiteralPath (Join-Path $sourceRoot 'app.config') -Destination (Join-Path $OutputDirectory $name) -Force
+    }
+    [IO.File]::WriteAllText((Join-Path $OutputDirectory '.srprec-install'), 'SRPRecorder2027 portable v1', [Text.UTF8Encoding]::new($false))
 }
-[IO.File]::WriteAllText((Join-Path $OutputDirectory '.srprec-install'), 'SRPRecorder2027 portable v1', [Text.UTF8Encoding]::new($false))
+finally {
+    # 临时编译目录只用于产出，建完即删；此前从不清理，SRCRec 内累积了 16 个 .build-* 目录。
+    if (Test-Path -LiteralPath $buildDirectory) { Remove-Item -LiteralPath $buildDirectory -Recurse -Force -ErrorAction SilentlyContinue }
+}
 Write-Host "Built local candidate in $OutputDirectory"
