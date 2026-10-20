@@ -30,6 +30,7 @@ namespace SRLogbook
         private Button btnUpProgress;
         private Button btnRemoveRefs;
         private Label boundLabel;
+        private Button btnActivity;
 
         private Panel BuildSyncPage()
         {
@@ -91,6 +92,8 @@ namespace SRLogbook
             btnUpProgress.Click += delegate { UploadProgressFolder(); };
             btnRemoveRefs = SButton("撤除我上传的参考资料", 414, 160, 230);
             btnRemoveRefs.Click += delegate { RemoveMyUploadedRefs(); };
+            btnActivity = SButton("查看活动日志", 654, 160, 190);
+            btnActivity.Click += delegate { ShowActivityLogs(); };
 
             UpdateSyncActionState();
 
@@ -533,6 +536,7 @@ namespace SRLogbook
                 SaveSyncConfig();
                 Log("已上传本地进度 " + n + " 个文件；其他远端文件保留，不自动删除。");
                 lblSStatus.Text = "本地进度上传完成（" + n + " 个文件）。";
+                await LogActivityAsync("上传本地进度", n + " 个文件");
             }
             catch (Exception ex) { Log("本地进度上传失败（可能已上传部分文件）：" + ex.Message); lblSStatus.Text = "上传失败，详见日志。"; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
@@ -546,6 +550,7 @@ namespace SRLogbook
             if (btnUpRefs != null) btnUpRefs.Enabled = has;
             if (btnUpProgress != null) btnUpProgress.Enabled = has;
             if (btnRemoveRefs != null) btnRemoveRefs.Enabled = has;
+            if (btnActivity != null) btnActivity.Enabled = has;
         }
 
         private async void PullOthersContent()
@@ -569,6 +574,7 @@ namespace SRLogbook
                 }
                 SaveSyncConfig();
                 lblSStatus.Text = n == 0 ? "没有其他成员内容。" : "已下载 " + n + " 位成员内容。";
+                if (n > 0) await LogActivityAsync("下载他人内容", n + " 位成员");
                 string baseDir = Path.Combine(AppPaths.MemberReferences(appDir, login), "TeamConRef");
                 Log(lblSStatus.Text + " " + baseDir);
                 if (n > 0) OpenPath(baseDir);
@@ -594,6 +600,7 @@ namespace SRLogbook
                 SaveSyncConfig();
                 if (backup != null) Log("旧默认资料库备份：" + backup);
                 lblSStatus.Text = "默认资料库已更新：" + count + " 个文件。";
+                await LogActivityAsync("下载默认资料库", count + " 个文件");
                 Log(lblSStatus.Text); RebuildRefs();
             }
             catch (Exception ex) { Log("下载默认资料库失败：" + ex.Message); lblSStatus.Text = "下载失败，原有默认资料库保留。"; }
@@ -661,6 +668,7 @@ namespace SRLogbook
                 Persist(); RebuildRefs(); SaveSyncConfig();
                 Log("已上传 " + files.Length + " 个参考文件，保留此前参考资料清单。");
                 lblSStatus.Text = "参考资料上传完成。";
+                await LogActivityAsync("上传参考资料", files.Length + " 个文件");
             }
             catch (Exception ex) { Log("参考资料上传失败（可能已上传部分文件）：" + ex.Message); lblSStatus.Text = "上传失败，详见日志。"; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
@@ -715,6 +723,7 @@ namespace SRLogbook
                 await UpdateReferencesManifest(owner, repo, branch, token, login, selected);
                 Persist(); RebuildRefs();
                 lblSStatus.Text = (Lang.En ? "Removed " : "已撤除 ") + removed + (Lang.En ? " uploaded reference(s)." : " 个参考资料。");
+                await LogActivityAsync("撤除参考资料", removed + " 个文件：" + string.Join("、", selected.ToArray()));
                 Msg.Show(lblSStatus.Text, "撤除参考资料");
             }
             catch (Exception ex) { Log((Lang.En ? "Remove failed: " : "撤除参考资料失败：") + ex.Message); lblSStatus.Text = Lang.En ? "Remove failed; see the log." : "撤除失败，详见日志。"; }
@@ -780,6 +789,80 @@ namespace SRLogbook
                     foreach (object o in list.CheckedItems) picked.Add(Convert.ToString(o));
             }
             return picked;
+        }
+
+        private async void ShowActivityLogs()
+        {
+            if (string.IsNullOrEmpty(sessionToken)) { Msg.Show("请先在左下角登录 GitHub 账号。", "活动日志"); return; }
+            SyncConfig c = GitHubSync.LoadConfig(appDir);
+            string login = sessionLogin, token = sessionToken;
+            Cursor = Cursors.WaitCursor;
+            try
+            {
+                List<ActivityEntry> pub = await Task.Run(() => ActivityLog.Read(c.owner, c.repo, c.branch, token, ActivityLog.PublicPath));
+                List<ActivityEntry> mine = await Task.Run(() => ActivityLog.Read(c.owner, c.repo, c.branch, token, ActivityLog.PrivatePath(login)));
+                ShowActivityDialog(pub, mine);
+            }
+            catch (Exception ex) { Msg.Show("读取活动日志失败：" + ex.Message, "活动日志"); }
+            finally { Cursor = Cursors.Default; }
+        }
+
+        private void ShowActivityDialog(List<ActivityEntry> pub, List<ActivityEntry> mine)
+        {
+            using (Form dialog = new Form())
+            {
+                dialog.Text = "活动日志";
+                dialog.Size = new Size(900, 560);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.BackColor = Color.White;
+                ListView list = new ListView();
+                list.Dock = DockStyle.Fill;
+                list.View = View.Details;
+                list.FullRowSelect = true;
+                list.Columns.Add("时间", 190);
+                list.Columns.Add("用户", 150);
+                list.Columns.Add("动作", 130);
+                list.Columns.Add("详情", 380);
+                List<ActivityEntry> all = new List<ActivityEntry>();
+                all.AddRange(pub);
+                all.AddRange(mine);
+                all.Reverse();
+                foreach (ActivityEntry e in all)
+                {
+                    ListViewItem it = new ListViewItem(e.Time ?? "");
+                    it.SubItems.Add(e.User ?? "");
+                    it.SubItems.Add(e.Action ?? "");
+                    it.SubItems.Add(e.Detail ?? "");
+                    list.Items.Add(it);
+                }
+                Panel bottom = new Panel();
+                bottom.Dock = DockStyle.Bottom;
+                bottom.Height = 48;
+                Button close = new Button();
+                close.Text = "关闭";
+                close.FlatStyle = FlatStyle.Flat;
+                close.SetBounds(12, 10, 100, 30);
+                close.Click += delegate { dialog.Close(); };
+                bottom.Controls.Add(close);
+                Label note = new Label();
+                note.Text = "公开日志 " + pub.Count + " 条 · 我的日志 " + mine.Count + " 条";
+                note.SetBounds(130, 14, 600, 22);
+                note.ForeColor = Theme.TextMuted;
+                bottom.Controls.Add(note);
+                dialog.Controls.Add(list);
+                dialog.Controls.Add(bottom);
+                Lang.Apply(dialog);
+                dialog.ShowDialog(this);
+            }
+        }
+
+        private async Task LogActivityAsync(string action, string detail, bool toPublic = true)
+        {
+            if (string.IsNullOrEmpty(sessionToken) || string.IsNullOrEmpty(sessionLogin)) return;
+            SyncConfig c = GitHubSync.LoadConfig(appDir);
+            string login = sessionLogin, token = sessionToken;
+            try { await Task.Run(() => ActivityLog.Append(c.owner, c.repo, c.branch, token, login, action, detail, toPublic)); }
+            catch (Exception ex) { Log((Lang.En ? "Activity log failed: " : "活动日志写入失败：") + ex.Message); }
         }
 
         private void Log(string text)
