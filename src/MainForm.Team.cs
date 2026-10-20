@@ -209,10 +209,12 @@ namespace SRLogbook
             if (teamFlow == null) return;
             if (teamLoading) return;
             SyncConfig cfg = GitHubSync.LoadConfig(appDir);
-            string token = SecretStore.Load(GitHubSync.TokenTarget);
-            if (string.IsNullOrEmpty(cfg.owner) || string.IsNullOrEmpty(token))
+            string token = sessionToken;
+            if (string.IsNullOrEmpty(token))
             {
-                teamStatus.Text = "请先在“团队同步”页配置仓库和访问密钥。";
+                teamFlow.SuspendLayout(); teamFlow.Controls.Clear(); teamFlow.ResumeLayout();
+                lblPersonal.Text = "（未登录）";
+                teamStatus.Text = "请先在左下角登录 GitHub 账号。";
                 return;
             }
             teamStatus.Text = "正在读取团队成员…";
@@ -330,8 +332,8 @@ namespace SRLogbook
         {
             if (syncBusy || teamLoading) return;
             SyncConfig cfg = GitHubSync.LoadConfig(appDir);
-            string token = SecretStore.Load(GitHubSync.TokenTarget);
-            if (string.IsNullOrEmpty(cfg.owner) || string.IsNullOrEmpty(token)) { Msg.Show("请先在“团队同步”页配置仓库和访问密钥。", "团队研究"); return; }
+            string token = sessionToken;
+            if (string.IsNullOrEmpty(token)) { Msg.Show("请先在左下角登录 GitHub 账号。", "团队研究"); return; }
             syncBusy = true; Cursor = Cursors.WaitCursor;
             try
             {
