@@ -407,6 +407,16 @@ namespace SRLogbook
             string login = name.Replace("（我）", "");
             view.Click += delegate { ShowMemberResearch(login); };
             card.Controls.Add(view);
+            if (me)
+            {
+                int labelWidth = Math.Max(Ui.S(160), card.Width - Ui.S(150) - Ui.S(160) - Ui.S(24));
+                n.Width = labelWidth; d.Width = labelWidth;
+                Button remove = TeamBtn(Lang.En ? "Remove My References" : "撤除参考资料");
+                remove.AutoSize = false;
+                remove.SetBounds(card.Width - Ui.S(150) - Ui.S(160), Ui.S(16), Ui.S(150), Ui.S(32));
+                remove.Click += delegate { RemoveMyUploadedRefs(); };
+                card.Controls.Add(remove);
+            }
             teamFlow.Controls.Add(card);
         }
     }
