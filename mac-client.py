@@ -466,27 +466,35 @@ class Client:
         last=acts[-1].get('time') if acts else '-'
         return {0:'team:'+members, 1:'posts:%d'%unread, 4:'act:%d:%s'%(len(acts),last)}
     def update_news(self):
-        """栏目未读红点：有新内容在标签后加一个红点，进入该栏目即清除。"""
+        """栏目未读红点：后台线程取状态（不禁用界面），完成后回到主线程更新标签。"""
         if not self.session_token or not getattr(self,'tab_base',None): return
-        try: sig=self.news_state()
-        except Exception: return
+        if getattr(self,'news_busy',False): return
+        self.news_busy=True
+        def job():
+            try: sig=self.news_state()
+            except Exception: sig=None
+            try: self.root.after(0,lambda: self.apply_news(sig))
+            except Exception: self.news_busy=False
+        threading.Thread(target=job,daemon=True).start()
+    def apply_news(self,sig):
+        self.news_busy=False
+        if not sig: return
+        self.news_sig=sig
         current=self.book.index(self.book.select())
         for idx,value in sig.items():
             seen=self.news_seen.get(str(idx))
             if seen is None:
                 self.news_seen[str(idx)]=value; continue
             badge=(seen!=value and idx!=current)
-            try: self.book.tab(idx,text=self.tab_base[idx]+('  ●' if badge else ''))
+            try: self.book.tab(idx,text=(('🔴  ' if badge else '')+self.tab_base[idx]))
             except Exception: pass
         self.config['news']=self.news_seen; atomic(self.configfile,self.config)
     def mark_news_seen(self,idx):
         if getattr(self,'tab_base',None):
             try: self.book.tab(idx,text=self.tab_base[idx])
             except Exception: pass
-        if not self.session_token: return
-        try: sig=self.news_state()
-        except Exception: return
-        if str(idx) in sig and self.news_seen.get(str(idx))!=sig[str(idx)]:
+        sig=getattr(self,'news_sig',None)
+        if sig and str(idx) in sig and self.news_seen.get(str(idx))!=sig[str(idx)]:
             self.news_seen[str(idx)]=sig[str(idx)]; self.config['news']=self.news_seen; atomic(self.configfile,self.config)
     def _news_tick(self):
         try: self.update_news()
