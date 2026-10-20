@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -78,7 +78,7 @@ namespace SRLogbook
             txtSBranch.SetBounds(724, 118, 110, 30);
             card.Controls.Add(txtSBranch);
 
-            AddSLabel(card, "访问密钥（仓库所有者可用 fine-grained PAT；个人仓库协作者需 classic PAT）", 24, 160);
+            AddSLabel(card, "访问密钥（每个成员使用自己的令牌）", 24, 160);
             txtSToken = new TextBox();
             txtSToken.Font = Theme.F(9.5f);
             txtSToken.UseSystemPasswordChar = true;
@@ -86,6 +86,14 @@ namespace SRLogbook
             card.Controls.Add(txtSToken);
             Button saveConfig = SButton("验证并保存配置", 654, 182, 180);
             saveConfig.Click += delegate { ValidateAndSaveSyncConfig(); };
+
+            Label tokenHint = new Label();
+            tokenHint.Text = "外部协作者请用 classic PAT 并勾选 repo；fine-grained 令牌无法访问他人账号的私有仓库。";
+            tokenHint.Font = Theme.F(8.2f);
+            tokenHint.ForeColor = Theme.Warm;
+            tokenHint.BackColor = Color.White;
+            tokenHint.SetBounds(24, 214, 800, 18);
+            card.Controls.Add(tokenHint);
 
             Label sc = new Label();
             sc.Text = "同步内容：";
@@ -242,13 +250,23 @@ namespace SRLogbook
             branch = txtSBranch.Text.Trim();
             if (branch.Length == 0) branch = "main";
             token = txtSToken.Text.Trim();
-            if (token == "********" || token.Length == 0) token = SecretStore.Load(GitHubSync.TokenTarget);
+            if (token == "********") token = "";
+            token = CleanToken(token);
+            if (token.Length == 0) token = CleanToken(SecretStore.Load(GitHubSync.TokenTarget));
             if (string.IsNullOrEmpty(token))
             {
                 Msg.Show("请填写你自己的 GitHub 访问密钥。", "团队同步");
                 return false;
             }
             return true;
+        }
+
+        private static string CleanToken(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "";
+            StringBuilder sb = new StringBuilder(raw.Length);
+            foreach (char c in raw) if (!char.IsWhiteSpace(c)) sb.Append(c);
+            return sb.ToString();
         }
 
         private void SaveSyncConfig()
@@ -386,9 +404,81 @@ namespace SRLogbook
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             syncBusy = true; syncCard.Enabled = false;
-            try { await Task.Run(() => GitHubSync.Test(owner, repo, token)); SaveSyncConfig(); }
-            catch (Exception ex) { Log(ex.Message); lblSStatus.Text = "Validation failed; previous saved token was preserved."; }
-            finally { syncBusy = false; syncCard.Enabled = true; Lang.Apply(this); }
+            lblSStatus.Text = Lang.En ? "Checking your GitHub token…" : "正在验证你的 GitHub 令牌…";
+            try
+            {
+                // Stage 1 is identity only. A valid token is stored even when the repository is not reachable yet,
+                // so a wrong repository setting no longer makes a member look like "not signed in".
+                string login;
+                try { login = await Task.Run(() => GitHubSync.GetUserLogin(token)); }
+                catch (Exception ex) { ReportSyncFailure(ex, false, "", owner, repo); return; }
+
+                try { SaveSyncConfig(); }
+                catch (Exception ex)
+                {
+                    Log((Lang.En ? "Token verified but settings could not be saved: " : "令牌有效，但配置无法保存：") + ex.Message);
+                    lblSStatus.Text = Lang.En ? "Token is valid, but the configuration could not be saved." : "令牌有效，但配置无法保存。";
+                    MessageBox.Show((Lang.En ? "Signed in as " : "已登录账号 ") + login
+                        + (Lang.En ? ", but the settings folder is not writable. Move the program to a writable folder and try again." : "，但程序目录不可写。请把软件放到可写文件夹后重试。"),
+                        Lang.En ? "Team Sync" : "团队同步", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                Log((Lang.En ? "Signed in: " : "已登录：") + login);
+                lblSStatus.Text = (Lang.En ? "Signed in as " : "已登录 ") + login + (Lang.En ? "; checking repository access…" : "；正在检查仓库权限…");
+
+                // Stage 2 is repository access, which is a separate problem from the account itself.
+                string full;
+                try { full = await Task.Run(() => GitHubSync.Test(owner, repo, token)); }
+                catch (Exception ex) { ReportSyncFailure(ex, true, login, owner, repo); return; }
+
+                Log((Lang.En ? "Repository reachable: " : "仓库可访问：") + full);
+                lblSStatus.Text = (Lang.En ? "Signed in as " : "已登录 ") + login + (Lang.En ? "; configuration saved." : "；配置已保存，密钥存放在 Windows 凭据管理器。");
+                Msg.Show((Lang.En ? "Signed in to GitHub as " : "已登录 GitHub 账号 ") + login
+                    + (Lang.En ? " and this token can reach " : "，该令牌可以访问 ") + full + "。", "团队同步");
+            }
+            finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
+        }
+
+        private void ReportSyncFailure(Exception ex, bool repoStage, string login, string owner, string repo)
+        {
+            GitHubApiException api = ex as GitHubApiException;
+            string prefix = repoStage && !string.IsNullOrEmpty(login)
+                ? (Lang.En ? "Signed in as " + login + ", but the repository is not reachable.\n\n" : "账号 " + login + " 已登录，但访问仓库失败。\n\n")
+                : "";
+            string msg;
+            if (api == null)
+            {
+                msg = prefix + (Lang.En ? "Cannot reach GitHub. Check the network or proxy.\n\n" : "无法连接 GitHub，请检查网络或代理。\n\n") + ex.Message;
+            }
+            else if (api.StatusCode == 401)
+            {
+                msg = prefix + (Lang.En
+                    ? "GitHub rejected the token (HTTP 401): it is invalid, expired or revoked.\n\nCreate a new token: Settings → Developer settings → Personal access tokens → Tokens (classic), tick the repo scope, then paste it here."
+                    : "GitHub 拒绝了该令牌（HTTP 401）：令牌无效、已过期或被撤销。\n\n请到 GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) 重新生成，勾选 repo 权限，再粘贴到这里。");
+            }
+            else if (api.StatusCode == 403)
+            {
+                bool rate = api.Message.IndexOf("rate limit", StringComparison.OrdinalIgnoreCase) >= 0;
+                msg = prefix + (rate
+                    ? (Lang.En ? "GitHub API rate limit reached (HTTP 403). Wait about an hour, then try again." : "GitHub API 调用次数已达上限（HTTP 403），请约一小时后重试。")
+                    : (Lang.En ? "GitHub refused access (HTTP 403): the token most likely lacks write access to this repository.\n\nA classic PAT needs the repo scope; a fine-grained PAT needs Contents: Read and write."
+                               : "GitHub 拒绝访问（HTTP 403）：令牌很可能没有该仓库的写入权限。\n\nclassic PAT 请勾选 repo；fine-grained 令牌请授予 Contents 读写。"));
+            }
+            else if (api.StatusCode == 404)
+            {
+                msg = prefix + (Lang.En
+                    ? "GitHub returned 404 for " + owner + "/" + repo + ".\n\nA private repository answers 404 whenever the token cannot see it. Check in order:\n1. Is the collaborator invitation accepted? Open the repository in a browser while signed in as yourself.\n2. Is the token a fine-grained token? GitHub does not support fine-grained tokens for a repository owned by another account, so external collaborators must use a classic PAT with the repo scope.\n3. Does the token still have the repo scope, and is it unexpired?\n4. Is the repository exactly " + owner + "/" + repo + "? The program repository research-progress-recorder is public and is not the data repository."
+                    : "GitHub 返回 404，找不到 " + owner + "/" + repo + "。\n\n私有仓库只要令牌看不到它就一律返回 404。请依次检查：\n1. 协作者邀请是否已接受？用本人账号在浏览器里能打开该仓库才算生效。\n2. 是不是用了 fine-grained 令牌？GitHub 不支持用 fine-grained 令牌访问他人账号的私有仓库，外部协作者必须用 classic PAT 并勾选 repo。\n3. 令牌是否仍有 repo 权限、是否已过期？\n4. 仓库名是否完全等于 " + owner + "/" + repo + "？公开的程序仓库是 research-progress-recorder，不是数据仓库。");
+            }
+            else
+            {
+                msg = prefix + (Lang.En ? "GitHub error HTTP " : "GitHub 返回 HTTP ") + api.StatusCode + "。\n\n" + ex.Message;
+            }
+            Log((Lang.En ? "Sign-in problem: " : "登录问题：") + msg.Replace("\n", " "));
+            lblSStatus.Text = repoStage
+                ? (Lang.En ? "Account signed in, but the repository is not reachable." : "账号已登录，但无法访问仓库。")
+                : (Lang.En ? "Sign-in failed; see the message and log below." : "登录失败，详见提示框与下方日志。");
+            MessageBox.Show(msg, Lang.En ? "Team Sync" : "团队同步", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         private string SerializeSyncStore() { return SyncData.Payload(store, null, ScopeString()); }
