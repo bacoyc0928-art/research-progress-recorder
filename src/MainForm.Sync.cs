@@ -28,6 +28,7 @@ namespace SRLogbook
         private Button btnDefault;
         private Button btnUpRefs;
         private Button btnUpProgress;
+        private Button btnRemoveRefs;
 
         private Panel BuildSyncPage()
         {
@@ -115,6 +116,8 @@ namespace SRLogbook
             btnUpRefs.Click += delegate { UploadRefsAction(); };
             btnUpProgress = SButton("上传本地进度", 214, 294, 180);
             btnUpProgress.Click += delegate { UploadProgressFolder(); };
+            btnRemoveRefs = SButton("撤除我上传的参考资料", 414, 294, 230);
+            btnRemoveRefs.Click += delegate { RemoveMyUploadedRefs(); };
 
             txtSToken.TextChanged += delegate { UpdateSyncActionState(); };
             UpdateSyncActionState();
@@ -666,6 +669,7 @@ namespace SRLogbook
             if (btnDefault != null) btnDefault.Enabled = has;
             if (btnUpRefs != null) btnUpRefs.Enabled = has;
             if (btnUpProgress != null) btnUpProgress.Enabled = has;
+            if (btnRemoveRefs != null) btnRemoveRefs.Enabled = has;
         }
 
         private async void PullOthersContent()
@@ -784,6 +788,122 @@ namespace SRLogbook
             }
             catch (Exception ex) { Log("参考资料上传失败（可能已上传部分文件）：" + ex.Message); lblSStatus.Text = "上传失败，详见日志。"; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
+        }
+
+        private async void RemoveMyUploadedRefs()
+        {
+            if (syncBusy || teamLoading) return;
+            string owner, repo, path, branch, token;
+            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
+            syncBusy = true; syncCard.Enabled = false;
+            lblSStatus.Text = Lang.En ? "Reading your uploaded references…" : "正在读取你上传的参考资料…";
+            try
+            {
+                string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
+                string remoteDir = "team/" + login + "/references";
+                Dictionary<string, string> remote = await Task.Run(() => GitHubSync.ListFileShas(owner, repo, remoteDir, branch, token));
+                if (remote.Count == 0)
+                {
+                    lblSStatus.Text = Lang.En ? "You have not uploaded any references." : "团队区里没有你上传的参考资料。";
+                    Msg.Show(Lang.En ? "There are no uploaded references under your account." : "团队区里没有你上传的参考资料。", "撤除参考资料");
+                    return;
+                }
+                List<string> names = new List<string>(remote.Keys);
+                names.Sort(StringComparer.OrdinalIgnoreCase);
+                List<string> selected = ChooseFilesToRemove(names);
+                if (selected.Count == 0) { lblSStatus.Text = Lang.En ? "Cancelled." : "已取消。"; return; }
+                string ask = Lang.En
+                    ? "Permanently remove " + selected.Count + " uploaded reference file(s) from the team area? Other members will no longer be able to download them."
+                    : "将从团队区永久删除你上传的 " + selected.Count + " 个参考资料（其他人将无法再下载）。继续？";
+                if (Msg.Show(ask, "撤除参考资料", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                { lblSStatus.Text = Lang.En ? "Cancelled." : "已取消。"; return; }
+                string personal = LoadPersonalFolder();
+                int removed = 0;
+                foreach (string name in selected)
+                {
+                    string remotePath = remoteDir + "/" + name;
+                    string sha = remote[name];
+                    await Task.Run(() => GitHubSync.DeleteFile(owner, repo, remotePath, branch, token, sha));
+                    if (Directory.Exists(personal))
+                    {
+                        string local = FileTransfers.Child(FileTransfers.Child(personal, "references"), name);
+                        if (File.Exists(local))
+                        {
+                            try { File.Delete(local); } catch { }
+                            store.Refs.RemoveAll(x => x != null && string.Equals(x.Path, local, StringComparison.OrdinalIgnoreCase));
+                        }
+                    }
+                    removed++;
+                    Log((Lang.En ? "Removed: " : "已撤除：") + remotePath);
+                }
+                await UpdateReferencesManifest(owner, repo, branch, token, login, selected);
+                Persist(); RebuildRefs();
+                lblSStatus.Text = (Lang.En ? "Removed " : "已撤除 ") + removed + (Lang.En ? " uploaded reference(s)." : " 个参考资料。");
+                Msg.Show(lblSStatus.Text, "撤除参考资料");
+            }
+            catch (Exception ex) { Log((Lang.En ? "Remove failed: " : "撤除参考资料失败：") + ex.Message); lblSStatus.Text = Lang.En ? "Remove failed; see the log." : "撤除失败，详见日志。"; }
+            finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
+        }
+
+        private async Task UpdateReferencesManifest(string owner, string repo, string branch, string token, string login, List<string> removedNames)
+        {
+            HashSet<string> gone = new HashSet<string>(removedNames, StringComparer.OrdinalIgnoreCase);
+            string metaPath = "team/" + login + "/references.json";
+            for (int attempt = 0; ; attempt++)
+            {
+                string sha = null;
+                string old = await Task.Run(() => GitHubSync.GetFile(owner, repo, metaPath, branch, token, out sha));
+                if (string.IsNullOrEmpty(old)) return;
+                List<RefItem> merged = SyncData.Serializer().Deserialize<List<RefItem>>(old);
+                if (merged == null) return;
+                merged.RemoveAll(x => x != null &&
+                    ((!string.IsNullOrEmpty(x.RelPath) && gone.Contains(x.RelPath)) ||
+                     (!string.IsNullOrEmpty(x.Path) && gone.Contains(Path.GetFileName(x.Path)))));
+                string json = SyncData.Serializer().Serialize(merged);
+                try { await Task.Run(() => GitHubSync.PutFile(owner, repo, metaPath, branch, token, json, sha)); return; }
+                catch (GitHubApiException ex) { if (attempt >= 2 || (ex.StatusCode != 409 && ex.StatusCode != 422)) throw; }
+            }
+        }
+
+        private List<string> ChooseFilesToRemove(List<string> names)
+        {
+            List<string> picked = new List<string>();
+            using (Form dialog = new Form())
+            {
+                dialog.Text = "撤除我上传的参考资料";
+                dialog.Size = new Size(620, 460);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.BackColor = Color.White;
+                CheckedListBox list = new CheckedListBox();
+                list.Dock = DockStyle.Fill;
+                list.CheckOnClick = true;
+                list.IntegralHeight = false;
+                list.Font = Theme.F(9f);
+                foreach (string n in names) list.Items.Add(n, true);
+                Panel bottom = new Panel();
+                bottom.Dock = DockStyle.Bottom;
+                bottom.Height = 48;
+                Button ok = new Button();
+                ok.Text = "撤除所选";
+                ok.FlatStyle = FlatStyle.Flat;
+                ok.SetBounds(330, 10, 120, 30);
+                ok.Click += delegate { dialog.DialogResult = DialogResult.OK; dialog.Close(); };
+                Button cancel = new Button();
+                cancel.Text = "取消";
+                cancel.FlatStyle = FlatStyle.Flat;
+                cancel.SetBounds(460, 10, 100, 30);
+                cancel.Click += delegate { dialog.Close(); };
+                bottom.Controls.Add(ok);
+                bottom.Controls.Add(cancel);
+                dialog.Controls.Add(list);
+                dialog.Controls.Add(bottom);
+                dialog.AcceptButton = ok;
+                dialog.CancelButton = cancel;
+                Lang.Apply(dialog);
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    foreach (object o in list.CheckedItems) picked.Add(Convert.ToString(o));
+            }
+            return picked;
         }
 
         private void Log(string text)
