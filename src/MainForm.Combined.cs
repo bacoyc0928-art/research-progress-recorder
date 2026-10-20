@@ -138,6 +138,7 @@ namespace SRLogbook
 
         private void ChooseProgressFolder()
         {
+            if (!RequireLogin("本地进度")) return;
             using (FolderBrowserDialog d = new FolderBrowserDialog())
             {
                 d.Description = "选择本地进度文件夹（所有内容都存放在这里）";
@@ -152,6 +153,7 @@ namespace SRLogbook
 
         private void CreateProgressDoc()
         {
+            if (!RequireLogin("本地进度")) return;
             string folder = LoadProgressFolder();
             if (!Directory.Exists(folder)) { ChooseProgressFolder(); folder = LoadProgressFolder(); }
             if (!Directory.Exists(folder)) return;
