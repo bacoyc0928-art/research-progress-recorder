@@ -112,7 +112,7 @@ namespace SRLogbook
             bDoc.BackColor = Color.White;
             bDoc.ForeColor = Theme.TextMain;
             bDoc.Cursor = Cursors.Hand;
-            bDoc.SetBounds(Ui.S(24), Ui.S(150), Ui.S(140), Ui.S(36));
+            bDoc.SetBounds(Ui.S(24), Ui.S(150), Ui.S(220), Ui.S(40));
             bDoc.Click += delegate { CreateProgressDoc(); };
             card.Controls.Add(bDoc);
 
@@ -125,7 +125,7 @@ namespace SRLogbook
             bOpen.BackColor = Color.White;
             bOpen.ForeColor = Theme.TextMain;
             bOpen.Cursor = Cursors.Hand;
-            bOpen.SetBounds(Ui.S(176), Ui.S(150), Ui.S(180), Ui.S(36));
+            bOpen.SetBounds(Ui.S(258), Ui.S(150), Ui.S(260), Ui.S(40));
             bOpen.Click += delegate { OpenProgressFolder(); };
             card.Controls.Add(bOpen);
 
