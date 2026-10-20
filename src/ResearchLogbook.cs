@@ -1233,56 +1233,151 @@ namespace SRLogbook
             return p3;
         }
 
+        private TextBox helpEditor;
+        private bool helpDirty;
+
         private Panel BuildHelpPage()
         {
             Panel page = new Panel();
-            TextBox rtb = new TextBox();
-            rtb.Dock = DockStyle.Fill;
-            rtb.BorderStyle = BorderStyle.None;
-            rtb.BackColor = Color.White;
-            rtb.Font = Theme.F(10f);
-            rtb.Multiline = true;
-            rtb.ReadOnly = true;
-            rtb.ScrollBars = ScrollBars.Vertical;
-            rtb.WordWrap = true;
-            rtb.ForeColor = Theme.TextMain;
-            rtb.Name = "helpText";
-            rtb.Text = "使用说明\r\n\r\n" +
-                "一、研究日志\r\n" +
-                "· 左侧列出全部记录，点击即可切换；右侧编辑标题、日期、类别、状态、进度与正文。\r\n" +
-                "· 输入内容后会自动保存，也可以点击“保存”。\r\n" +
-                "· “＋ 新建记录”创建一条新记录；右上角的搜索框可按标题或内容筛选。\r\n" +
-                "· 进度条用于标记每条记录完成到哪一步，便于回顾整体进展。\r\n\r\n" +
-                "二、参考文献与资料\r\n" +
-                "· 每张卡片对应一个实际存在的文件或文件夹，点击“打开”或双击卡片，即用系统默认程序打开。\r\n" +
-                "· “定位”会在资源管理器中选中该文件；“移除”只是从列表中删除，不会删除原文件。\r\n" +
-                "· 通过“添加文件 / 添加文件夹”可以把新的书籍、数据或文献目录加入资料库。\r\n" +
-                "· 初始资料来自你的工作文件夹中的书籍、笔记与文档。\r\n\r\n" +
-                "三、项目概览\r\n" +
-                "· 显示记录总数、平均进度、资料条目数、类别分布与最近更新，便于快速了解项目状态。\r\n\r\n" +
-                "四、工作文件夹\r\n" +
-                "· 首次启动时选择工作文件夹，程序从中读取书籍、文档与资料。\r\n" +
-                "· 记录随团队同步保存到共享仓库。\r\n\r\n" +
-                "五、提示\r\n" +
-                "· 若卡片指向的文件被移动，点击“打开”会提示找不到；此时请移除后重新添加。\r\n" +
-                "· 软件为绿色版，无需安装。\r\n\r\n" +
-                "六、研究类别\r\n" +
-                "· “研究类别”页可以添加、编辑、删除类别；每个类别可设置任务总数、已完成数、预计小时数，并挂接相关材料（文件、文件夹或链接）。\r\n" +
-                "· 类别进度 = 已完成任务 / 任务总数；项目概览的总体进度按所有类别汇总。\r\n" +
-                "· 修改类别名称会同步更新已有记录的类别；删除类别不会删除记录，记录会归入“未分类”。\r\n\r\n" +
-                "七、本地进度\r\n" +
-                "· “本地进度”页填写项目名称（默认 Untitled）与归属类别，点“新建文档”：程序在工作文件夹内创建“日期 + 项目名称”的 .docx，并把文件路径加入该类别的相关材料。\r\n" +
-                "· 文档清单记录所有通过本程序创建的文档，可打开、归入类别或移除记录（不会删除文件）。\r\n" +
-                "· 团队同步通过 GitHub 私有仓库进行。";
-            rtb.Text = Lang.HelpText();
-            page.Controls.Add(rtb);
+            page.BackColor = Color.White;
+
+            Panel bar = new Panel();
+            bar.Dock = DockStyle.Top;
+            bar.Height = Ui.S(50);
+            bar.BackColor = Color.White;
+
+            Button upload = HelpButton("上传到 GitHub", 12);
+            upload.Click += delegate { UploadHelp(); };
+            Button reload = HelpButton("读取云端版本", 152);
+            reload.Click += delegate { LoadHelpFromGitHub(true); };
+            Button reset = HelpButton("恢复默认", 292);
+            reset.Click += delegate { RestoreDefaultHelp(); };
+            Button history = HelpButton("改动日志", 402);
+            history.Click += delegate { ShowHelpChangelog(); };
+            bar.Controls.Add(upload);
+            bar.Controls.Add(reload);
+            bar.Controls.Add(reset);
+            bar.Controls.Add(history);
+
+            helpEditor = new TextBox();
+            helpEditor.Dock = DockStyle.Fill;
+            helpEditor.BorderStyle = BorderStyle.None;
+            helpEditor.BackColor = Color.White;
+            helpEditor.Font = Theme.F(10f);
+            helpEditor.Multiline = true;
+            helpEditor.ReadOnly = false;
+            helpEditor.ScrollBars = ScrollBars.Vertical;
+            helpEditor.WordWrap = true;
+            helpEditor.ForeColor = Theme.TextMain;
+            helpEditor.Name = "helpEditor";
+            string local = Path.Combine(appDir, "help_local.md");
+            if (File.Exists(local))
+            {
+                try { helpEditor.Text = File.ReadAllText(local, Encoding.UTF8); }
+                catch { helpEditor.Text = Lang.HelpText(); }
+            }
+            else helpEditor.Text = Lang.HelpText();
+            helpEditor.TextChanged += delegate { helpDirty = true; };
+
+            page.Controls.Add(helpEditor);
+            page.Controls.Add(bar);
             return page;
         }
+
+        private Button HelpButton(string text, int x)
+        {
+            Button b = new Button();
+            b.Text = text;
+            b.Font = Theme.F(8.8f);
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderSize = 1;
+            b.FlatAppearance.BorderColor = Theme.CardBorder;
+            b.BackColor = Color.White;
+            b.ForeColor = Theme.TextMain;
+            b.Cursor = Cursors.Hand;
+            b.SetBounds(Ui.S(x), Ui.S(10), Ui.S(130), Ui.S(30));
+            return b;
+        }
+
+        private async void UploadHelp()
+        {
+            if (string.IsNullOrEmpty(sessionToken)) { Msg.Show("请先在左下角登录 GitHub 账号。", "使用说明"); return; }
+            string text = helpEditor.Text;
+            if (string.IsNullOrWhiteSpace(text)) { Msg.Show("使用说明不能为空。", "使用说明"); return; }
+            SyncConfig c = GitHubSync.LoadConfig(appDir);
+            string token = sessionToken, login = sessionLogin;
+            try
+            {
+                string sha = null;
+                await Task.Run(() => GitHubSync.GetFile(c.owner, c.repo, "help/help.md", c.branch, token, out sha));
+                await Task.Run(() => GitHubSync.PutFile(c.owner, c.repo, "help/help.md", c.branch, token, text, sha));
+                await Task.Run(() => ActivityLog.AppendTo(c.owner, c.repo, c.branch, token, "help/changelog.json", login, "更新使用说明", text.Length + " 字符", 200));
+                File.WriteAllText(Path.Combine(appDir, "help_local.md"), text, new UTF8Encoding(false));
+                helpDirty = false;
+                await LogActivityAsync("更新使用说明", text.Length + " 字符");
+                Msg.Show("已上传；所有成员登录后都会读到这一版。", "使用说明");
+            }
+            catch (Exception ex) { Msg.Show("上传失败：" + ex.Message, "使用说明"); }
+        }
+
+        private async void LoadHelpFromGitHub(bool manual)
+        {
+            if (helpEditor == null) return;
+            if (string.IsNullOrEmpty(sessionToken))
+            {
+                if (manual) Msg.Show("请先在左下角登录 GitHub 账号。", "使用说明");
+                return;
+            }
+            SyncConfig c = GitHubSync.LoadConfig(appDir);
+            string token = sessionToken;
+            try
+            {
+                string sha = null;
+                string text = await Task.Run(() => GitHubSync.GetFile(c.owner, c.repo, "help/help.md", c.branch, token, out sha));
+                if (string.IsNullOrEmpty(text))
+                {
+                    if (manual) Msg.Show("云端还没有上传过使用说明。", "使用说明");
+                    return;
+                }
+                helpEditor.Text = text;
+                helpDirty = false;
+                if (manual) Msg.Show("已读取云端使用说明。", "使用说明");
+            }
+            catch (Exception ex) { if (manual) Msg.Show("读取失败：" + ex.Message, "使用说明"); }
+        }
+
+        private void RestoreDefaultHelp()
+        {
+            if (Msg.Show("将编辑框恢复为软件自带的使用说明（上传前不影响云端）。继续？", "使用说明", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            helpEditor.Text = Lang.HelpText();
+            helpDirty = false;
+        }
+
+        private async void ShowHelpChangelog()
+        {
+            if (string.IsNullOrEmpty(sessionToken)) { Msg.Show("请先在左下角登录 GitHub 账号。", "改动日志"); return; }
+            SyncConfig c = GitHubSync.LoadConfig(appDir);
+            string token = sessionToken;
+            try
+            {
+                List<ActivityEntry> rows = await Task.Run(() => ActivityLog.Read(c.owner, c.repo, c.branch, token, "help/changelog.json"));
+                if (rows.Count == 0) { Msg.Show("还没有改动日志。", "改动日志"); return; }
+                StringBuilder sb = new StringBuilder();
+                for (int i = rows.Count - 1; i >= 0; i--)
+                    sb.Append(rows[i].Time).Append("  ·  ").Append(rows[i].User).Append("  ·  ").Append(rows[i].Detail).AppendLine();
+                Msg.Show(sb.ToString(), "改动日志");
+            }
+            catch (Exception ex) { Msg.Show("读取改动日志失败：" + ex.Message, "改动日志"); }
+        }
+
+
 
         private void SetPage(int idx)
         {
             if (idx < 0 || idx >= pages.Length) throw new ArgumentOutOfRangeException("idx");
             if (saveTimer != null && saveTimer.Enabled) { saveTimer.Stop(); SaveCurrent(); }
+            if (idx == 4 && helpEditor != null && !helpDirty)
+                LoadHelpFromGitHub(false);
             if (idx == 3 && !Directory.Exists(LoadProgressFolder()))
             {
                 Msg.Show("请先在“本地进度”选择文件夹，否则无法进入团队同步。", "本地进度");
