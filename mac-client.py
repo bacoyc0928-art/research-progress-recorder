@@ -233,6 +233,24 @@ def repo_problem_text(error, en):
                 if en else 'GitHub 返回 404：这个令牌看不到该仓库。\n\n1. 协作者邀请是否已接受？用本人账号在浏览器能打开该仓库才算生效。\n2. fine-grained 令牌无法访问他人账号的私有仓库，外部协作者必须用 classic PAT 并勾选 repo。\n3. 仓库名是否完全等于 owner/repo？\n4. 令牌是否已过期？')
     return str(error)
 
+def append_activity(api, login, action, detail, to_public=True):
+    targets=[(f'logs/private/{login}/activity.json',500)]
+    if to_public: targets.append(('logs/public/activity.json',2000))
+    for path,limit in targets:
+        for attempt in range(3):
+            old, sha = api.get(path)
+            rows = old if isinstance(old, list) else []
+            rows.append(dict(time=now(), user=login, action=action, detail=detail))
+            if len(rows) > limit: rows = rows[-limit:]
+            try:
+                api.put(path, rows, sha); break
+            except urllib.error.HTTPError as error:
+                if attempt == 2 or error.code not in (409,422): raise
+
+def read_activity(api, path):
+    data, sha = api.get(path)
+    return data if isinstance(data, list) else []
+
 class Client:
     def __init__(self, root, home=None, smoke=False):
         import tkinter as tk
@@ -246,8 +264,9 @@ class Client:
         self.config=json.loads(self.configfile.read_text(encoding='utf-8-sig')) if self.configfile.exists() else {}
         # Keep legacy research JSON intact. 0.1.0 file channels never rewrite it.
         if self.datafile.exists(): normalize(json.loads(self.datafile.read_text(encoding='utf-8-sig')))
-        self.en=self.config.get('language','zh')=='en'; self.busy=False; self.events=queue.Queue(); self.keychain=None
-        self.smoke=smoke; self.disabled=[]; self.login=self.config.get('login','')
+        self.en=self.config.get('language','zh')=='en'; self.busy=False; self.events=queue.Queue()
+        self.smoke=smoke; self.disabled=[]; self.login=''
+        self.session_token=''; self.session_login=''
         progress=Path(self.config.get('progress') or self.files_root/'PersonalWorkspaceSRRec')
         if not progress.is_dir(): progress=self.files_root/'PersonalWorkspaceSRRec'
         progress.mkdir(parents=True,exist_ok=True); self.config['progress']=str(progress)
@@ -301,8 +320,90 @@ class Client:
         self.tabs=[]
         for zh,en in [('团队研究','Team Research'),('参考文献与资料','References'),('本地进度','Local Progress'),('团队同步','Team Sync'),('使用说明','Help')]:
             panel=ttk.Frame(self.book,padding=16); self.book.add(panel,text=self.tr(zh,en)); self.tabs.append(panel)
+        self.build_login_bar()
         self.status=self.tk.StringVar(value=self.tr('就绪','Ready')); ttk.Label(self.root,textvariable=self.status,padding=8).pack(fill='x')
         self.build_team(); self.build_references(); self.build_progress(); self.build_sync(); self.build_help()
+        self.update_login_ui()
+    def build_login_bar(self):
+        bar=self.ttk.Frame(self.root,padding=(12,6)); bar.pack(fill='x')
+        self.avatar=self.tk.Canvas(bar,width=40,height=40,highlightthickness=0)
+        try: self.avatar.configure(bg=self.root.cget('bg'))
+        except Exception: pass
+        self.avatar.pack(side='left')
+        info=self.ttk.Frame(bar); info.pack(side='left',padx=10,anchor='w')
+        self.login_name=self.ttk.Label(info,text='',font=('',11,'bold')); self.login_name.pack(anchor='w')
+        self.login_hint=self.ttk.Label(info,text='',foreground='#5e697a'); self.login_hint.pack(anchor='w')
+        self.login_token=self.tk.StringVar()
+        self.login_entry=self.ttk.Entry(bar,textvariable=self.login_token,show='●',width=46)
+        self.login_entry.pack(side='left',padx=8)
+        self.login_btn=self.ttk.Button(bar,text=self.tr('登录','Sign In'),command=self.sign_in)
+        self.login_btn.pack(side='left',padx=4)
+        self.logout_btn=self.ttk.Button(bar,text=self.tr('退出','Sign Out'),command=self.sign_out)
+        self.logout_btn.pack(side='left',padx=4)
+    def draw_avatar(self):
+        if not hasattr(self,'avatar'): return
+        c=self.avatar; c.delete('all')
+        initial=(self.session_login[:1].upper() if self.session_login else '?')
+        color='#2d6cdf' if self.session_login else '#404e68'
+        c.create_oval(2,2,38,38,fill=color,outline='')
+        c.create_text(20,20,text=initial,fill='white',font=('',13,'bold'))
+    def update_login_ui(self):
+        if not hasattr(self,'login_name'): return
+        signed=bool(self.session_login)
+        self.login_name.configure(text=self.session_login if signed else self.tr('未登录','Not signed in'))
+        self.login_hint.configure(text=self.tr('已登录 GitHub','Signed in with GitHub') if signed else self.tr('输入密钥后登录','Enter token, then Sign In'))
+        if signed:
+            self.login_entry.pack_forget(); self.login_btn.pack_forget(); self.logout_btn.pack(side='left',padx=4)
+        else:
+            self.logout_btn.pack_forget(); self.login_entry.pack(side='left',padx=8); self.login_btn.pack(side='left',padx=4)
+        self.draw_avatar()
+    def sign_in(self):
+        token=self.login_token.get().strip()
+        if not token:
+            self.mb.showinfo('SRPRecorder2027',self.tr('请粘贴 GitHub 访问密钥。','Paste your GitHub token first.'),parent=self.root); return
+        def work():
+            try:
+                api=GitHub({'repo':DEFAULT_REPO,'branch':'main'},token)
+                login=api.login(); api.login_cached=login
+                try: append_activity(api,login,'登录','身份验证成功')
+                except Exception: pass
+                return login,None
+            except Exception as error:
+                return None,str(error)
+        def done(result):
+            login,error=result
+            if error:
+                self.mb.showerror('SRPRecorder2027',self.tr('登录失败：','Sign-in failed: ')+error,parent=self.root)
+                return
+            self.session_login=login; self.session_token=token; self.login=login
+            self.login_token.set(''); self.update_login_ui(); self.team()
+            self.status.set(self.tr('已登录 ','Signed in as ')+login)
+        self.run(work,done)
+    def sign_out(self):
+        self.session_login=''; self.session_token=''; self.login=''
+        self.update_login_ui()
+        try: self.members_tree.delete(*self.members_tree.get_children())
+        except Exception: pass
+        self.status.set(self.tr('已退出登录','Signed out'))
+    def log_activity(self,api,login,action,detail):
+        try: append_activity(api,login,action,detail)
+        except Exception as error: self.status.set(self.tr('活动日志写入失败：','Activity log failed: ')+str(error))
+    def view_activity(self):
+        api,config=self.api()
+        def work():
+            login=api.login(); api.login_cached=login
+            return login,read_activity(api,'logs/public/activity.json'),read_activity(api,f'logs/private/{login}/activity.json')
+        def done(result):
+            login,pub,mine=result
+            self.remember(api,config)
+            win=self.tk.Toplevel(self.root); win.title(self.tr('活动日志','Activity Log')); win.geometry('900x520'); win.transient(self.root); win.grab_set()
+            self.ttk.Label(win,text=self.tr('公开日志 ','Public log ')+str(len(pub))+self.tr(' 条 · 我的日志 ',' entries · my log ')+str(len(mine))+self.tr(' 条',' entries'),padding=8).pack(anchor='w')
+            tree=self.table(win,[self.tr('时间','Time'),self.tr('用户','User'),self.tr('动作','Action'),self.tr('详情','Detail')])
+            rows=list(reversed(pub))+list(reversed(mine))
+            for row in rows:
+                tree.insert('','end',values=(row.get('time',''),row.get('user',''),row.get('action',''),row.get('detail','')))
+            self.ttk.Button(win,text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
+        self.run(work,done)
     def choose_workspace(self):
         value=self.fd.askdirectory(initialdir=self.config.get('workspace',str(self.files_root)))
         if value: no_links(value); self.config['workspace']=value; atomic(self.configfile,self.config)
@@ -318,12 +419,11 @@ class Client:
         scrollbar.pack(side='right',fill='y'); tree.pack(fill='both',expand=True)
         return tree
     def api(self):
-        config={k:v.get().strip() for k,v in self.sync_fields.items()}
-        if self.keychain is None: self.keychain=Keychain()
-        token=self.token.get().strip() or self.keychain.load()
-        return GitHub(config,token),config
+        if not self.session_token:
+            raise ValueError(self.tr('请先在窗口底部登录 GitHub 账号。','Sign in at the bottom of the window first.'))
+        config={'repo':DEFAULT_REPO,'branch':'main'}
+        return GitHub(config,self.session_token),config
     def remember(self,api,config):
-        self.keychain.save(api.token); self.token.set(''); self.config.update(config)
         self.login=api.login_cached if hasattr(api,'login_cached') else self.login
         if self.login: self.config['login']=self.login
         atomic(self.configfile,self.config); self.personal_label.configure(text=self.personal_display())
@@ -430,12 +530,9 @@ class Client:
             target=docx(self.progress.get(),project,'',title,direct=True)
             self.open_path(target)
     def build_sync(self):
-        p=self.tabs[3]; self.sync_fields={}
-        for key,default in [('repo',DEFAULT_REPO),('branch','main')]:
-            self.ttk.Label(p,text=key).pack(anchor='w'); value=self.tk.StringVar(value=self.config.get(key,default)); self.sync_fields[key]=value; self.ttk.Entry(p,textvariable=value).pack(fill='x')
-        self.ttk.Label(p,text=self.tr('个人 GitHub 令牌（保存在 macOS 钥匙串；留空使用已保存令牌）','Your GitHub token (stored in Keychain; leave blank to use the saved token)')).pack(anchor='w',pady=(12,0))
-        self.token=self.tk.StringVar(); self.ttk.Entry(p,textvariable=self.token,show='●').pack(fill='x')
-        bar=self.ttk.Frame(p); bar.pack(fill='x'); self.button(bar,'验证并保存配置','Validate and Save',self.save_sync)
+        p=self.tabs[3]
+        self.ttk.Label(p,text=self.tr('已绑定仓库：','Bound repository: ')+DEFAULT_REPO+' · main',font=('',11,'bold')).pack(anchor='w')
+        self.ttk.Label(p,text=self.tr('登录后在下方直接操作，无需填写任何配置。','Sign in first; no configuration needed below.'),foreground='#c47a2a').pack(anchor='w',pady=(4,10))
         downloads=self.ttk.Frame(p); downloads.pack(fill='x',pady=(8,0))
         self.button(downloads,'从 GitHub 下载他人内容','Download Team Files',self.pull_others)
         self.button(downloads,'从 GitHub 下载默认资料库','Download Default Library',self.pull_default)
@@ -443,6 +540,7 @@ class Client:
         self.button(uploads,'上传参考资料','Upload References',self.upload_references); self.button(uploads,'上传本地进度','Upload Local Progress',self.upload_progress)
         removals=self.ttk.Frame(p); removals.pack(fill='x')
         self.button(removals,'撤除我上传的参考资料','Remove My Uploaded References',self.remove_my_references)
+        self.button(removals,'查看活动日志','View Activity Log',self.view_activity)
         self.ttk.Label(p,text=self.tr('每个上传文件最大 50 MiB；不自动删除远端旧文件。下载成功后替换并保留旧副本；部分上传失败时请重试。','Maximum 50 MiB per uploaded file. Remote old files are not deleted. Downloads replace only after success and keep backups. Retry after partial upload failures.'),wraplength=980).pack(anchor='w',pady=16)
         self.ttk.Label(p,text=self.tr('个人仓库协作者使用 classic PAT 的 repo 权限。不要共享令牌。','Personal-repository collaborators use a classic PAT with repo scope. Never share tokens.'),wraplength=980).pack(anchor='w')
     def save_sync(self):
@@ -475,12 +573,16 @@ class Client:
             files=self.channels(api); me=files.identity(); api.login_cached=me; count=0
             for member in files.members():
                 if member.lower()!=me.lower() and files.download_member(member,self.team_destination(me,member)): count+=1
+            if count: self.log_activity(api,me,'下载他人内容',str(count)+' 位成员')
             return count
         self.run(work,lambda count:self.finish(api,config,self.tr('成员内容下载完成：','Team downloads completed: ')+str(count)))
     def pull_default(self):
         if not self.mb.askyesno('SRPRecorder2027',self.tr('下载成功后替换默认库，保留旧副本。继续？','Replace the default library after a successful download, keeping a backup?'),parent=self.root): return
         api,config=self.api()
-        self.run(lambda:self.channels(api).default_library(self.default),lambda _:self.finish(api,config,self.tr('默认资料库已更新。','Default library updated.')))
+        def work():
+            self.channels(api).default_library(self.default)
+            self.log_activity(api,self.session_login,'下载默认资料库','完成')
+        self.run(work,lambda _:self.finish(api,config,self.tr('默认资料库已更新。','Default library updated.')))
     def team_references(self):
         api,config=self.api()
         def work():
@@ -492,7 +594,9 @@ class Client:
     def upload_progress(self):
         api,config=self.api(); folder=self.progress.get()
         def work():
-            files=self.channels(api); result=files.upload_progress(folder,self.files_root); api.login_cached=files.identity(); return result
+            files=self.channels(api); result=files.upload_progress(folder,self.files_root); api.login_cached=files.identity()
+            self.log_activity(api,files.identity(),'上传本地进度',str(result)+' 个文件')
+            return result
         self.run(work,lambda count:self.finish(api,config,self.tr('本地进度已上传：','Progress files uploaded: ')+str(count)))
     def upload_references(self):
         selected=self.fd.askopenfilenames()
@@ -500,7 +604,9 @@ class Client:
         api,config=self.api()
         def work():
             files=self.channels(api); login=files.identity(); api.login_cached=login
-            return files.upload_references(selected,self.personal_folder(login))
+            result=files.upload_references(selected,self.personal_folder(login))
+            self.log_activity(api,login,'上传参考资料',str(len(selected))+' 个文件')
+            return result
         self.run(work,lambda _:self.finish(api,config,self.tr('参考资料已上传，旧清单保留。','References uploaded; earlier manifest entries preserved.')))
     def remove_my_references(self):
         api,config=self.api()
@@ -526,7 +632,9 @@ class Client:
             if not self.mb.askyesno('SRPRecorder2027',self.tr('将从团队区永久删除 %d 个参考资料。继续？' % len(picked),'Permanently remove %d uploaded reference(s)?' % len(picked)),parent=win): return
             win.destroy()
             def work():
-                count=self.channels(api).remove_references(picked,self.personal_folder(login)); return count
+                count=self.channels(api).remove_references(picked,self.personal_folder(login))
+                self.log_activity(api,login,'撤除参考资料',str(count)+' 个文件：'+'、'.join(picked))
+                return count
             self.run(work,lambda count:self.finish(api,config,self.tr('已撤除 %d 个参考资料。' % count,'Removed %d uploaded reference(s).' % count)))
         self.ttk.Button(bar,text=self.tr('撤除所选','Remove Selected'),command=confirm).pack(side='right',padx=4)
         self.ttk.Button(bar,text=self.tr('取消','Cancel'),command=win.destroy).pack(side='right',padx=4)
