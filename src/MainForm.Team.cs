@@ -23,7 +23,7 @@ namespace SRLogbook
 
             Panel top = new Panel();
             top.Dock = DockStyle.Top;
-            top.Height = Ui.S(84);
+            top.Height = Ui.S(122);
             top.BackColor = Color.White;
 
             Label h = new Label();
@@ -31,24 +31,26 @@ namespace SRLogbook
             h.Font = Theme.FB(13f);
             h.ForeColor = Theme.Navy;
             h.BackColor = Color.White;
-            h.SetBounds(Ui.S(2), Ui.S(12), Ui.S(460), Ui.S(28));
+            h.SetBounds(Ui.S(2), Ui.S(12), Ui.S(520), Ui.S(28));
             top.Controls.Add(h);
 
             Label sub = new Label();
-            sub.Text = "下载成员内容到 References/<用户名>；上传时会建立本人的 team/<用户名>/ 档案。";
-            sub.Font = Theme.F(8.8f);
+            sub.Text = "成员内容下载到 References/<账号>/TeamConRef/。";
+            sub.Font = Theme.F(8.4f);
             sub.ForeColor = Theme.TextMuted;
             sub.BackColor = Color.White;
-            sub.SetBounds(Ui.S(2), Ui.S(44), Ui.S(980), Ui.S(40));
+            sub.SetBounds(Ui.S(2), Ui.S(52), Ui.S(880), Ui.S(40));
+            sub.AutoEllipsis = true;
             top.Controls.Add(sub);
 
+            // 只占标题那一行的高度；用 Anchor 而不是 Dock=Right，否则白色面板会盖住下面的副标题。
             FlowLayoutPanel topRight = new FlowLayoutPanel();
-            topRight.Dock = DockStyle.Right;
-            topRight.Width = Ui.S(640);
+            topRight.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            topRight.Size = new Size(Ui.S(500), Ui.S(56));
             topRight.FlowDirection = FlowDirection.RightToLeft;
             topRight.WrapContents = false;
             topRight.BackColor = Color.White;
-            topRight.Padding = new Padding(0, Ui.S(16), Ui.S(10), 0);
+            topRight.Padding = new Padding(0, Ui.S(6), Ui.S(10), 0);
             Button b = TeamBtn("刷新");
             b.Click += delegate { RefreshTeamPage(); };
             Button bMerge = TeamBtn("下载并合并团队参考资料");
@@ -62,7 +64,7 @@ namespace SRLogbook
             teamStatus.Font = Theme.F(8.6f);
             teamStatus.ForeColor = Theme.TextMuted;
             teamStatus.BackColor = Color.White;
-            teamStatus.SetBounds(Ui.S(2), Ui.S(64), Ui.S(820), Ui.S(18));
+            teamStatus.SetBounds(Ui.S(2), Ui.S(96), Ui.S(880), Ui.S(18));
             top.Controls.Add(teamStatus);
 
             Panel pp = new Panel();
@@ -89,7 +91,7 @@ namespace SRLogbook
             pp.Controls.Add(lblPersonal);
 
             lblPersonalPath = new Label();
-            lblPersonalPath.Text = "未选择个人文件夹：个人研究上传将失败。";
+            lblPersonalPath.Text = "个人文件夹未选 / No folder chosen.";
             lblPersonalPath.Font = Theme.F(8.6f);
             lblPersonalPath.ForeColor = Theme.TextMuted;
             lblPersonalPath.BackColor = Color.White;
@@ -99,12 +101,12 @@ namespace SRLogbook
             UpdatePersonalLabels();
 
             FlowLayoutPanel ppRight = new FlowLayoutPanel();
-            ppRight.Dock = DockStyle.Right;
-            ppRight.Width = Ui.S(520);
+            ppRight.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            ppRight.Size = new Size(Ui.S(480), Ui.S(46));
             ppRight.FlowDirection = FlowDirection.RightToLeft;
             ppRight.WrapContents = false;
             ppRight.BackColor = Color.White;
-            ppRight.Padding = new Padding(0, Ui.S(28), Ui.S(10), 0);
+            ppRight.Padding = new Padding(0, Ui.S(6), Ui.S(10), 0);
             Button bOpenP = TeamBtn("打开个人文件夹");
             bOpenP.Click += delegate { OpenPersonalFolder(); };
             Button bChoose = TeamBtn("选择个人文件夹");
@@ -126,14 +128,15 @@ namespace SRLogbook
             page.Controls.Add(top);
             Action layoutTeam = delegate
             {
-                b.Anchor = bMerge.Anchor = bChoose.Anchor = bOpenP.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-                b.SetBounds(Math.Max(Ui.S(310), top.ClientSize.Width - Ui.S(94)), Ui.S(12), Ui.S(84), Ui.S(30));
-                bMerge.SetBounds(Math.Max(Ui.S(110), top.ClientSize.Width - Ui.S(304)), Ui.S(12), Ui.S(200), Ui.S(30));
-                sub.Width = teamStatus.Width = Math.Max(Ui.S(200), top.ClientSize.Width - Ui.S(12));
-                lblPersonal.Width = Math.Max(Ui.S(200), pp.ClientSize.Width - Ui.S(150));
-                lblPersonalPath.Width = Math.Max(Ui.S(150), pp.ClientSize.Width - Ui.S(330));
-                bChoose.SetBounds(Math.Max(Ui.S(170), pp.ClientSize.Width - Ui.S(318)), Ui.S(30), Ui.S(150), Ui.S(30));
-                bOpenP.SetBounds(Math.Max(Ui.S(330), pp.ClientSize.Width - Ui.S(158)), Ui.S(30), Ui.S(150), Ui.S(30));
+                int tw = Math.Max(Ui.S(360), top.ClientSize.Width);
+                topRight.Left = Math.Max(Ui.S(2), tw - topRight.Width - Ui.S(8));
+                sub.Width = Math.Max(Ui.S(240), tw - Ui.S(14));
+                teamStatus.Width = Math.Max(Ui.S(240), tw - Ui.S(14));
+                int pw = Math.Max(Ui.S(360), pp.ClientSize.Width);
+                ppRight.Left = Math.Max(Ui.S(2), pw - ppRight.Width - Ui.S(8));
+                int labelW = Math.Max(Ui.S(180), pw - ppRight.Width - Ui.S(20));
+                lblPersonal.Width = labelW;
+                lblPersonalPath.Width = labelW;
             };
             top.Resize += delegate { layoutTeam(); };
             pp.Resize += delegate { layoutTeam(); };
@@ -174,12 +177,12 @@ namespace SRLogbook
             if (lblPersonalPath == null) return;
             if (Directory.Exists(personalFolder))
             {
-                lblPersonalPath.Text = "个人文件夹：" + personalFolder;
+                lblPersonalPath.Text = "个人文件夹 / Folder：" + personalFolder;
                 lblPersonalPath.ForeColor = Theme.TextMuted;
             }
             else
             {
-                lblPersonalPath.Text = "未选择个人文件夹：个人研究上传将失败。";
+                lblPersonalPath.Text = "个人文件夹未选 / No folder chosen.";
                 lblPersonalPath.ForeColor = Color.FromArgb(179, 69, 63);
             }
         }
