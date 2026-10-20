@@ -29,6 +29,7 @@ namespace SRLogbook
         private Button btnUpRefs;
         private Button btnUpProgress;
         private Button btnRemoveRefs;
+        private Label boundLabel;
 
         private Panel BuildSyncPage()
         {
@@ -53,47 +54,19 @@ namespace SRLogbook
             h.SetBounds(24, 16, 500, 28);
             card.Controls.Add(h);
 
-            Label hint = new Label();
-            hint.Text = "每位成员使用自己的 GitHub 账号和访问密钥。可下载成员文件或默认资料库，并上传本人选择的参考文件、本地进度文件夹；每个文件最大 50 MiB。";
-            hint.Font = Theme.F(8.6f);
-            hint.ForeColor = Theme.TextMuted;
-            hint.BackColor = Color.White;
-            hint.SetBounds(24, 48, 800, 40);
-            card.Controls.Add(hint);
-
-            AddSLabel(card, "仓库（owner/repo）", 24, 96);
-            txtSRepo = new TextBox();
-            txtSRepo.Font = Theme.F(9.5f);
-            txtSRepo.SetBounds(24, 118, 360, 30);
-            card.Controls.Add(txtSRepo);
-
-            AddSLabel(card, "文件路径", 404, 96);
-            txtSPath = new TextBox();
-            txtSPath.Font = Theme.F(9.5f);
-            txtSPath.SetBounds(404, 118, 300, 30);
-            card.Controls.Add(txtSPath);
-
-            AddSLabel(card, "分支", 724, 96);
-            txtSBranch = new TextBox();
-            txtSBranch.Font = Theme.F(9.5f);
-            txtSBranch.SetBounds(724, 118, 110, 30);
-            card.Controls.Add(txtSBranch);
-
-            AddSLabel(card, "访问密钥（每个成员使用自己的令牌）", 24, 160);
-            txtSToken = new TextBox();
-            txtSToken.Font = Theme.F(9.5f);
-            txtSToken.UseSystemPasswordChar = true;
-            txtSToken.SetBounds(24, 182, 620, 30);
-            card.Controls.Add(txtSToken);
-            Button saveConfig = SButton("验证并保存配置", 654, 182, 180);
-            saveConfig.Click += delegate { ValidateAndSaveSyncConfig(); };
+            boundLabel = new Label();
+            boundLabel.Font = Theme.F(8.6f);
+            boundLabel.ForeColor = Theme.TextMuted;
+            boundLabel.BackColor = Color.White;
+            boundLabel.SetBounds(24, 48, 800, 40);
+            card.Controls.Add(boundLabel);
 
             Label tokenHint = new Label();
-            tokenHint.Text = "外部协作者请用 classic PAT 并勾选 repo；fine-grained 令牌无法访问他人账号的私有仓库。";
+            tokenHint.Text = "登录后在团队同步页操作即可；仓库已绑定，无需填写任何配置。";
             tokenHint.Font = Theme.F(8.2f);
             tokenHint.ForeColor = Theme.Warm;
             tokenHint.BackColor = Color.White;
-            tokenHint.SetBounds(24, 214, 800, 18);
+            tokenHint.SetBounds(24, 88, 800, 18);
             card.Controls.Add(tokenHint);
 
             Label sc = new Label();
@@ -108,25 +81,24 @@ namespace SRLogbook
             chkSyncEntries.Visible = chkSyncCategories.Visible = false;
 
 
-            btnOthers = SButton("从 GitHub 下载他人内容", 24, 254, 220);
+            btnOthers = SButton("从 GitHub 下载他人内容", 24, 120, 220);
             btnOthers.Click += delegate { PullOthersContent(); };
-            btnDefault = SButton("从 GitHub 下载默认资料库", 254, 254, 230);
+            btnDefault = SButton("从 GitHub 下载默认资料库", 254, 120, 230);
             btnDefault.Click += delegate { PullDefaultLibrary(); };
-            btnUpRefs = SButton("上传参考资料", 24, 294, 180);
+            btnUpRefs = SButton("上传参考资料", 24, 160, 180);
             btnUpRefs.Click += delegate { UploadRefsAction(); };
-            btnUpProgress = SButton("上传本地进度", 214, 294, 180);
+            btnUpProgress = SButton("上传本地进度", 214, 160, 180);
             btnUpProgress.Click += delegate { UploadProgressFolder(); };
-            btnRemoveRefs = SButton("撤除我上传的参考资料", 414, 294, 230);
+            btnRemoveRefs = SButton("撤除我上传的参考资料", 414, 160, 230);
             btnRemoveRefs.Click += delegate { RemoveMyUploadedRefs(); };
 
-            txtSToken.TextChanged += delegate { UpdateSyncActionState(); };
             UpdateSyncActionState();
 
             lblSStatus = new Label();
             lblSStatus.Font = Theme.F(8.6f);
             lblSStatus.ForeColor = Theme.TextMuted;
             lblSStatus.BackColor = Color.White;
-            lblSStatus.SetBounds(24, 334, 800, 40);
+            lblSStatus.SetBounds(24, 204, 800, 40);
             card.Controls.Add(lblSStatus);
 
             Label logLabel = new Label();
@@ -134,7 +106,7 @@ namespace SRLogbook
             logLabel.Font = Theme.FB(10.5f);
             logLabel.ForeColor = Theme.Navy;
             logLabel.BackColor = Color.White;
-            logLabel.SetBounds(24, 380, 200, 24);
+            logLabel.SetBounds(24, 254, 200, 24);
             card.Controls.Add(logLabel);
 
             txtSLog = new TextBox();
@@ -143,7 +115,7 @@ namespace SRLogbook
             txtSLog.ScrollBars = ScrollBars.Vertical;
             txtSLog.Font = Theme.F(8.6f);
             txtSLog.BackColor = Color.White;
-            txtSLog.SetBounds(24, 408, 800, 92);
+            txtSLog.SetBounds(24, 282, 800, 200);
             card.Controls.Add(txtSLog);
 
             page.Resize += delegate
@@ -225,51 +197,32 @@ namespace SRLogbook
 
         private void RefreshSyncPage()
         {
-            if (txtSRepo == null) return;
+            if (txtSLog == null) return;
             SyncConfig c = GitHubSync.LoadConfig(appDir);
-            txtSRepo.Text = string.IsNullOrEmpty(c.owner) ? "" : (c.owner + "/" + c.repo);
-            txtSPath.Text = string.IsNullOrEmpty(c.path) ? "sync/research_log.json" : c.path;
-            txtSBranch.Text = string.IsNullOrEmpty(c.branch) ? "main" : c.branch;
-            txtSToken.Text = GitHubSync.HasToken() ? "********" : "";
-            ApplyScope(c.scope);
+            if (boundLabel != null)
+                boundLabel.Text = (Lang.En ? "Bound repository: " : "已绑定仓库：")
+                    + (string.IsNullOrEmpty(c.owner) ? "bacoyc0928-art" : c.owner) + "/"
+                    + (string.IsNullOrEmpty(c.repo) ? "research-data" : c.repo) + " · "
+                    + (string.IsNullOrEmpty(c.branch) ? "main" : c.branch)
+                    + (Lang.En ? "。Sign in at the bottom-left to enable these actions." : "。请在左下角登录后使用下列操作。");
             if (string.IsNullOrEmpty(txtSLog.Text))
-                txtSLog.Text = Lang.En ? "Use your own token for the private data repository. Personal-repository collaborators need a classic PAT with repo scope." : "提示：数据仓库保持私有；每人使用自己的令牌。个人仓库协作者使用 classic PAT（repo 权限）。";
+                txtSLog.Text = Lang.En ? "Sign in with your own GitHub token first (bottom-left)." : "提示：请先在左下角用本人的 GitHub 密钥登录。";
         }
 
         private bool ReadSyncForm(out string owner, out string repo, out string path, out string branch, out string token)
         {
             owner = repo = path = branch = token = "";
-            // The sync page may never have been opened (actions can start from the team page),
-            // so fall back to the saved configuration instead of failing with "owner/repo".
-            SyncConfig saved = GitHubSync.LoadConfig(appDir);
-            string full = txtSRepo.Text.Trim();
-            if (full.Length == 0 && !string.IsNullOrEmpty(saved.owner) && !string.IsNullOrEmpty(saved.repo))
-                full = saved.owner + "/" + saved.repo;
-            int slash = full.IndexOf('/');
-            if (slash <= 0 || slash == full.Length - 1 || full.LastIndexOf('/') != slash)
+            if (string.IsNullOrEmpty(sessionToken))
             {
-                Msg.Show("仓库请填写为 owner/repo，例如 yourname/research-data。", "团队同步");
+                Msg.Show("请先在左下角登录 GitHub 账号。", "团队同步");
                 return false;
             }
-            owner = full.Substring(0, slash).Trim();
-            repo = full.Substring(slash + 1).Trim();
-            path = txtSPath.Text.Trim();
-            if (path.Length == 0) path = string.IsNullOrEmpty(saved.path) ? "sync/research_log.json" : saved.path;
-            branch = txtSBranch.Text.Trim();
-            if (branch.Length == 0) branch = string.IsNullOrEmpty(saved.branch) ? "main" : saved.branch;
-            if (txtSRepo.Text.Trim().Length == 0)
-            {
-                txtSRepo.Text = full; txtSPath.Text = path; txtSBranch.Text = branch;
-            }
-            token = txtSToken.Text.Trim();
-            if (token == "********") token = "";
-            token = CleanToken(token);
-            if (token.Length == 0) token = CleanToken(SecretStore.Load(GitHubSync.TokenTarget));
-            if (string.IsNullOrEmpty(token))
-            {
-                Msg.Show("请填写你自己的 GitHub 访问密钥。", "团队同步");
-                return false;
-            }
+            SyncConfig c = GitHubSync.LoadConfig(appDir);
+            owner = string.IsNullOrEmpty(c.owner) ? "bacoyc0928-art" : c.owner;
+            repo = string.IsNullOrEmpty(c.repo) ? "research-data" : c.repo;
+            path = string.IsNullOrEmpty(c.path) ? "sync/research_log.json" : c.path;
+            branch = string.IsNullOrEmpty(c.branch) ? "main" : c.branch;
+            token = sessionToken;
             return true;
         }
 
@@ -288,9 +241,6 @@ namespace SRLogbook
             SyncConfig c = new SyncConfig { owner = owner, repo = repo, path = path, branch = branch, scope = ScopeString() };
             syncScope = ScopeString();
             GitHubSync.SaveConfig(appDir, c);
-            GitHubSync.SetToken(token);
-            txtSToken.Text = "********";
-            lblSStatus.Text = "配置已保存；密钥存放在 Windows 凭据管理器。";
         }
 
         private async void TestSyncConnection()
@@ -410,90 +360,7 @@ namespace SRLogbook
             SaveCurrent();
         }
 
-        private async void ValidateAndSaveSyncConfig()
-        {
-            if (syncBusy || teamLoading) return;
-            string owner, repo, path, branch, token;
-            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
-            syncBusy = true; syncCard.Enabled = false;
-            lblSStatus.Text = Lang.En ? "Checking your GitHub token…" : "正在验证你的 GitHub 令牌…";
-            try
-            {
-                // Stage 1 is identity only. A valid token is stored even when the repository is not reachable yet,
-                // so a wrong repository setting no longer makes a member look like "not signed in".
-                string login;
-                try { login = await Task.Run(() => GitHubSync.GetUserLogin(token)); }
-                catch (Exception ex) { ReportSyncFailure(ex, false, "", owner, repo); return; }
-
-                try { SaveSyncConfig(); }
-                catch (Exception ex)
-                {
-                    Log((Lang.En ? "Token verified but settings could not be saved: " : "令牌有效，但配置无法保存：") + ex.Message);
-                    lblSStatus.Text = Lang.En ? "Token is valid, but the configuration could not be saved." : "令牌有效，但配置无法保存。";
-                    MessageBox.Show((Lang.En ? "Signed in as " : "已登录账号 ") + login
-                        + (Lang.En ? ", but the settings folder is not writable. Move the program to a writable folder and try again." : "，但程序目录不可写。请把软件放到可写文件夹后重试。"),
-                        Lang.En ? "Team Sync" : "团队同步", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-                Log((Lang.En ? "Signed in: " : "已登录：") + login);
-                lblSStatus.Text = (Lang.En ? "Signed in as " : "已登录 ") + login + (Lang.En ? "; checking repository access…" : "；正在检查仓库权限…");
-
-                // Stage 2 is repository access, which is a separate problem from the account itself.
-                string full;
-                try { full = await Task.Run(() => GitHubSync.Test(owner, repo, token)); }
-                catch (Exception ex) { ReportSyncFailure(ex, true, login, owner, repo); return; }
-
-                Log((Lang.En ? "Repository reachable: " : "仓库可访问：") + full);
-                lblSStatus.Text = (Lang.En ? "Signed in as " : "已登录 ") + login + (Lang.En ? "; configuration saved." : "；配置已保存，密钥存放在 Windows 凭据管理器。");
-                Msg.Show((Lang.En ? "Signed in to GitHub as " : "已登录 GitHub 账号 ") + login
-                    + (Lang.En ? " and this token can reach " : "，该令牌可以访问 ") + full + "。", "团队同步");
-            }
-            finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
-        }
-
-        private void ReportSyncFailure(Exception ex, bool repoStage, string login, string owner, string repo)
-        {
-            GitHubApiException api = ex as GitHubApiException;
-            string prefix = repoStage && !string.IsNullOrEmpty(login)
-                ? (Lang.En ? "Signed in as " + login + ", but the repository is not reachable.\n\n" : "账号 " + login + " 已登录，但访问仓库失败。\n\n")
-                : "";
-            string msg;
-            if (api == null)
-            {
-                msg = prefix + (Lang.En ? "Cannot reach GitHub. Check the network or proxy.\n\n" : "无法连接 GitHub，请检查网络或代理。\n\n") + ex.Message;
-            }
-            else if (api.StatusCode == 401)
-            {
-                msg = prefix + (Lang.En
-                    ? "GitHub rejected the token (HTTP 401): it is invalid, expired or revoked.\n\nCreate a new token: Settings → Developer settings → Personal access tokens → Tokens (classic), tick the repo scope, then paste it here."
-                    : "GitHub 拒绝了该令牌（HTTP 401）：令牌无效、已过期或被撤销。\n\n请到 GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) 重新生成，勾选 repo 权限，再粘贴到这里。");
-            }
-            else if (api.StatusCode == 403)
-            {
-                bool rate = api.Message.IndexOf("rate limit", StringComparison.OrdinalIgnoreCase) >= 0;
-                msg = prefix + (rate
-                    ? (Lang.En ? "GitHub API rate limit reached (HTTP 403). Wait about an hour, then try again." : "GitHub API 调用次数已达上限（HTTP 403），请约一小时后重试。")
-                    : (Lang.En ? "GitHub refused access (HTTP 403): the token most likely lacks write access to this repository.\n\nA classic PAT needs the repo scope; a fine-grained PAT needs Contents: Read and write."
-                               : "GitHub 拒绝访问（HTTP 403）：令牌很可能没有该仓库的写入权限。\n\nclassic PAT 请勾选 repo；fine-grained 令牌请授予 Contents 读写。"));
-            }
-            else if (api.StatusCode == 404)
-            {
-                msg = prefix + (Lang.En
-                    ? "GitHub returned 404 for " + owner + "/" + repo + ".\n\nA private repository answers 404 whenever the token cannot see it. Check in order:\n1. Is the collaborator invitation accepted? Open the repository in a browser while signed in as yourself.\n2. Is the token a fine-grained token? GitHub does not support fine-grained tokens for a repository owned by another account, so external collaborators must use a classic PAT with the repo scope.\n3. Does the token still have the repo scope, and is it unexpired?\n4. Is the repository exactly " + owner + "/" + repo + "? The program repository research-progress-recorder is public and is not the data repository."
-                    : "GitHub 返回 404，找不到 " + owner + "/" + repo + "。\n\n私有仓库只要令牌看不到它就一律返回 404。请依次检查：\n1. 协作者邀请是否已接受？用本人账号在浏览器里能打开该仓库才算生效。\n2. 是不是用了 fine-grained 令牌？GitHub 不支持用 fine-grained 令牌访问他人账号的私有仓库，外部协作者必须用 classic PAT 并勾选 repo。\n3. 令牌是否仍有 repo 权限、是否已过期？\n4. 仓库名是否完全等于 " + owner + "/" + repo + "？公开的程序仓库是 research-progress-recorder，不是数据仓库。");
-            }
-            else
-            {
-                msg = prefix + (Lang.En ? "GitHub error HTTP " : "GitHub 返回 HTTP ") + api.StatusCode + "。\n\n" + ex.Message;
-            }
-            Log((Lang.En ? "Sign-in problem: " : "登录问题：") + msg.Replace("\n", " "));
-            lblSStatus.Text = repoStage
-                ? (Lang.En ? "Account signed in, but the repository is not reachable." : "账号已登录，但无法访问仓库。")
-                : (Lang.En ? "Sign-in failed; see the message and log below." : "登录失败，详见提示框与下方日志。");
-            MessageBox.Show(msg, Lang.En ? "Team Sync" : "团队同步", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-
-        private string SerializeSyncStore() { return SyncData.Payload(store, null, ScopeString()); }
+        // Sign-in moved to the sidebar login panel; per-operation repository configuration is no longer required.
         private static int CompareUpdated(string a, string b) { return SyncData.Compare(a, b); }
         private int MergeStore(string json)
         {
@@ -511,10 +378,10 @@ namespace SRLogbook
         public async void ShowChangeHistory()
         {
             SyncConfig c = GitHubSync.LoadConfig(appDir);
-            string token = SecretStore.Load(GitHubSync.TokenTarget);
-            if (string.IsNullOrEmpty(c.owner) || string.IsNullOrEmpty(token))
+            string token = sessionToken;
+            if (string.IsNullOrEmpty(token))
             {
-                Msg.Show("请先在“团队同步”页填写仓库并保存配置。", "改动记录");
+                Msg.Show("请先在左下角登录 GitHub 账号。", "改动记录");
                 return;
             }
             try
@@ -616,8 +483,8 @@ namespace SRLogbook
         {
             if (syncBusy || teamLoading) return;
             SyncConfig cfg = GitHubSync.LoadConfig(appDir);
-            string token = SecretStore.Load(GitHubSync.TokenTarget);
-            if (string.IsNullOrEmpty(cfg.owner) || string.IsNullOrEmpty(token)) { Msg.Show("请先在“团队同步”页配置仓库和访问密钥。", "团队同步"); return; }
+            string token = sessionToken;
+            if (string.IsNullOrEmpty(token)) { Msg.Show("请先在左下角登录 GitHub 账号。", "团队同步"); return; }
             syncBusy = true; Cursor = Cursors.WaitCursor;
             try
             {
@@ -673,7 +540,7 @@ namespace SRLogbook
 
         private void UpdateSyncActionState()
         {
-            bool has = (txtSToken != null && txtSToken.Text.Trim().Length > 0) || GitHubSync.HasToken();
+            bool has = !string.IsNullOrEmpty(sessionToken);
             if (btnOthers != null) btnOthers.Enabled = has;
             if (btnDefault != null) btnDefault.Enabled = has;
             if (btnUpRefs != null) btnUpRefs.Enabled = has;
