@@ -38,7 +38,7 @@ namespace SRLogbook
             page.BackColor = Color.White;
 
             Panel card = new Panel();
-            card.SetBounds(0, 0, 860, 520);
+            card.SetBounds(0, 0, 900, 590);
             syncCard = card;
             card.BackColor = Color.White;
             card.Paint += delegate(object s, PaintEventArgs e)
@@ -59,7 +59,7 @@ namespace SRLogbook
             boundLabel.Font = Theme.F(8.6f);
             boundLabel.ForeColor = Theme.TextMuted;
             boundLabel.BackColor = Color.White;
-            boundLabel.SetBounds(24, 48, 800, 40);
+            boundLabel.SetBounds(24, 48, 850, 40);
             card.Controls.Add(boundLabel);
 
             Label tokenHint = new Label();
@@ -67,7 +67,7 @@ namespace SRLogbook
             tokenHint.Font = Theme.F(8.2f);
             tokenHint.ForeColor = Theme.Warm;
             tokenHint.BackColor = Color.White;
-            tokenHint.SetBounds(24, 88, 800, 18);
+            tokenHint.SetBounds(24, 88, 860, 18);
             card.Controls.Add(tokenHint);
 
             Label sc = new Label();
@@ -82,17 +82,17 @@ namespace SRLogbook
             chkSyncEntries.Visible = chkSyncCategories.Visible = false;
 
 
-            btnOthers = SButton("从 GitHub 下载他人内容", 24, 120, 220);
+            btnOthers = SButton("从 GitHub 下载他人内容", 24, 120, 300);
             btnOthers.Click += delegate { PullOthersContent(); };
-            btnDefault = SButton("从 GitHub 下载默认资料库", 254, 120, 230);
+            btnDefault = SButton("从 GitHub 下载默认资料库", 334, 120, 330);
             btnDefault.Click += delegate { PullDefaultLibrary(); };
-            btnUpRefs = SButton("上传参考资料", 24, 160, 180);
+            btnUpRefs = SButton("上传参考资料", 24, 160, 240);
             btnUpRefs.Click += delegate { UploadRefsAction(); };
-            btnUpProgress = SButton("上传本地进度", 214, 160, 180);
+            btnUpProgress = SButton("上传本地进度", 274, 160, 240);
             btnUpProgress.Click += delegate { UploadProgressFolder(); };
-            btnRemoveRefs = SButton("撤除我上传的参考资料", 414, 160, 230);
+            btnRemoveRefs = SButton("撤除我上传的参考资料", 24, 200, 330);
             btnRemoveRefs.Click += delegate { RemoveMyUploadedRefs(); };
-            btnActivity = SButton("查看活动日志", 654, 160, 190);
+            btnActivity = SButton("查看活动日志", 364, 200, 220);
             btnActivity.Click += delegate { ShowActivityLogs(); };
 
             UpdateSyncActionState();
@@ -101,7 +101,7 @@ namespace SRLogbook
             lblSStatus.Font = Theme.F(8.6f);
             lblSStatus.ForeColor = Theme.TextMuted;
             lblSStatus.BackColor = Color.White;
-            lblSStatus.SetBounds(24, 204, 800, 40);
+            lblSStatus.SetBounds(24, 244, 850, 40);
             card.Controls.Add(lblSStatus);
 
             Label logLabel = new Label();
@@ -109,7 +109,7 @@ namespace SRLogbook
             logLabel.Font = Theme.FB(10.5f);
             logLabel.ForeColor = Theme.Navy;
             logLabel.BackColor = Color.White;
-            logLabel.SetBounds(24, 254, 200, 24);
+            logLabel.SetBounds(24, 292, 260, 24);
             card.Controls.Add(logLabel);
 
             txtSLog = new TextBox();
@@ -118,7 +118,7 @@ namespace SRLogbook
             txtSLog.ScrollBars = ScrollBars.Vertical;
             txtSLog.Font = Theme.F(8.6f);
             txtSLog.BackColor = Color.White;
-            txtSLog.SetBounds(24, 282, 800, 200);
+            txtSLog.SetBounds(24, 320, 850, 220);
             card.Controls.Add(txtSLog);
 
             page.Resize += delegate
@@ -203,13 +203,13 @@ namespace SRLogbook
             if (txtSLog == null) return;
             SyncConfig c = GitHubSync.LoadConfig(appDir);
             if (boundLabel != null)
-                boundLabel.Text = (Lang.En ? "Bound repository: " : "已绑定仓库：")
+                boundLabel.Text = "已绑定仓库 / Bound repository: "
                     + (string.IsNullOrEmpty(c.owner) ? "bacoyc0928-art" : c.owner) + "/"
                     + (string.IsNullOrEmpty(c.repo) ? "research-data" : c.repo) + " · "
                     + (string.IsNullOrEmpty(c.branch) ? "main" : c.branch)
-                    + (Lang.En ? "。Sign in at the bottom-left to enable these actions." : "。请在左下角登录后使用下列操作。");
+                    + "。请在左下角登录后使用下列操作 / Sign in at the bottom-left to use these actions.";
             if (string.IsNullOrEmpty(txtSLog.Text))
-                txtSLog.Text = Lang.En ? "Sign in with your own GitHub token first (bottom-left)." : "提示：请先在左下角用本人的 GitHub 密钥登录。";
+                txtSLog.Text = "提示：请先在左下角用本人的 GitHub 密钥登录 / Sign in with your own token first.";
         }
 
         private bool ReadSyncForm(out string owner, out string repo, out string path, out string branch, out string token)
@@ -515,18 +515,22 @@ namespace SRLogbook
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             string folder = Path.GetFullPath(LoadProgressFolder()).TrimEnd(Path.DirectorySeparatorChar);
-            if (!Directory.Exists(folder)) { Msg.Show("请先在“本地进度”选择文件夹。", "本地进度"); return; }
-            if (SyncData.IsWithin(appDir, folder)) { Msg.Show("请选择专用进度文件夹，不能上传程序目录或其上级目录。", "本地进度"); return; }
+            if (!Directory.Exists(folder)) { Msg.Show("请先在“本地进度”选择文件夹 / Pick a progress folder first.", "本地进度"); return; }
+            if (SyncData.IsWithin(appDir, folder)) { Msg.Show("请选择专用进度文件夹，不能上传程序目录或其上级目录 / Choose a dedicated folder, not the program folder.", "本地进度"); return; }
             syncBusy = true; syncCard.Enabled = false;
-            lblSStatus.Text = "正在上传本地进度…";
+            lblSStatus.Text = "正在列出可上传文件… / Listing files…";
             try
             {
                 List<string> files = FileTransfers.UploadFiles(folder);
-                if (files.Count == 0) { lblSStatus.Text = "本地进度文件夹为空，未上传。"; return; }
+                if (files.Count == 0) { lblSStatus.Text = "本地进度文件夹为空，未上传 / Folder is empty."; return; }
+                List<string> picked = PickItems("上传本地进度 / Upload local progress",
+                    "勾选要上传的文件；未勾选的文件不会上传。 / Check the files to upload; unchecked files are not sent.",
+                    Rows(files, f => f.Substring(folder.Length).TrimStart('\\', '/') + "  ·  " + Math.Max(1, new FileInfo(f).Length / 1024) + " KB"), false);
+                if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
                 string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
                 await Task.Run(() => GitHubSync.EnsureProfile(owner, repo, branch, token, login));
                 int n = 0;
-                foreach (string file in files)
+                foreach (string file in picked)
                 {
                     string rel = file.Substring(folder.Length).TrimStart('\\', '/').Replace('\\', '/');
                     byte[] bytes = File.ReadAllBytes(file);
@@ -534,11 +538,11 @@ namespace SRLogbook
                     n++;
                 }
                 SaveSyncConfig();
-                Log("已上传本地进度 " + n + " 个文件；其他远端文件保留，不自动删除。");
-                lblSStatus.Text = "本地进度上传完成（" + n + " 个文件）。";
-                await LogActivityAsync("上传本地进度", n + " 个文件");
+                Log("已上传本地进度 " + n + " 个文件；其他远端文件保留，不自动删除 / Uploaded; remote older files kept.");
+                lblSStatus.Text = "本地进度上传完成 / Progress uploaded: " + n + " 个文件 / files";
+                await LogActivityAsync("上传本地进度 / Upload local progress", n + " 个文件 / files");
             }
-            catch (Exception ex) { Log("本地进度上传失败（可能已上传部分文件）：" + ex.Message); lblSStatus.Text = "上传失败，详见日志。"; }
+            catch (Exception ex) { Log("本地进度上传失败（可能已上传部分文件）/ Upload failed: " + ex.Message); lblSStatus.Text = "上传失败，详见日志 / Upload failed; see log."; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
         }
 
@@ -553,33 +557,121 @@ namespace SRLogbook
             if (btnActivity != null) btnActivity.Enabled = has;
         }
 
+        /// <summary>通用“先预览、再勾选”对话框：列出可下载或可上传的条目，只处理勾选项。</summary>
+        private List<string> PickItems(string title, string hint, IList<KeyValuePair<string, string>> items, bool allowBrowse)
+        {
+            List<string> picked = new List<string>();
+            using (Form dialog = new Form())
+            {
+                dialog.Text = Lang.T(title);
+                dialog.Size = new Size(780, 580);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.BackColor = Color.White;
+                Label tip = new Label();
+                tip.Text = Lang.T(hint);
+                tip.Dock = DockStyle.Top; tip.Height = 56; tip.Padding = new Padding(14, 10, 14, 0);
+                tip.Font = Theme.F(8.8f); tip.ForeColor = Theme.TextMuted; tip.BackColor = Color.White;
+                CheckedListBox list = new CheckedListBox();
+                list.Dock = DockStyle.Fill; list.CheckOnClick = true; list.IntegralHeight = false;
+                list.Font = Theme.F(9f);
+                foreach (KeyValuePair<string, string> it in items) list.Items.Add(it.Value, true);
+                Panel bottom = new Panel(); bottom.Dock = DockStyle.Bottom; bottom.Height = 56; bottom.BackColor = Color.White;
+                int x = 14;
+                Button all = new Button(); all.Text = "全选 / Select All"; all.FlatStyle = FlatStyle.Flat; all.SetBounds(x, 12, 128, 30); x += 136;
+                Button none = new Button(); none.Text = "全不选 / Select None"; none.FlatStyle = FlatStyle.Flat; none.SetBounds(x, 12, 148, 30); x += 156;
+                all.Click += delegate { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, true); };
+                none.Click += delegate { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, false); };
+                bottom.Controls.Add(all); bottom.Controls.Add(none);
+                if (allowBrowse)
+                {
+                    Button browse = new Button(); browse.Text = "添加文件 / Add files"; browse.FlatStyle = FlatStyle.Flat; browse.SetBounds(x, 12, 150, 30);
+                    browse.Click += delegate
+                    {
+                        using (OpenFileDialog od = new OpenFileDialog())
+                        {
+                            od.Multiselect = true; od.Filter = "所有文件 / All files|*.*";
+                            if (od.ShowDialog(dialog) != DialogResult.OK) return;
+                            foreach (string f in od.FileNames)
+                            {
+                                bool exists = false;
+                                foreach (KeyValuePair<string, string> it in items) if (string.Equals(it.Key, f, StringComparison.OrdinalIgnoreCase)) exists = true;
+                                if (exists) continue;
+                                FileInfo info = new FileInfo(f);
+                                items.Add(new KeyValuePair<string, string>(f, info.Name + "  ·  " + Math.Max(1, info.Length / 1024) + " KB"));
+                                list.Items.Add(items[items.Count - 1].Value, true);
+                            }
+                        }
+                    };
+                    bottom.Controls.Add(browse);
+                }
+                Button ok = new Button(); ok.Text = "确定 / OK"; ok.FlatStyle = FlatStyle.Flat; ok.SetBounds(bottom.Width - 236, 12, 104, 30);
+                Button cancel = new Button(); cancel.Text = "取消 / Cancel"; cancel.FlatStyle = FlatStyle.Flat; cancel.SetBounds(bottom.Width - 124, 12, 110, 30);
+                ok.Anchor = AnchorStyles.Top | AnchorStyles.Right; cancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+                ok.Click += delegate { dialog.DialogResult = DialogResult.OK; dialog.Close(); };
+                cancel.Click += delegate { dialog.Close(); };
+                bottom.Controls.Add(ok); bottom.Controls.Add(cancel);
+                dialog.Controls.Add(tip);
+                dialog.Controls.Add(bottom);
+                dialog.Controls.Add(list);
+                dialog.AcceptButton = ok; dialog.CancelButton = cancel;
+                if (dialog.ShowDialog(this) != DialogResult.OK) return picked;
+                for (int i = 0; i < list.Items.Count && i < items.Count; i++)
+                    if (list.GetItemChecked(i)) picked.Add(items[i].Key);
+            }
+            return picked;
+        }
+
+        private static List<KeyValuePair<string, string>> Rows(IEnumerable<string> values, Func<string, string> format)
+        {
+            List<KeyValuePair<string, string>> rows = new List<KeyValuePair<string, string>>();
+            foreach (string v in values) rows.Add(new KeyValuePair<string, string>(v, format(v)));
+            return rows;
+        }
+
         private async void PullOthersContent()
         {
             if (syncBusy || teamLoading) return;
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             syncBusy = true; syncCard.Enabled = false;
-            lblSStatus.Text = "正在下载他人内容…";
+            lblSStatus.Text = "正在读取团队成员… / Reading team members…";
             try
             {
                 string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
                 List<string> members = await Task.Run(() => GitHubSync.ListDir(owner, repo, "team", branch, token));
-                int n = 0;
+                members.RemoveAll(m => m.Equals(login, StringComparison.OrdinalIgnoreCase));
+                members.Sort(StringComparer.OrdinalIgnoreCase);
+                if (members.Count == 0) { lblSStatus.Text = "没有其他成员内容 / No other member content."; return; }
+                Dictionary<string, string> display = new Dictionary<string, string>();
                 foreach (string member in members)
                 {
-                    if (member.Equals(login, StringComparison.OrdinalIgnoreCase)) continue;
+                    int refCount = 0; bool hasProgress = false;
+                    try
+                    {
+                        refCount = (await Task.Run(() => GitHubSync.ListFileShas(owner, repo, "team/" + member + "/references", branch, token))).Count;
+                        hasProgress = (await Task.Run(() => GitHubSync.ListDir(owner, repo, "team/" + member, branch, token))).Contains("progress");
+                    }
+                    catch { }
+                    display[member] = member + "  ·  references: " + refCount + (hasProgress ? "  ·  progress ✓" : "  ·  progress —");
+                }
+                List<string> picked = PickItems("下载他人内容 / Download team files",
+                    "勾选要下载的成员；只下载勾选的成员，未勾选的不动。 / Check the members to download; everything else stays untouched.",
+                    Rows(members, m => display[m]), false);
+                if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
+                int n = 0;
+                foreach (string member in picked)
+                {
                     string dest = FileTransfers.Child(TeamConRefRoot(login), member);
-                    bool downloaded = await Task.Run(() => GitHubSync.DownloadMemberFiles(owner, repo, member, branch, token, dest));
-                    if (downloaded) n++;
+                    if (await Task.Run(() => GitHubSync.DownloadMemberFiles(owner, repo, member, branch, token, dest))) n++;
                 }
                 SaveSyncConfig();
-                lblSStatus.Text = n == 0 ? "没有其他成员内容。" : "已下载 " + n + " 位成员内容。";
-                if (n > 0) await LogActivityAsync("下载他人内容", n + " 位成员");
+                lblSStatus.Text = n == 0 ? "没有其他成员内容 / No other member content." : "已下载 / Downloaded: " + n;
+                if (n > 0) await LogActivityAsync("下载他人内容 / Download team files", n + " 位成员 / members");
                 string baseDir = Path.Combine(AppPaths.MemberReferences(appDir, login), "TeamConRef");
                 Log(lblSStatus.Text + " " + baseDir);
                 if (n > 0) OpenPath(baseDir);
             }
-            catch (Exception ex) { Log("下载他人内容失败：" + ex.Message); lblSStatus.Text = "下载失败，原有内容保留，详见日志。"; }
+            catch (Exception ex) { Log("下载他人内容失败 / Download failed: " + ex.Message); lblSStatus.Text = "下载失败，原有内容保留，详见日志 / Download failed; existing files kept."; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
         }
 
@@ -589,21 +681,39 @@ namespace SRLogbook
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             string local = AppPaths.DefaultReferences(appDir);
-            if (Msg.Show("将先下载并检查默认资料库，成功后替换本地副本并保留旧副本备份。继续？", "默认资料库", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
             syncBusy = true; syncCard.Enabled = false;
-            lblSStatus.Text = "正在下载默认资料库…";
+            lblSStatus.Text = "正在读取默认资料库… / Reading default library…";
             try
             {
-                string backup = await Task.Run(() => FileTransfers.ReplaceFromDownload(local,
-                    stage => GitHubSync.DownloadDir(owner, repo, "default", branch, token, stage)));
-                int count = Directory.GetFiles(local, "*", SearchOption.AllDirectories).Length;
+                Dictionary<string, string> remote = await Task.Run(() => GitHubSync.ListFileShas(owner, repo, "default", branch, token));
+                if (remote.Count == 0) { lblSStatus.Text = "远端默认资料库为空 / The remote default library is empty."; return; }
+                List<string> names = new List<string>(remote.Keys);
+                names.Sort(StringComparer.OrdinalIgnoreCase);
+                List<string> picked = PickItems("下载默认资料库 / Download default library",
+                    "勾选要下载的文件；未勾选的文件不会被改动，被覆盖的旧文件会保留 .bak 备份。 / Check files to download; unchecked files stay untouched, overwritten ones keep a .bak copy.",
+                    Rows(names, n => n + (File.Exists(FileTransfers.Child(local, n)) ? "  ·  已存在 / exists" : "  ·  新增 / new")), false);
+                if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
+                Directory.CreateDirectory(local);
+                int n2 = 0, updated = 0;
+                foreach (string name in picked)
+                {
+                    string sha = null;
+                    byte[] bytes = await Task.Run(() => GitHubSync.GetFileBytes(owner, repo, "default/" + name, branch, token, out sha));
+                    if (bytes == null) continue;
+                    string dest = FileTransfers.Child(local, name);
+                    if (File.Exists(dest)) { File.Copy(dest, dest + ".bak-" + DateTime.Now.ToString("yyyyMMddHHmmss"), true); updated++; }
+                    string temp = dest + ".tmp-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                    File.WriteAllBytes(temp, bytes);
+                    if (File.Exists(dest)) File.Delete(dest);
+                    File.Move(temp, dest);
+                    n2++;
+                }
                 SaveSyncConfig();
-                if (backup != null) Log("旧默认资料库备份：" + backup);
-                lblSStatus.Text = "默认资料库已更新：" + count + " 个文件。";
-                await LogActivityAsync("下载默认资料库", count + " 个文件");
+                lblSStatus.Text = "默认资料库已更新 / Default library updated: " + n2 + (updated > 0 ? "（备份 / backups: " + updated + "）" : "");
+                await LogActivityAsync("下载默认资料库 / Download default library", n2 + " 个文件 / files");
                 Log(lblSStatus.Text); RebuildRefs();
             }
-            catch (Exception ex) { Log("下载默认资料库失败：" + ex.Message); lblSStatus.Text = "下载失败，原有默认资料库保留。"; }
+            catch (Exception ex) { Log("下载默认资料库失败 / Default library failed: " + ex.Message); lblSStatus.Text = "下载失败，原有默认资料库保留 / Failed; existing library kept."; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
         }
 
@@ -613,14 +723,17 @@ namespace SRLogbook
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             string folder = LoadPersonalFolder();
-            if (!Directory.Exists(folder)) { Msg.Show("请先在“团队研究”页选择个人文件夹；未选择时上传会失败。", "团队研究"); return; }
-            string[] files;
-            using (OpenFileDialog dialog = new OpenFileDialog())
-            {
-                dialog.Filter = "所有文件|*.*"; dialog.Multiselect = true;
-                if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                files = dialog.FileNames;
-            }
+            if (!Directory.Exists(folder)) { Msg.Show("请先在“团队研究”页选择个人文件夹；未选择时上传会失败 / Pick your personal folder on Team Research first.", "团队研究"); return; }
+            List<string> candidates = new List<string>();
+            string previewDir = Path.Combine(folder, "references");
+            if (Directory.Exists(previewDir))
+                foreach (string f in Directory.GetFiles(previewDir)) candidates.Add(f);
+            candidates.Sort(StringComparer.OrdinalIgnoreCase);
+            List<string> picked = PickItems("上传参考资料 / Upload references",
+                "勾选要上传的文件；也可以用“添加文件”从其他位置挑选。未勾选的不会上传。 / Check the files to upload, or add more from elsewhere; unchecked files are not sent.",
+                Rows(candidates, f => Path.GetFileName(f) + "  ·  " + Math.Max(1, new FileInfo(f).Length / 1024) + " KB"), true);
+            if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
+            string[] files = picked.ToArray();
             syncBusy = true; syncCard.Enabled = false;
             lblSStatus.Text = "正在上传参考资料…";
             try
@@ -666,11 +779,11 @@ namespace SRLogbook
                     if (!store.Refs.Exists(x => x.Path == local)) store.Refs.Add(new RefItem { Title = item.Title, Path = local, Kind = "file", Personal = true });
                 }
                 Persist(); RebuildRefs(); SaveSyncConfig();
-                Log("已上传 " + files.Length + " 个参考文件，保留此前参考资料清单。");
-                lblSStatus.Text = "参考资料上传完成。";
-                await LogActivityAsync("上传参考资料", files.Length + " 个文件");
+                Log("已上传 / Uploaded " + files.Length + " 个参考文件 / reference file(s).");
+                lblSStatus.Text = "参考资料上传完成 / References uploaded.";
+                await LogActivityAsync("上传参考资料 / Upload references", files.Length + " 个文件 / files");
             }
-            catch (Exception ex) { Log("参考资料上传失败（可能已上传部分文件）：" + ex.Message); lblSStatus.Text = "上传失败，详见日志。"; }
+            catch (Exception ex) { Log("参考资料上传失败（可能已上传部分文件）/ Upload failed: " + ex.Message); lblSStatus.Text = "上传失败，详见日志 / Upload failed; see log."; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
         }
 
@@ -680,7 +793,7 @@ namespace SRLogbook
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             syncBusy = true; syncCard.Enabled = false;
-            lblSStatus.Text = Lang.En ? "Reading your uploaded references…" : "正在读取你上传的参考资料…";
+            lblSStatus.Text = "正在读取你上传的参考资料… / Reading your uploaded references…";
             try
             {
                 string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
@@ -688,19 +801,19 @@ namespace SRLogbook
                 Dictionary<string, string> remote = await Task.Run(() => GitHubSync.ListFileShas(owner, repo, remoteDir, branch, token));
                 if (remote.Count == 0)
                 {
-                    lblSStatus.Text = Lang.En ? "You have not uploaded any references." : "团队区里没有你上传的参考资料。";
-                    Msg.Show(Lang.En ? "There are no uploaded references under your account." : "团队区里没有你上传的参考资料。", "撤除参考资料");
+                    lblSStatus.Text = "团队区里没有你上传的参考资料 / You have not uploaded any references.";
+                    Msg.Show("团队区里没有你上传的参考资料 / There are no uploaded references under your account.", "撤除参考资料");
                     return;
                 }
                 List<string> names = new List<string>(remote.Keys);
                 names.Sort(StringComparer.OrdinalIgnoreCase);
-                List<string> selected = ChooseFilesToRemove(names);
-                if (selected.Count == 0) { lblSStatus.Text = Lang.En ? "Cancelled." : "已取消。"; return; }
-                string ask = Lang.En
-                    ? "Permanently remove " + selected.Count + " uploaded reference file(s) from the team area? Other members will no longer be able to download them."
-                    : "将从团队区永久删除你上传的 " + selected.Count + " 个参考资料（其他人将无法再下载）。继续？";
+                List<string> selected = PickItems("撤除我上传的参考资料 / Remove my uploaded references",
+                    "勾选要从团队区删除的文件；只删除勾选项，其他人将无法再下载它们。 / Check the files to delete; only checked ones are removed.",
+                    Rows(names, n => n), false);
+                if (selected.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
+                string ask = "将从团队区永久删除你上传的 " + selected.Count + " 个参考资料（其他人将无法再下载）。继续？ / Permanently remove " + selected.Count + " uploaded file(s)?";
                 if (Msg.Show(ask, "撤除参考资料", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
-                { lblSStatus.Text = Lang.En ? "Cancelled." : "已取消。"; return; }
+                { lblSStatus.Text = "已取消 / Cancelled."; return; }
                 string personal = LoadPersonalFolder();
                 int removed = 0;
                 foreach (string name in selected)
@@ -718,15 +831,15 @@ namespace SRLogbook
                         }
                     }
                     removed++;
-                    Log((Lang.En ? "Removed: " : "已撤除：") + remotePath);
+                    Log("已撤除 / Removed: " + remotePath);
                 }
                 await UpdateReferencesManifest(owner, repo, branch, token, login, selected);
                 Persist(); RebuildRefs();
-                lblSStatus.Text = (Lang.En ? "Removed " : "已撤除 ") + removed + (Lang.En ? " uploaded reference(s)." : " 个参考资料。");
-                await LogActivityAsync("撤除参考资料", removed + " 个文件：" + string.Join("、", selected.ToArray()));
+                lblSStatus.Text = "已撤除 / Removed: " + removed;
+                await LogActivityAsync("撤除参考资料 / Remove references", removed + " 个文件 / files: " + string.Join("、", selected.ToArray()));
                 Msg.Show(lblSStatus.Text, "撤除参考资料");
             }
-            catch (Exception ex) { Log((Lang.En ? "Remove failed: " : "撤除参考资料失败：") + ex.Message); lblSStatus.Text = Lang.En ? "Remove failed; see the log." : "撤除失败，详见日志。"; }
+            catch (Exception ex) { Log("撤除参考资料失败 / Remove failed: " + ex.Message); lblSStatus.Text = "撤除失败，详见日志 / Remove failed; see log."; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
         }
 
@@ -862,7 +975,7 @@ namespace SRLogbook
             SyncConfig c = GitHubSync.LoadConfig(appDir);
             string login = sessionLogin, token = sessionToken;
             try { await Task.Run(() => ActivityLog.Append(c.owner, c.repo, c.branch, token, login, action, detail, toPublic)); }
-            catch (Exception ex) { Log((Lang.En ? "Activity log failed: " : "活动日志写入失败：") + ex.Message); }
+            catch (Exception ex) { Log("活动日志写入失败 / Activity log failed: " + ex.Message); }
         }
 
         private void Log(string text)
