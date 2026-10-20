@@ -350,6 +350,39 @@ namespace SRLogbook
             return true;
         }
 
+        public static Dictionary<string, string> ListFileShas(string owner, string repo, string path, string branch, string token)
+        {
+            Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                + "/contents/" + EncodePath(path) + "?ref=" + Uri.EscapeDataString(branch);
+            string json;
+            try { json = Request("GET", url, token, null); }
+            catch (GitHubApiException ex) { if (ex.StatusCode == 404) { CheckBranchAccess(owner, repo, branch, token); return map; } throw; }
+            object[] arr = SyncData.Serializer().Deserialize<object[]>(json);
+            if (arr != null)
+            {
+                foreach (object o in arr)
+                {
+                    Dictionary<string, object> d = o as Dictionary<string, object>;
+                    if (d == null) continue;
+                    if (d.ContainsKey("type") && Convert.ToString(d["type"]) == "file" && d.ContainsKey("name") && d.ContainsKey("sha"))
+                        map[Convert.ToString(d["name"])] = Convert.ToString(d["sha"]);
+                }
+            }
+            return map;
+        }
+
+        public static void DeleteFile(string owner, string repo, string path, string branch, string token, string sha)
+        {
+            Dictionary<string, object> body = new Dictionary<string, object>();
+            body["message"] = "remove: " + Path.GetFileName(path) + " " + DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            body["branch"] = branch;
+            body["sha"] = sha;
+            JavaScriptSerializer ser = SyncData.Serializer();
+            Request("DELETE", API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                + "/contents/" + EncodePath(path), token, ser.Serialize(body));
+        }
+
         private static string EncodePath(string path)
         {
             string[] parts = path.Replace("\\", "/").Split('/');
