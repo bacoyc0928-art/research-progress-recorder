@@ -7,11 +7,16 @@ using System.Xml;
 using SRLogbook;
 public class Verify002
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetThreadDpiAwarenessContext();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool AreDpiAwarenessContextsEqual(IntPtr a, IntPtr b);
     static int count;
     static void Check(bool ok, string message) { if (!ok) throw new Exception(message); Console.WriteLine("PASS " + message); count++; }
     static Entry E(string id, string date, string title) { return new Entry { Id=id, Updated=date, Title=title, Date="2026-10-20", Category="", Status="进行中", Progress=0, Content="" }; }
     [STAThread] public static void Main()
     {
+        Ui.EnableHighDpi();
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
         string root = AppDomain.CurrentDomain.BaseDirectory; LocalTransferChecks.Run(root);
         string older="2026-10-20T10:00:00.0000000Z", newer="2026-10-20T10:00:00.0000001Z";
         var a=new Store(); var b=new Store(); a.Entries.Add(E("a",older,"local")); b.Entries.Add(E("a",newer,"remote")); b.Entries.Add(E("b",older,"other"));
@@ -37,7 +42,9 @@ public class Verify002
         SyncData.WriteAtomic(Path.Combine(root,"workspace.json"),"{\"folder\":"+SyncData.Serializer().Serialize(root)+"}");
         SyncData.WriteAtomic(Path.Combine(root,"sync_config.json"),"{\"owner\":\"\",\"repo\":\"\",\"scope\":\"entries,categories\"}");
         File.WriteAllText(Path.Combine(root,"lang.txt"),"zh");
-        Application.EnableVisualStyles();
+        var dpiContext = GetThreadDpiAwarenessContext();
+        Console.WriteLine("DPI context: " + dpiContext.ToInt64());
+        Check(AreDpiAwarenessContextsEqual(dpiContext, new IntPtr(-4)), "Windows UI runs in PerMonitorV2 DPI mode");
         using(var f=new MainForm())
         {
             f.Show(); Application.DoEvents();

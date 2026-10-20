@@ -7,7 +7,7 @@ if ($destinationRoot.Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) 
 if (Test-Path -LiteralPath $destinationRoot) { throw 'Choose a new output directory to avoid mixing old files.' }
 $bundleRoot = Join-Path $destinationRoot 'SRCRec'
 New-Item -ItemType Directory -Path $bundleRoot -Force | Out-Null
-foreach ($file in @('app.ico','app.manifest','build.ps1','package-local.ps1','说明.md','说明.txt','分发与使用说明.md')) {
+foreach ($file in @('app.ico','app.manifest','app.config','README.md','build.ps1','package-local.ps1','说明.md','说明.txt','分发与使用说明.md')) {
     if (Test-Path -LiteralPath (Join-Path $sourceRoot $file)) { Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination $bundleRoot }
 }
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'src') -Destination (Join-Path $bundleRoot 'src') -Recurse

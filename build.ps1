@@ -17,5 +17,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Main application compilation failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Uninstaller compilation failed.' }
 Copy-Item -LiteralPath $appTemporary -Destination (Join-Path $OutputDirectory 'SRPRecorder2027.exe') -Force
 Copy-Item -LiteralPath $uninstallTemporary -Destination (Join-Path $OutputDirectory '卸载SRPRecorder2027.exe') -Force
+foreach ($name in @('SRPRecorder2027.exe.config','卸载SRPRecorder2027.exe.config')) {
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'app.config') -Destination (Join-Path $OutputDirectory $name) -Force
+}
 [IO.File]::WriteAllText((Join-Path $OutputDirectory '.srprec-install'), 'SRPRecorder2027 portable v1', [Text.UTF8Encoding]::new($false))
 Write-Host "Built local candidate in $OutputDirectory"
