@@ -237,18 +237,18 @@ namespace SRLogbook
                 foreach (string m in members)
                 {
                     if (m == login) continue;
-                    AddTeamCard(m, "团队成员", false);
+                    AddTeamCard(m, "项目成员", false);
                     roster.RemoveAll(x => string.Equals(x, m, StringComparison.OrdinalIgnoreCase));
                 }
                 int pending = 0;
                 foreach (string m in roster)
                 {
                     if (string.Equals(m, login, StringComparison.OrdinalIgnoreCase)) continue;
-                    AddTeamCard(m, "协作者（尚未上传）", false);
+                    AddTeamCard(m, "项目成员", false);
                     pending++;
                 }
                 teamFlow.ResumeLayout();
-                teamStatus.Text = "共 " + members.Count + " 位成员" + (pending > 0 ? "；另有 " + pending + " 位协作者尚未上传" : "") + (created ? "；已为 " + login + " 创建 team/" + login + "/" : "");
+                teamStatus.Text = "共 " + (members.Count + pending) + " 位项目成员" + (created ? "；已为 " + login + " 创建 team/" + login + "/" : "");
             }
             catch (Exception ex)
             {
