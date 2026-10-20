@@ -1,0 +1,68 @@
+name: Package 0.0.2 macOS DMGs
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dmg:
+    name: DMG (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+            sha256: 11966a2362f89bff5237349802d6e93b7eb576fa1ffeab8396609b19b2d92336
+          - runner: macos-15-intel
+            arch: x64
+            sha256: 7ca46bb28a97c4b21a6cc87e98adcdfdb13b5229f04c0cf4660ec0409bd45e54
+    steps:
+      - name: Download and verify published app
+        env:
+          ARCH: ${{ matrix.arch }}
+          EXPECTED_SHA256: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          zip="research-progress-recorder-0.0.2-macOS-${ARCH}.zip"
+          curl --fail --location --retry 3 --output "$zip" "https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.0.2/$zip"
+          printf '%s  %s\n' "$EXPECTED_SHA256" "$zip" | shasum -a 256 --check
+          mkdir dmg-root
+          ditto -x -k "$zip" dmg-root
+          codesign --verify --deep --strict --verbose=2 dmg-root/ResearchProgressRecorder.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' dmg-root/ResearchProgressRecorder.app/Contents/Info.plist)" = '0.0.2'
+      - name: Create and verify disk image
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          ln -s /Applications dmg-root/Applications
+          cat > dmg-root/INSTALL.txt <<'EOF'
+          Research Progress Recorder 0.0.2
+
+          Install: drag ResearchProgressRecorder.app to Applications, then eject this disk image.
+          Apple Silicon (M-series): arm64; Intel Mac: x64.
+          This app uses an ad-hoc signature and is not Apple notarized. Follow your organization's installation policy.
+          Downloads: https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest
+          Team data is private. Accept the research-data invitation and use your own GitHub token for sync.
+          EOF
+          image="research-progress-recorder-0.0.2-macOS-${ARCH}.dmg"
+          hdiutil create -volname 'Research Progress Recorder 0.0.2' -srcfolder dmg-root -ov -format UDZO -fs HFS+ "$image"
+          hdiutil verify "$image"
+          mountpoint="$RUNNER_TEMP/rpr-dmg"
+          mkdir -p "$mountpoint"
+          hdiutil attach "$image" -mountpoint "$mountpoint" -nobrowse -readonly
+          trap 'hdiutil detach "$mountpoint"' EXIT
+          test "$(readlink "$mountpoint/Applications")" = '/Applications'
+          codesign --verify --deep --strict --verbose=2 "$mountpoint/ResearchProgressRecorder.app"
+          "$mountpoint/ResearchProgressRecorder.app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
+          hdiutil detach "$mountpoint"
+          trap - EXIT
+          shasum -a 256 "$image" > "$image.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg-${{ matrix.arch }}
+          path: |
+            *.dmg
+            *.dmg.sha256
