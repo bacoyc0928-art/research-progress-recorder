@@ -158,6 +158,34 @@ class FileChannels:
             try: self.api.request('PUT', self.api.endpoint(path), body); return
             except urllib.error.HTTPError as error:
                 if attempt == 2 or error.code not in (409,422): raise
+    def remote_references(self):
+        login = self.identity()
+        rows = self.listing('team/' + login + '/references', True)
+        return login, {row['name']: row['sha'] for row in rows if row.get('type') == 'file' and row.get('sha')}
+    def remove_references(self, names, personal_folder=None):
+        login = self.identity(); names = [safe_name(n) for n in names]; count = 0
+        for name in names:
+            path = 'team/' + login + '/references/' + name
+            data = self.api.request('GET', self.api.endpoint(path) + '?ref=' + urllib.parse.quote(self.api.branch, safe=''))
+            body = {'message': 'remove: SRPRecorder2027 0.1.1', 'branch': self.api.branch, 'sha': data['sha']}
+            self.api.request('DELETE', self.api.endpoint(path), body)
+            if personal_folder:
+                local = Path(personal_folder) / 'references' / name
+                try:
+                    if local.is_file(): local.unlink()
+                except OSError:
+                    pass
+            count += 1
+        manifest = 'team/' + login + '/references.json'
+        for attempt in range(3):
+            old, sha = self.api.get(manifest)
+            if old is None: return count
+            gone = {n.casefold() for n in names}
+            rows = [x for x in old if not (x and (str(x.get('RelPath') or '').casefold() in gone or Path(str(x.get('Path') or '')).name.casefold() in gone))]
+            try: self.api.put(manifest, rows, sha); return count
+            except urllib.error.HTTPError as error:
+                if attempt == 2 or error.code not in (409,422): raise
+        return count
     def upload_progress(self, folder, protected_root):
         folder = no_links(folder); protected_root = no_links(protected_root)
         if folder == protected_root or folder in protected_root.parents: raise ValueError('Choose a dedicated progress folder, not the application data root or its parents')
