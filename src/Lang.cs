@@ -27,6 +27,7 @@ namespace SRLogbook
             { "下载成员内容到 References/<用户名>；上传时会建立本人的 team/<用户名>/ 档案。", "Team files download to References/<your login>/TeamConRef/<member>. Uploading creates your team/<login>/ profile." },
             { "已连接 GitHub 账号", "Connected to GitHub account" },
             { "团队成员", "Team member" },
+            { "项目成员", "Project member" },
             { "协作者（尚未上传）", "Collaborator (no upload yet)" },
             { "研究进展记录器", "Research Progress Recorder" },
             { "研究进展记录器 · Synchrotron Radiation Project 2027 · 0.0.2", "Research Progress Recorder · Synchrotron Radiation Project 2027 · 0.0.2" },
