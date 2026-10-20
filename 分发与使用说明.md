@@ -28,11 +28,13 @@ Windows：将 ZIP 完整解压到自己的可写文件夹，运行 SRCRec/SRPRec
 
 0.1.1 是**补丁**，不是新版本：不建 0.1.1 Release，只替换程序本体，不改变数据结构、配置格式和文件位置。装上它就是 0.1.1，不装仍是 0.1.0。
 
-| 平台 | 0.1.1 补丁（commit 固定地址） | 大小 / SHA-256 | 覆盖方式 |
-| --- | --- | --- | --- |
-| Windows | [Windows 补丁 ZIP](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/00ff2a7b8d/patches/0.1.1/research-progress-recorder-0.1.1-Windows.zip) | 247,878 B / `7b446657…941de7` | 解压后覆盖 SRCRec 内同名 exe 与 .exe.config |
-| Apple Silicon / M 系列 | [macOS arm64 补丁](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/e64779a4b6/patches/0.1.1/research-progress-recorder-0.1.1-macOS-arm64.dmg) | 12,634,653 B / `cd45374e…3a7e` | 打开 DMG，把 app 拖到 Applications 覆盖旧版 |
-| Intel Mac | [macOS x64 补丁](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/e6b4527119/patches/0.1.1/research-progress-recorder-0.1.1-macOS-x64.dmg) | 13,408,070 B / `0656dd4e…887` | 同上 |
+| 平台 | 0.1.1 补丁下载 | 覆盖方式 |
+| --- | --- | --- |
+| Windows | [Windows 补丁 ZIP](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/main/patches/0.1.1/research-progress-recorder-0.1.1-Windows.zip) | 解压后覆盖 SRCRec 内同名 exe 与 .exe.config |
+| Apple Silicon / M 系列 | [macOS arm64 补丁](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/main/patches/0.1.1/research-progress-recorder-0.1.1-macOS-arm64.dmg) | 打开 DMG，把 app 拖到 Applications 覆盖旧版 |
+| Intel Mac | [macOS x64 补丁](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/main/patches/0.1.1/research-progress-recorder-0.1.1-macOS-x64.dmg) | 同上 |
+
+三个文件的大小与 SHA-256 见仓库内 [`patches/0.1.1/SHA256SUMS.txt`](https://github.com/bacoyc0928-art/research-progress-recorder/blob/main/patches/0.1.1/SHA256SUMS.txt)。raw 直链走 CDN，刚更新过可能短暂返回旧文件；遇到时用该文件核对摘要，或稍后重试。
 
 补丁内容（0.1.1 相对 0.1.0）：
 - 登录改成窗口左下角独立面板，令牌只存在内存，每次启动重新登录；“退出”＝二次确认后关闭程序。
