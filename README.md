@@ -4,7 +4,7 @@ Windows 和 macOS 桌面客户端，共用私有数据仓库 bacoyc0928-art/rese
 
 ## 下载与启动
 
-从本仓库 Releases 下载。程序仓库邀请用于下载，数据仓库邀请用于同步，两份邀请均需接受。
+程序仓库现已公开，可直接从 [Releases](https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest) 下载，无需登录、邀请或令牌。研究数据仓库仍为私有，参与团队同步需接受数据仓库邀请并使用自己的令牌。公开访问不授予修改本仓库的权限。
 
 | 下载文件 | 平台 |
 | --- | --- |
@@ -44,4 +44,4 @@ Windows 在 PowerShell 执行 ./build.ps1。Mac 开发运行 python3 mac-client.
 ## English quick start
 
 Download the ZIP matching your platform from Releases. Mac bundles include their runtime; use arm64 for Apple Silicon, x64 for Intel. They are not Developer ID signed/notarized; follow your organization's installation policy.
-Accept both private repository invitations, choose a workspace, configure bacoyc0928-art/research-data / main / sync/research_log.json, and use your own GitHub token. Tokens stay in Windows Credential Manager or macOS Keychain. Sync selected records/categories manually; unselected remote data is preserved and deletions propagate. Personal channels upload metadata under your own GitHub login. Files themselves are not transferred. Keep local backups and upgrade all team devices to 0.0.2.
+The program repository is public; downloading requires no sign-in, invitation, or token. Accept the private data repository invitation to join team sync, choose a workspace, configure bacoyc0928-art/research-data / main / sync/research_log.json, and use your own GitHub token. Tokens stay in Windows Credential Manager or macOS Keychain. Sync selected records/categories manually; unselected remote data is preserved and deletions propagate. Personal channels upload metadata under your own GitHub login. Files themselves are not transferred. Keep local backups and upgrade all team devices to 0.0.2.
