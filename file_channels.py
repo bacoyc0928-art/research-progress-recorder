@@ -1,4 +1,4 @@
-"""0.1.0 file channels; no credentials on disk, no destructive replacement before success."""
+"""0.1.1 file channels; no credentials on disk, no destructive replacement before success."""
 from __future__ import annotations
 import base64
 import datetime as dt
@@ -153,7 +153,7 @@ class FileChannels:
             except urllib.error.HTTPError as error:
                 if error.code != 404: raise
                 sha = None
-            body = {'message': 'upload: SRPRecorder2027 0.1.0', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
+            body = {'message': 'upload: SRPRecorder2027 0.1.1', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
             if sha: body['sha'] = sha
             try: self.api.request('PUT', self.api.endpoint(path), body); return
             except urllib.error.HTTPError as error:
