@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -26,6 +26,8 @@ namespace SRLogbook
             { "每位成员使用自己的 GitHub 账号和访问密钥。可下载成员文件或默认资料库，并上传本人选择的参考文件、本地进度文件夹；每个文件最大 50 MiB。", "Use your own GitHub account/token. Download team/default files; upload selected references or your progress folder (50 MiB per file)." },
             { "下载成员内容到 References/<用户名>；上传时会建立本人的 team/<用户名>/ 档案。", "Team files download to References/<your login>/TeamConRef/<member>. Uploading creates your team/<login>/ profile." },
             { "已连接 GitHub 账号", "Connected to GitHub account" },
+            { "团队成员", "Team member" },
+            { "协作者（尚未上传）", "Collaborator (no upload yet)" },
             { "研究进展记录器", "Research Progress Recorder" },
             { "研究进展记录器 · Synchrotron Radiation Project 2027 · 0.0.2", "Research Progress Recorder · Synchrotron Radiation Project 2027 · 0.0.2" },
             { "文档可打开或归入类别；移除会将磁盘文件移入回收站。", "Open or categorize documents; Remove moves the file to Recycle Bin." },
@@ -33,7 +35,8 @@ namespace SRLogbook
             { "文件路径", "File path" },
             { "分支", "Branch" },
             { "类别名称", "Category name" },
-            { "访问密钥（仓库所有者可用 fine-grained PAT；个人仓库协作者需 classic PAT）", "Token (owner: fine-grained PAT; collaborators: classic PAT)" },
+            { "访问密钥（每个成员使用自己的令牌）", "Access token (each member uses their own)" },
+            { "外部协作者请用 classic PAT 并勾选 repo；fine-grained 令牌无法访问他人账号的私有仓库。", "External collaborators need a classic PAT with the repo scope; fine-grained tokens cannot reach another account's private repository." },
             { "请填写你自己的 GitHub 访问密钥。", "Enter your own GitHub token." },
             { "查看研究", "View Research" },
             { "仓库请填写为 owner/repo，例如 yourname/research-data。", "Repository must be owner/repo, e.g. yourname/research-data." },
@@ -260,9 +263,9 @@ namespace SRLogbook
 
 
 
-        private const string HelpZh = "SRPRecorder2027 · 0.1.0 公开测试版\r\n\r\n1. 团队研究\r\n配置自己的 GitHub 令牌后刷新成员；打开文件夹查看已下载的成员内容。浏览页面只读取，上传时才建立个人档案。\r\n\r\n2. 参考资料\r\nReferences/Default 是私有团队默认资料库，登录后下载，软件内只读；他人内容位于 References/<本人账号>/TeamConRef/<成员账号>。\r\n\r\n3. 本地进度\r\n选择专用进度文件夹，新建 Word 文档或打开文件夹编辑。默认位置为 SRCRec/PersonalWorkspaceSRRec。\r\n\r\n4. 团队同步\r\n填写数据仓库与本人令牌，点“验证并保存配置”。四个动作：下载他人内容、下载默认资料库、上传参考资料、上传本地进度。个人仓库协作者使用 classic PAT（repo 权限），令牌存 Windows 凭据管理器。\r\n下载先保存到临时目录，成功后替换目标，旧副本保留备份；失败或远端缺失不清空本地库。上传参考资料会上传所选文件及合并后的清单；上传进度递归上传专用文件夹，不自动删除远端旧文件。每个上传文件最大 50 MiB，不支持链接目录。\r\n\r\n5. 卸载与版本区别\r\n关闭主程序后运行“卸载SRPRecorder2027.exe”。默认仅移除程序，保留研究资料，配置另存到文档/SRPRecorder2027-数据备份。外部自选文件夹不删除。\r\nWindows 与 Mac 0.1.0 均支持文件传输；升级前备份，旧研究 JSON 保留。";
+        private const string HelpZh = "SRPRecorder2027 · 0.1.1 公开测试版\r\n\r\n1. 团队研究\r\n配置自己的 GitHub 令牌后刷新成员；打开文件夹查看已下载的成员内容。浏览页面只读取，上传时才建立个人档案。\r\n\r\n2. 参考资料\r\nReferences/Default 是私有团队默认资料库，登录后下载，软件内只读；他人内容位于 References/<本人账号>/TeamConRef/<成员账号>。\r\n\r\n3. 本地进度\r\n选择专用进度文件夹，新建 Word 文档或打开文件夹编辑。默认位置为 SRCRec/PersonalWorkspaceSRRec。\r\n\r\n4. 团队同步\r\n填写数据仓库与本人令牌，点“验证并保存配置”。四个动作：下载他人内容、下载默认资料库、上传参考资料、上传本地进度。个人仓库协作者使用 classic PAT（repo 权限），令牌存 Windows 凭据管理器。\r\n下载先保存到临时目录，成功后替换目标，旧副本保留备份；失败或远端缺失不清空本地库。上传参考资料会上传所选文件及合并后的清单；上传进度递归上传专用文件夹，不自动删除远端旧文件。每个上传文件最大 50 MiB，不支持链接目录。\r\n\r\n5. 卸载与版本区别\r\n关闭主程序后运行“卸载SRPRecorder2027.exe”。默认仅移除程序，保留研究资料，配置另存到文档/SRPRecorder2027-数据备份。外部自选文件夹不删除。\r\nWindows 与 Mac 0.1.0 均支持文件传输；升级前备份，旧研究 JSON 保留。";
 
-        private const string HelpEn = "SRPRecorder2027 · 0.1.0 Public Test\r\n\r\n1. Team Research\r\nConfigure your own GitHub token and refresh members. Open Folder shows downloaded team files. Refresh only reads; uploading creates your profile.\r\n\r\n2. References\r\nReferences/Default is a private team library; download it after signing in. Downloaded member files are under References/<your login>/TeamConRef/<member>.\r\n\r\n3. Local Progress\r\nChoose a dedicated folder; create Word documents and edit files there. Default: SRCRec/PersonalWorkspaceSRRec.\r\n\r\n4. Team Sync\r\nEnter the private data repository and your own token; click Validate & Save. Four actions: Download Team Files, Download Default Library, Upload References, Upload Local Progress. Personal-repository collaborators use a classic PAT with repo scope; tokens stay in Windows Credential Manager.\r\nDownloads use staging and preserve the previous folder as a backup. Failures/empty results do not erase your files. Reference uploads preserve earlier manifest entries. Progress uploads recursively copy the dedicated folder and do not delete older remote files. Maximum 50 MiB per uploaded file; linked folders are rejected.\r\n\r\n5. Uninstall and version differences\r\nClose the app and run the uninstaller. Research data stays in place by default; configurations are backed up in Documents/SRPRecorder2027-数据备份. External folders are never removed.\r\nWindows and Mac 0.1.0 support file transfers. Back up existing data and upgrade all team clients. Existing 0.0.2 JSON data is preserved.";
+        private const string HelpEn = "SRPRecorder2027 · 0.1.1 Public Test\r\n\r\n1. Team Research\r\nConfigure your own GitHub token and refresh members. Open Folder shows downloaded team files. Refresh only reads; uploading creates your profile.\r\n\r\n2. References\r\nReferences/Default is a private team library; download it after signing in. Downloaded member files are under References/<your login>/TeamConRef/<member>.\r\n\r\n3. Local Progress\r\nChoose a dedicated folder; create Word documents and edit files there. Default: SRCRec/PersonalWorkspaceSRRec.\r\n\r\n4. Team Sync\r\nEnter the private data repository and your own token; click Validate & Save. Four actions: Download Team Files, Download Default Library, Upload References, Upload Local Progress. Personal-repository collaborators use a classic PAT with repo scope; tokens stay in Windows Credential Manager.\r\nDownloads use staging and preserve the previous folder as a backup. Failures/empty results do not erase your files. Reference uploads preserve earlier manifest entries. Progress uploads recursively copy the dedicated folder and do not delete older remote files. Maximum 50 MiB per uploaded file; linked folders are rejected.\r\n\r\n5. Uninstall and version differences\r\nClose the app and run the uninstaller. Research data stays in place by default; configurations are backed up in Documents/SRPRecorder2027-数据备份. External folders are never removed.\r\nWindows and Mac 0.1.0 support file transfers. Back up existing data and upgrade all team clients. Existing 0.0.2 JSON data is preserved.";
 
         public static void Apply(Control root)
         {
