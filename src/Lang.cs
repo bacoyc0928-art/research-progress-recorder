@@ -41,7 +41,7 @@ namespace SRLogbook
             { "打开本地资料文件夹", "Open Progress Folder" },
             { "所有本地进度内容都存放在这个文件夹；未选择时无法进入“团队同步”。", "Create documents here, then upload this folder from Team Sync." },
             { "每位成员使用自己的 GitHub 账号和访问密钥。可下载成员文件或默认资料库，并上传本人选择的参考文件、本地进度文件夹；每个文件最大 50 MiB。", "Use your own GitHub account/token. Download team/default files; upload selected references or your progress folder (50 MiB per file)." },
-            { "成员内容下载到 References/<账号>/TeamConRef/。", "Team files go to References/<login>/TeamConRef/。" },
+            { "他人内容下载到 PersonalWorkspaceSRRec\\Public_Temp（退出即清空）。", "Others' files go to PersonalWorkspaceSRRec\\Public_Temp (cleared on exit)." },
             { "已连接 GitHub 账号", "Connected to GitHub account" },
             { "团队成员", "Team member" },
             { "请先在左下角登录 GitHub 账号。", "Sign in at the bottom-left first." },
@@ -285,7 +285,7 @@ namespace SRLogbook
 
 
 
-        private const string HelpBoth = "SRPRecorder2027 · 0.2.1 · 中英双语界面 / Bilingual UI\r\n\r\n" +
+        private const string HelpBoth = "SRPRecorder2027 · 0.2.2 · 中英双语界面 / Bilingual UI\r\n\r\n" +
             "1. 登录 / Sign in\r\n" +
             "在窗口左下角粘贴自己的 GitHub 访问密钥，点“登录 / Sign In”。令牌只保存在内存，每次启动都要重新登录；未登录时不能进入参考文献页，也不能发起任何同步、发帖或改动。\r\n" +
             "Paste your own GitHub token at the bottom-left of the window and press Sign In. The token stays in memory only, so every launch needs a fresh sign-in. While signed out you cannot open References or start any sync, post or edit.\r\n\r\n" +
