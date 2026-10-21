@@ -1,4 +1,4 @@
-name: Build 0.2.2 packages
+name: Build 0.2.3 packages
 on:
   workflow_dispatch:
 permissions:
@@ -13,17 +13,17 @@ jobs:
         shell: pwsh
         run: |
           ./test-local.ps1 -TestDirectory "$env:RUNNER_TEMP/offline-tests"
-          ./package-local.ps1 -Destination "$env:RUNNER_TEMP/package-022"
-          $package = "$env:RUNNER_TEMP/package-022/SRCRec"
-          if ((Get-Item "$package/SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.2.2.0') { throw 'Incorrect application version' }
-          if ((Get-Item "$package/卸载SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.2.2.0') { throw 'Incorrect uninstaller version' }
+          ./package-local.ps1 -Destination "$env:RUNNER_TEMP/package-023"
+          $package = "$env:RUNNER_TEMP/package-023/SRCRec"
+          if ((Get-Item "$package/SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.2.3.0') { throw 'Incorrect application version' }
+          if ((Get-Item "$package/卸载SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.2.3.0') { throw 'Incorrect uninstaller version' }
           $unexpected = Get-ChildItem $package -Recurse -File | Where-Object { $_.Extension -in '.pdf','.docx','.json' }
           if ($unexpected) { throw 'Private data entered the public package' }
-          Copy-Item "$env:RUNNER_TEMP/package-022/research-progress-recorder-0.2.2-Windows.zip" .
+          Copy-Item "$env:RUNNER_TEMP/package-023/research-progress-recorder-0.2.3-Windows.zip" .
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-0.2.2
-          path: research-progress-recorder-0.2.2-Windows.zip
+          name: windows-0.2.3
+          path: research-progress-recorder-0.2.3-Windows.zip
           if-no-files-found: error
   macos:
     timeout-minutes: 25
@@ -51,8 +51,8 @@ jobs:
           python -m pip install pyinstaller==6.22.3
           python -m PyInstaller --noconfirm --clean --windowed --name ResearchProgressRecorder --osx-bundle-identifier org.syncresearch.recorder mac-client.py
           app=dist/ResearchProgressRecorder.app
-          plutil -replace CFBundleShortVersionString -string 0.2.2 "$app/Contents/Info.plist"
-          plutil -insert CFBundleVersion -string 0.2.2 "$app/Contents/Info.plist"
+          plutil -replace CFBundleShortVersionString -string 0.2.3 "$app/Contents/Info.plist"
+          plutil -insert CFBundleVersion -string 0.2.3 "$app/Contents/Info.plist"
           codesign --force --deep --sign - "$app"
           "$app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
           codesign --verify --deep --strict --verbose=2 "$app"
@@ -65,8 +65,8 @@ jobs:
           cp README.md dmg-root/README.md
           cp 卸载工具/uninstall-macos.command dmg-root/uninstall-macos.command
           chmod +x dmg-root/uninstall-macos.command
-          image=research-progress-recorder-0.2.2-macOS-${{ matrix.arch }}.dmg
-          hdiutil create -volname 'Research Progress Recorder 0.2.2' -srcfolder dmg-root -format UDZO -fs HFS+ "$image"
+          image=research-progress-recorder-0.2.3-macOS-${{ matrix.arch }}.dmg
+          hdiutil create -volname 'Research Progress Recorder 0.2.3' -srcfolder dmg-root -format UDZO -fs HFS+ "$image"
           hdiutil verify "$image"
           mount="$RUNNER_TEMP/verify-dmg"
           mkdir "$mount"
@@ -75,12 +75,12 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$mount/ResearchProgressRecorder.app"
           "$mount/ResearchProgressRecorder.app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
           test -x "$mount/uninstall-macos.command"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/ResearchProgressRecorder.app/Contents/Info.plist")" = '0.2.2'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/ResearchProgressRecorder.app/Contents/Info.plist")" = '0.2.3'
           shasum -a 256 "$image"
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}-0.2.2
-          path: research-progress-recorder-0.2.2-macOS-${{ matrix.arch }}.dmg
+          name: macos-${{ matrix.arch }}-0.2.3
+          path: research-progress-recorder-0.2.3-macOS-${{ matrix.arch }}.dmg
           if-no-files-found: error
 
   publish:
@@ -96,18 +96,18 @@ jobs:
       - name: Stage release assets and checksums
         run: |
           mkdir -p release-assets
-          cp release-assets/staged/windows-0.2.2/research-progress-recorder-0.2.2-Windows.zip release-assets/
-          cp release-assets/staged/macos-arm64-0.2.2/research-progress-recorder-0.2.2-macOS-arm64.dmg release-assets/
-          cp release-assets/staged/macos-x64-0.2.2/research-progress-recorder-0.2.2-macOS-x64.dmg release-assets/
+          cp release-assets/staged/windows-0.2.3/research-progress-recorder-0.2.3-Windows.zip release-assets/
+          cp release-assets/staged/macos-arm64-0.2.3/research-progress-recorder-0.2.3-macOS-arm64.dmg release-assets/
+          cp release-assets/staged/macos-x64-0.2.3/research-progress-recorder-0.2.3-macOS-x64.dmg release-assets/
           cp RELEASE_NOTES.md release-assets/
           cd release-assets
-          sha256sum research-progress-recorder-0.2.2-Windows.zip research-progress-recorder-0.2.2-macOS-arm64.dmg research-progress-recorder-0.2.2-macOS-x64.dmg > SHA256SUMS.txt
+          sha256sum research-progress-recorder-0.2.3-Windows.zip research-progress-recorder-0.2.3-macOS-arm64.dmg research-progress-recorder-0.2.3-macOS-x64.dmg > SHA256SUMS.txt
           cd ..
-          gh release view v0.2.2 >/dev/null 2>&1 || gh release create v0.2.2 --title 'SRPRecorder2027 0.2.2 · 公开测试版 / Public Test' --notes-file RELEASE_NOTES.md
-          gh release upload v0.2.2 \
-            release-assets/research-progress-recorder-0.2.2-Windows.zip \
-            release-assets/research-progress-recorder-0.2.2-macOS-arm64.dmg \
-            release-assets/research-progress-recorder-0.2.2-macOS-x64.dmg \
+          gh release view v0.2.3 >/dev/null 2>&1 || gh release create v0.2.3 --title 'SRPRecorder2027 0.2.3 · 公开测试版 / Public Test' --notes-file RELEASE_NOTES.md
+          gh release upload v0.2.3 \
+            release-assets/research-progress-recorder-0.2.3-Windows.zip \
+            release-assets/research-progress-recorder-0.2.3-macOS-arm64.dmg \
+            release-assets/research-progress-recorder-0.2.3-macOS-x64.dmg \
             release-assets/SHA256SUMS.txt \
             release-assets/RELEASE_NOTES.md \
             --clobber
