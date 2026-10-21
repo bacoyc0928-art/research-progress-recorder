@@ -75,7 +75,7 @@ Windows 运行“卸载SRPRecorder2027.exe”；默认保留研究文件，配�
 
 Windows：`./test-local.ps1 -TestDirectory <新建的独立测试目录>`；`./package-local.ps1 -Destination <新的输出目录>` 生成干净的 Windows ZIP。`build.ps1` 现在会自行清理临时编译目录。默认不打包任何真实默认资料，`-IncludePrivateDefault` 仅供私有本地用途，禁止将其输出作为公开安装包。
 
-Mac：`python -m unittest test_mac_client.py test_file_channels.py -v` 和 `python mac-client.py --smoke-test`。GitHub Actions `Build 0.2.1 packages` 只读权限、手动触发，在 Windows、Apple Silicon 和 Intel Mac 分别验证并打包。发布由维护者手动上传，流程没有数据仓库密钥；补丁产物放在 `patches/0.1.1/`。
+Mac：`python -m unittest test_mac_client.py test_file_channels.py -v` 和 `python mac-client.py --smoke-test`。GitHub Actions `Build 0.2.1 packages` 手动触发，在 Windows、Apple Silicon 和 Intel Mac 分别测试并打包；测试全部通过后，由独立发布任务使用仅限公开程序仓库的短期 `GITHUB_TOKEN` 上传 Release。构建任务只读，流程不使用数据仓库密钥；补丁产物放在 `patches/0.1.1/`。
 
 仍需真实同僚完成两账号、两设备、首次安装、首次钥匙串授权验收。自动化检查不代表没有缺陷。反馈时附系统版本、芯片型号、软件版本、按钮名称和去除令牌/研究内容后的错误信息。404 下载问题请附完整下载 URL。
 
