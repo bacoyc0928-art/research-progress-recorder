@@ -12,6 +12,27 @@ m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 OLD='2026-10-20T10:00:00.0000000Z'; NEW='2026-10-20T10:00:00.0000001Z'
 def entry(ident,title='A',updated=OLD): return dict(Id=ident,Title=title,Updated=updated,Category='',Content='',Date='2026-10-20',Progress=0)
 class SyncTests(unittest.TestCase):
+    def test_021_upgrade_preserves_020_user_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home=Path(tmp)
+            (home/'data_version.txt').write_text('0.2.0',encoding='utf-8')
+            for name in ('config.json','research_log.json','workspace.json','sync_config.json'):
+                (home/name).write_text('preserve-'+name,encoding='utf-8')
+            default=home/'SRCRec'/'References'/'Default'; default.mkdir(parents=True)
+            (default/'team-book.pdf').write_bytes(b'test')
+            member=home/'SRCRec'/'References'/'alice'/'TeamConRef'; member.mkdir(parents=True)
+            (member/'notes.txt').write_text('test',encoding='utf-8')
+            (member.parent/'references.json').write_text('[]',encoding='utf-8')
+            client=m.Client.__new__(m.Client); client.home=home
+            client.clean_previous_data()
+            self.assertEqual((home/'config.json').read_text(encoding='utf-8'),'preserve-config.json')
+            self.assertEqual((home/'research_log.json').read_text(encoding='utf-8'),'preserve-research_log.json')
+            self.assertTrue((default/'team-book.pdf').exists())
+            self.assertTrue((member/'notes.txt').exists())
+            self.assertTrue((member.parent/'references.json').exists())
+            self.assertEqual((home/'data_version.txt').read_text(encoding='utf-8'),'0.2.0')
+            self.assertFalse((home/'upgrade_cleanup.log').exists())
+
     def test_merge_and_subseconds(self):
         a=m.empty(); b=m.empty(); a['Entries']=[entry('a')]; b['Entries']=[entry('a','B',NEW),entry('b')]
         out=m.merge(a,b,['entries']); self.assertEqual([e['Title'] for e in out['Entries']],['B','A']); self.assertEqual(a['Entries'][0]['Title'],'A')

@@ -25,7 +25,7 @@ New-Item -ItemType Directory -Path (Join-Path $bundleRoot 'PersonalWorkspaceSRRe
 if ($LASTEXITCODE -ne 0) { throw 'Candidate build failed.' }
 $checksums = @(Get-FileHash -LiteralPath (Join-Path $bundleRoot 'SRPRecorder2027.exe'),(Join-Path $bundleRoot '卸载SRPRecorder2027.exe') -Algorithm SHA256 | ForEach-Object { $_.Hash.ToLowerInvariant() + '  ' + [IO.Path]::GetFileName($_.Path) })
 [IO.File]::WriteAllLines((Join-Path $bundleRoot 'SHA256SUMS.txt'), $checksums, [Text.UTF8Encoding]::new($false))
-$archive = Join-Path $destinationRoot 'research-progress-recorder-0.2.0-Windows.zip'
+$archive = Join-Path $destinationRoot 'research-progress-recorder-0.2.1-Windows.zip'
 # Explicit relative entry names preserve the single SRCRec root, the marker, and Unicode filenames.
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem

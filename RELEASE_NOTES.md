@@ -1,4 +1,4 @@
-# SRPRecorder2027 0.2.0 · 公开测试版 / Public Test
+# SRPRecorder2027 0.2.1 · 公开测试版 / Public Test
 
 发布日期 / Released: 2026-10-20
 
@@ -6,9 +6,9 @@
 
 | 系统 | 文件 | 要求 |
 | --- | --- | --- |
-| Windows 10/11 | research-progress-recorder-0.2.0-Windows.zip | .NET Framework 4.8 |
-| Apple Silicon / M 系列 | research-progress-recorder-0.2.0-macOS-arm64.dmg | macOS 14+ |
-| Intel Mac | research-progress-recorder-0.2.0-macOS-x64.dmg | macOS 15+ |
+| Windows 10/11 | research-progress-recorder-0.2.1-Windows.zip | .NET Framework 4.8 |
+| Apple Silicon / M 系列 | research-progress-recorder-0.2.1-macOS-arm64.dmg | macOS 14+ |
+| Intel Mac | research-progress-recorder-0.2.1-macOS-x64.dmg | macOS 15+ |
 
 三个文件都在本 Release 的 Assets 里，另有 `SHA256SUMS.txt` 可核对摘要。下载不需要登录，也不需要令牌。
 
@@ -27,6 +27,16 @@
 - 保留：你自己的本地进度文件夹及其中的 Word/PDF 文档、个人文件夹 `references/` 里的上传副本。
 - 记录：删除项写入程序目录的 `upgrade_cleanup.log`，版本标记写入 `data_version.txt`（之后启动不再清理）。
 - 需要做的事：重新选择工作文件夹与本地进度文件夹、重新登录（令牌只在内存），登录后点“下载默认资料库”把默认库重新拉下来。
+
+升级到 0.2.1 时，**不要再次清理数据**：Windows 和 macOS 均保留已经写入 `data_version.txt` 的 0.2.0 标记，因此工作文件夹、配置、下载缓存及其余本地数据会继续保留。每次启动仍需重新登录，因为令牌只保存在内存。
+
+## 0.2.1 修复
+
+- Quick Post 在最小窗口下按可用宽度排布输入框与按钮，不再把按钮推出卡片；页面卡片会跟随窗口缩放。
+- 帮助页的中英按钮按可用空间换行并随文字调整宽度，标题栏只在团队研究页显示工作文件夹操作，避免其他页面标题被挤窄。
+- 团队同步页的仓库说明、状态和日志框随窗口尺寸调整，不会越过卡片边界。
+- 本地进度列表缩短修改时间列标题，保留完整时间值。
+- macOS 将应用版本与数据迁移版本分开；0.2.1 不会因版本号变化而重复清除 0.2.0 数据。
 
 ## 0.2.0 主要变化
 

@@ -18,6 +18,12 @@ public class Verify002
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         string root = AppDomain.CurrentDomain.BaseDirectory; LocalTransferChecks.Run(root);
+        string upgradeFixture = Path.Combine(root, "upgrade-fixture");
+        Directory.CreateDirectory(upgradeFixture);
+        File.WriteAllText(Path.Combine(upgradeFixture, "data_version.txt"), CleanUpgrade.Target);
+        File.WriteAllText(Path.Combine(upgradeFixture, "sync_config.json"), "existing-user-config");
+        Check(!CleanUpgrade.Run(upgradeFixture) && File.Exists(Path.Combine(upgradeFixture, "sync_config.json")),
+            "0.2.0 cleanup marker preserves existing Windows user data on 0.2.1 upgrade");
         string older="2026-10-20T10:00:00.0000000Z", newer="2026-10-20T10:00:00.0000001Z";
         var a=new Store(); var b=new Store(); a.Entries.Add(E("a",older,"local")); b.Entries.Add(E("a",newer,"remote")); b.Entries.Add(E("b",older,"other"));
         SyncData.Merge(a,b,"entries"); Check(a.Entries.Count==2 && a.Entries[0].Title=="remote","merge newer records and preserve independent entries");
@@ -51,6 +57,39 @@ public class Verify002
             for(int i=0;i<6;i++) { f.SetPagePublic(i); Application.DoEvents(); }
             Lang.En=true; Lang.Apply(f); f.SetPagePublic(3); Application.DoEvents(); f.CaptureTo(Path.Combine(root,"windows-en.png"));
             Lang.En=false; Lang.Apply(f); f.SetPagePublic(0); Application.DoEvents(); f.CaptureTo(Path.Combine(root,"windows-zh.png"));
+            f.SetSizePublic(1020, 680); Application.DoEvents();
+            var fields = BindingFlags.NonPublic | BindingFlags.Instance;
+            f.SetPagePublic(0); Application.DoEvents();
+            var workspaceAction = (Button)typeof(MainForm).GetField("btnWorkspaceHeader", fields).GetValue(f);
+            var openWorkspaceAction = (Button)typeof(MainForm).GetField("btnOpenWorkspaceHeader", fields).GetValue(f);
+            Check(workspaceAction.Visible && openWorkspaceAction.Visible, "workspace actions remain available on Team Research");
+            f.SetPagePublic(1); Application.DoEvents();
+            Check(!workspaceAction.Visible && !openWorkspaceAction.Visible, "unrelated workspace actions are hidden on other pages");
+            var pagePanels = (Panel[])typeof(MainForm).GetField("pages", fields).GetValue(f);
+            var postCard = (Panel)typeof(MainForm).GetField("postCard", fields).GetValue(f);
+            var postComposer = (TextBox)typeof(MainForm).GetField("postComposer", fields).GetValue(f);
+            var postPublish = (Button)typeof(MainForm).GetField("postPublishButton", fields).GetValue(f);
+            var postHistory = (Button)typeof(MainForm).GetField("postHistoryButton", fields).GetValue(f);
+            Check(pagePanels[1].ClientRectangle.Contains(postCard.Bounds) && postCard.ClientRectangle.Contains(postComposer.Bounds) && postCard.ClientRectangle.Contains(postPublish.Bounds) &&
+                postCard.ClientRectangle.Contains(postHistory.Bounds), "Quick Post controls fit at the minimum supported window size");
+            f.SetPagePublic(5); Application.DoEvents();
+            var toolbar = (FlowLayoutPanel)typeof(MainForm).GetField("helpToolbar", fields).GetValue(f);
+            foreach (Control button in toolbar.Controls) Application.DoEvents();
+            bool helpButtonsFit = toolbar.Controls.Count == 4;
+            foreach (Control button in toolbar.Controls)
+                helpButtonsFit = helpButtonsFit && toolbar.ClientRectangle.Contains(button.Bounds);
+            Check(helpButtonsFit, "all four bilingual Help toolbar buttons fit without clipping");
+            f.SetPagePublic(4); Application.DoEvents();
+            var syncCard = (Panel)typeof(MainForm).GetField("syncCard", fields).GetValue(f);
+            Check(pagePanels[4].ClientRectangle.Contains(syncCard.Bounds), "Team Sync card fits inside the page at minimum size");
+            string[] syncFields = new string[] { "boundLabel", "syncHint", "lblSStatus", "txtSLog" };
+            bool syncContentFits = true;
+            foreach (string name in syncFields)
+            {
+                Control control = (Control)typeof(MainForm).GetField(name, fields).GetValue(f);
+                syncContentFits = syncContentFits && syncCard.ClientRectangle.Contains(control.Bounds);
+            }
+            Check(syncContentFits, "Team Sync text and log fit inside the minimum-size card");
             var sf=typeof(MainForm).GetField("store",BindingFlags.NonPublic|BindingFlags.Instance); var data=(Store)sf.GetValue(f);
             Check(data.Entries.Count==0 && data.Categories.Count==0,"fresh install has no personal seed data");
             f.Close();
