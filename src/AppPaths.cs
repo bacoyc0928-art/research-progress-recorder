@@ -17,8 +17,46 @@ namespace SRLogbook
             Directory.CreateDirectory(root);
             Directory.CreateDirectory(Path.Combine(root, "References"));
             Directory.CreateDirectory(Path.Combine(root, "References", "Default"));
+            // 默认本地进度文件夹：PersonalWorkspaceSRRec，内含三个子文件夹（用户 2026-10-21 要求）。
             Directory.CreateDirectory(Path.Combine(root, "PersonalWorkspaceSRRec"));
+            Directory.CreateDirectory(Path.Combine(root, "PersonalWorkspaceSRRec", "Mat_Local"));
+            Directory.CreateDirectory(Path.Combine(root, "PersonalWorkspaceSRRec", "Reference"));
+            Directory.CreateDirectory(Path.Combine(root, "PersonalWorkspaceSRRec", "Public_Temp"));
             return root;
+        }
+
+        /// <summary>非参考资料的个人本地资料（上传本地进度的默认来源）。</summary>
+        public static string MatLocal(string appDir)
+        {
+            Ensure(appDir);
+            return Path.Combine(Root(appDir), "PersonalWorkspaceSRRec", "Mat_Local");
+        }
+
+        /// <summary>个人参考资料（上传参考资料的默认来源，也显示在参考资料页）。</summary>
+        public static string ReferenceDir(string appDir)
+        {
+            Ensure(appDir);
+            return Path.Combine(Root(appDir), "PersonalWorkspaceSRRec", "Reference");
+        }
+
+        /// <summary>他人上传内容的临时下载区：启动时清空、退出时清空。</summary>
+        public static string PublicTemp(string appDir)
+        {
+            Ensure(appDir);
+            return Path.Combine(Root(appDir), "PersonalWorkspaceSRRec", "Public_Temp");
+        }
+
+        /// <summary>清空 Public_Temp（保留文件夹本身）。</summary>
+        public static void ClearPublicTemp(string appDir)
+        {
+            try
+            {
+                string dir = PublicTemp(appDir);
+                if (!Directory.Exists(dir)) return;
+                foreach (string f in Directory.GetFiles(dir)) { try { File.Delete(f); } catch { } }
+                foreach (string d in Directory.GetDirectories(dir)) { try { Directory.Delete(d, true); } catch { } }
+            }
+            catch { }
         }
 
         public static string DefaultReferences(string appDir)
