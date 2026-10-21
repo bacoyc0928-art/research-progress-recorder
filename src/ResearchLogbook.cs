@@ -422,9 +422,13 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.2";
-            this.ClientSize = new Size(1180, 730);
-            this.MinimumSize = new Size(1020, 680);
+            this.Text = "SRPRecorder2027 · 0.2.3";
+            // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
+            Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
+            int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
+            int fitH = Math.Max(Ui.S(520), work.Height - Ui.S(60));
+            this.ClientSize = new Size(Math.Min(Ui.S(1180), fitW), Math.Min(Ui.S(730), fitH));
+            this.MinimumSize = new Size(Math.Min(Ui.S(1020), fitW), Math.Min(Ui.S(680), fitH));
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Theme.Bg;
             this.Font = Theme.F(10f);
@@ -2265,6 +2269,7 @@ namespace SRLogbook
             try { CleanUpgrade.Run(AppDomain.CurrentDomain.BaseDirectory); } catch { }
             // Public_Temp 只放本次运行临时下载的他人内容：启动时先清空。
             try { AppPaths.ClearPublicTemp(AppDomain.CurrentDomain.BaseDirectory); } catch { }
+            try { AppPaths.MigrateLegacyReferences(AppDomain.CurrentDomain.BaseDirectory); } catch { }
             MainForm f;
             try
             {
