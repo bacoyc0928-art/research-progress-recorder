@@ -422,7 +422,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.1";
+            this.Text = "SRPRecorder2027 · 0.2.2";
             this.ClientSize = new Size(1180, 730);
             this.MinimumSize = new Size(1020, 680);
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -448,7 +448,7 @@ namespace SRLogbook
             {
                 lstEntries.SelectedIndex = 0;
             }
-            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (syncBusy || teamLoading) { e.Cancel = true; return; } saveTimer.Stop(); SaveCurrent(); };
+            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (syncBusy || teamLoading) { e.Cancel = true; return; } saveTimer.Stop(); SaveCurrent(); AppPaths.ClearPublicTemp(appDir); };
             Lang.Apply(this);
         }
 
@@ -1571,17 +1571,73 @@ namespace SRLogbook
                 List<string> read = await Task.Run(() => Posts.ReadIds(c.owner, c.repo, c.branch, token, login));
                 int unread = 0;
                 foreach (PostItem p in posts) if (!read.Contains(p.Id)) unread++;
-                sig[1] = "posts:" + unread;
                 List<string> members = await Task.Run(() => GitHubSync.ListDir(c.owner, c.repo, "team", c.branch, token));
                 members.Sort(StringComparer.OrdinalIgnoreCase);
-                sig[0] = "team:" + string.Join(",", members.ToArray());
                 List<ActivityEntry> pub = await Task.Run(() => ActivityLog.Read(c.owner, c.repo, c.branch, token, ActivityLog.PublicPath));
+                string helpSha = "-";
+                try
+                {
+                    Dictionary<string, string> help = await Task.Run(() => GitHubSync.ListFileShas(c.owner, c.repo, "help", c.branch, token));
+                    if (help.ContainsKey("help.md")) helpSha = help["help.md"];
+                }
+                catch { }
+                sig[0] = "team:" + string.Join(",", members.ToArray());
                 sig[4] = "act:" + pub.Count + ":" + (pub.Count == 0 ? "-" : pub[pub.Count - 1].Time);
+                // 红点跟着“日志说的是哪个栏目”走，而不是一律红在团队同步。
+                sig[1] = "posts:" + unread + "|" + Fingerprint(pub, "发布帖子", "删除帖子");
+                sig[2] = "refs:" + Fingerprint(pub, "上传参考资料", "撤除参考资料", "下载默认资料库");
+                sig[3] = "progress:" + Fingerprint(pub, "上传本地进度") + "|" + LocalFolderSignature();
+                sig[5] = "help:" + helpSha + "|" + Fingerprint(pub, "更新使用说明");
             }
             catch { return; }
             newsNow.Clear();
             foreach (KeyValuePair<int, string> kv in sig) newsNow[kv.Key] = kv.Value;
             ApplyBadges();
+        }
+
+        /// <summary>活动日志里“属于某个栏目”的条目指纹：条数 + 最后一条时间；只有该栏目的日志变化才会变。</summary>
+        private static string Fingerprint(List<ActivityEntry> entries, params string[] actions)
+        {
+            int count = 0;
+            string last = "-";
+            foreach (ActivityEntry e in entries)
+            {
+                if (e == null || string.IsNullOrEmpty(e.Action)) continue;
+                foreach (string a in actions)
+                {
+                    if (e.Action.IndexOf(a, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        count++;
+                        last = e.Time;
+                        break;
+                    }
+                }
+            }
+            return count + ":" + last;
+        }
+
+        /// <summary>本地进度文件夹（Mat_Local / Reference）的文件数与最新修改时间，用于本地进度栏目的红点。</summary>
+        private string LocalFolderSignature()
+        {
+            try
+            {
+                string folder = LoadProgressFolder();
+                if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return "none";
+                int n = 0;
+                long ticks = 0;
+                foreach (string sub in new string[] { "Mat_Local", "Reference" })
+                {
+                    string dir = Path.Combine(folder, sub);
+                    if (!Directory.Exists(dir)) continue;
+                    foreach (string f in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                    {
+                        n++;
+                        try { long t = File.GetLastWriteTimeUtc(f).Ticks; if (t > ticks) ticks = t; } catch { }
+                    }
+                }
+                return n + ":" + ticks;
+            }
+            catch { return "err"; }
         }
 
         private void StartNewsTimer()
@@ -1780,6 +1836,7 @@ namespace SRLogbook
         private void RebuildRefs()
         {
             if (flow == null || !uiReady) return;
+            SyncRefsFromFolders();
             int keepY = -flow.AutoScrollPosition.Y;
             flow.SuspendLayout();
             flow.Controls.Clear();
@@ -1798,6 +1855,40 @@ namespace SRLogbook
                 int max = flow.VerticalScroll.Maximum - flow.VerticalScroll.LargeChange + 1;
                 flow.AutoScrollPosition = new Point(0, Math.Min(keepY, Math.Max(0, max)));
             }
+        }
+
+        /// <summary>参考资料页 = 团队默认库 + 我的 Reference + 他人内容（Public_Temp 下的成员目录）。</summary>
+        private void SyncRefsFromFolders()
+        {
+            try
+            {
+                string ws = AppPaths.PersonalProgress(appDir);
+                string def = AppPaths.DefaultReferences(appDir);
+                List<RefItem> keep = new List<RefItem>();
+                foreach (RefItem r in store.Refs)
+                {
+                    if (r == null) continue;
+                    string p = r.Path;
+                    if (!string.IsNullOrEmpty(p) && (SyncData.IsWithin(p, ws) || SyncData.IsWithin(p, def))) continue;
+                    keep.Add(r);
+                }
+                store.Refs = keep;
+                AddRefFolder(def, "团队默认资料库 / Default Library");
+                AddRefFolder(AppPaths.ReferenceDir(appDir), "我的参考资料 / My References");
+                string pub = AppPaths.PublicTemp(appDir);
+                if (Directory.Exists(pub))
+                    foreach (string d in Directory.GetDirectories(pub))
+                        AddRefFolder(d, "成员 / Member: " + Path.GetFileName(d));
+            }
+            catch { }
+        }
+
+        private void AddRefFolder(string dir, string title)
+        {
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
+            foreach (RefItem r in store.Refs)
+                if (string.Equals(r.Path, dir, StringComparison.OrdinalIgnoreCase)) return;
+            store.Refs.Add(new RefItem { Title = title, Path = dir, Kind = "dir" });
         }
 
         private string Resolve(RefItem r)
@@ -2172,6 +2263,8 @@ namespace SRLogbook
             Application.SetCompatibleTextRenderingDefault(false);
             // 0.2.0 的一次性迁移：清理更早版本留下的软件数据；后续更新保留用户状态。
             try { CleanUpgrade.Run(AppDomain.CurrentDomain.BaseDirectory); } catch { }
+            // Public_Temp 只放本次运行临时下载的他人内容：启动时先清空。
+            try { AppPaths.ClearPublicTemp(AppDomain.CurrentDomain.BaseDirectory); } catch { }
             MainForm f;
             try
             {
