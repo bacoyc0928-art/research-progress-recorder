@@ -24,7 +24,7 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.2'
+VERSION = '0.2.3'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
@@ -370,6 +370,7 @@ class Client:
         self.public_temp=self.workspace/'Public_Temp'
         for _folder in (self.workspace,self.mat_local,self.reference_dir,self.public_temp): _folder.mkdir(parents=True,exist_ok=True)
         self.clear_public_temp()
+        self.migrate_legacy()
         self.configfile=self.home/'config.json'; self.datafile=self.home/'research_log.json'
         self.clean_previous_data()
         self.config=json.loads(self.configfile.read_text(encoding='utf-8-sig')) if self.configfile.exists() else {}
@@ -619,9 +620,24 @@ class Client:
     def channels(self,api): return FileChannels(api)
     def finish(self,api,config,message):
         self.remember(api,config); self.refresh_references(); self.status.set(message)
-    def personal_display(self): return (self.login or self.tr('未登录','Not configured'))+'  '+self.config.get('personal','')
+    def personal_display(self): return (self.login or self.tr('未登录','Not configured'))+'  '+str(self.reference_dir)
     def personal_folder(self,login):
-        folder=Path(self.config.get('personal') or member_folder(self.files_root,login)); no_links(folder); folder.mkdir(parents=True,exist_ok=True); return folder
+        # 0.2.2 规则：个人参考资料固定 PersonalWorkspaceSRRec/Reference，不再允许自选目录。
+        self.reference_dir.mkdir(parents=True,exist_ok=True); return self.reference_dir
+    def migrate_legacy(self):
+        # 0.2.2 规则：References 下只保留 Default（团队默认库）；旧成员缓存/清单/personal 配置全部清掉。
+        try:
+            refs=self.files_root/'References'
+            if refs.is_dir():
+                for item in refs.iterdir():
+                    if item.is_dir():
+                        if item.name.lower()=='default': continue
+                        shutil.rmtree(item,ignore_errors=True)
+                    elif item.suffix.lower()=='.json':
+                        try: item.unlink()
+                        except Exception: pass
+            if getattr(self,'config',None) is not None and self.config.pop('personal',None) is not None: atomic(self.configfile,self.config)
+        except Exception: pass
     def team_destination(self,me,member): return child(self.public_temp,member)
     def clear_public_temp(self):
         # Public_Temp 只放本次临时下载的他人内容：启动与退出时都清空。
@@ -634,8 +650,7 @@ class Client:
         except Exception: pass
     def build_team(self):
         p=self.tabs[0]; bar=self.ttk.Frame(p); bar.pack(fill='x')
-        self.button(bar,'选择个人文件夹','Choose Personal Folder',self.choose_personal)
-        self.button(bar,'打开个人文件夹','Open Personal Folder',self.open_personal)
+        self.button(bar,'打开 Reference','Open Reference',self.open_personal)
         self.button(bar,'刷新成员','Refresh Members',self.team)
         self.button(bar,'打开成员文件','Open Member Files',self.member_research)
         self.button(bar,'下载并合并团队参考资料','Download Team References',self.team_references)
@@ -643,12 +658,10 @@ class Client:
         self.members_tree=self.table(p,[self.tr('GitHub 账号','GitHub login')])
         self.members_tree.bind('<Double-1>',lambda _:self.guarded(self.member_research))
     def choose_personal(self):
-        if not self.require_login(): return
-        value=self.fd.askdirectory()
-        if value: no_links(value); self.config['personal']=value; atomic(self.configfile,self.config); self.personal_label.configure(text=self.personal_display())
+        # 保留旧调用点：个人参考资料目录不可更换，直接打开 Reference。
+        self.open_personal()
     def open_personal(self):
-        if not self.login and not self.config.get('personal'): raise ValueError(self.tr('请先验证保存配置。','Validate and save the configuration first.'))
-        self.open_path(self.personal_folder(self.login or 'unknown'))
+        self.reference_dir.mkdir(parents=True,exist_ok=True); self.open_path(self.reference_dir)
     def team(self):
         api,config=self.api()
         def work():
@@ -829,12 +842,6 @@ class Client:
                 path=Path(directory)/name
                 if path.is_symlink(): continue
                 ident=self.ref_tree.insert('', 'end',values=(name,str(path.relative_to(references)))); self.ref_paths[ident]=path
-        personal=self.config.get('personal')
-        if personal:
-            folder=Path(personal)/'references'
-            if folder.is_dir():
-                for path in upload_files(folder):
-                    ident=self.ref_tree.insert('', 'end',values=(path.name,str(path))); self.ref_paths[ident]=path
         # 我的参考资料（工作区 Reference）+ 他人内容（Public_Temp\<成员>），与 Windows 一致
         for label,folder in (('我的参考资料 / My References',self.reference_dir),('他人内容 / Others (temp)',self.public_temp)):
             if not folder.is_dir(): continue
@@ -1090,8 +1097,8 @@ class Client:
         self.help_text.bind('<<Modified>>',self.help_modified)
         text=self.help_text
         self.help_dirty=False
-        zh='SRPRecorder2027 0.2.2 公开测试版\n\n六页与 Windows 一致：团队研究、Quick Post、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证登录。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。0.2.0 首次升级的旧数据清理只执行一次；本次更新保留已标记 0.2.0 的数据。退出程序后再替换 .app。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
-        en='SRPRecorder2027 0.2.2 Public Test\n\nSix pages match Windows: Team Research, Quick Post, References, Local Progress, Team Sync, and Help.\n\nAccept the private research-data invitation, then sign in with your own classic PAT (repo scope). Browsing is read-only; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. The 0.2.0 cleanup runs once; this update preserves data already marked 0.2.0. Quit before replacing the .app.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
+        zh='SRPRecorder2027 0.2.3 公开测试版\n\n六页与 Windows 一致：团队研究、Quick Post、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证登录。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。0.2.0 首次升级的旧数据清理只执行一次；本次更新保留已标记 0.2.0 的数据。退出程序后再替换 .app。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
+        en='SRPRecorder2027 0.2.3 Public Test\n\nSix pages match Windows: Team Research, Quick Post, References, Local Progress, Team Sync, and Help.\n\nAccept the private research-data invitation, then sign in with your own classic PAT (repo scope). Browsing is read-only; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. The 0.2.0 cleanup runs once; this update preserves data already marked 0.2.0. Quit before replacing the .app.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
         self._help_zh=zh; self._help_en=en
         text.insert('1.0',en if self.en else zh); text.edit_modified(False)
 
