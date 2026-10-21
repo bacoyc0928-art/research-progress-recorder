@@ -82,3 +82,27 @@ jobs:
           name: macos-${{ matrix.arch }}-0.2.1
           path: research-progress-recorder-0.2.1-macOS-${{ matrix.arch }}.dmg
           if-no-files-found: error
+
+  publish:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets/staged
+      - name: Stage release assets and checksums
+        run: |
+          mkdir -p release-assets
+          cp release-assets/staged/windows-0.2.1/research-progress-recorder-0.2.1-Windows.zip release-assets/
+          cp release-assets/staged/macos-arm64-0.2.1/research-progress-recorder-0.2.1-macOS-arm64.dmg release-assets/
+          cp release-assets/staged/macos-x64-0.2.1/research-progress-recorder-0.2.1-macOS-x64.dmg release-assets/
+          cp RELEASE_NOTES.md release-assets/
+          cd release-assets
+          sha256sum research-progress-recorder-0.2.1-Windows.zip research-progress-recorder-0.2.1-macOS-arm64.dmg research-progress-recorder-0.2.1-macOS-x64.dmg > SHA256SUMS.txt
+          cd ..
+          gh release create v0.2.1 release-assets/research-progress-recorder-0.2.1-Windows.zip release-assets/research-progress-recorder-0.2.1-macOS-arm64.dmg release-assets/research-progress-recorder-0.2.1-macOS-x64.dmg release-assets/SHA256SUMS.txt release-assets/RELEASE_NOTES.md --title 'SRPRecorder2027 0.2.1 · Public Test' --notes-file RELEASE_NOTES.md --latest
+        env:
+          GH_TOKEN: ${{ github.token }}
