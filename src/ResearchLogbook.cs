@@ -371,6 +371,8 @@ namespace SRLogbook
         private Panel header;
         private Panel pagesHost;
         private Label lblHeaderTitle;
+        private Button btnWorkspaceHeader;
+        private Button btnOpenWorkspaceHeader;
         /* ---------- 栏目未读红点 ---------- */
         private readonly Dictionary<int, string> newsSeen = new Dictionary<int, string>();
         private readonly Dictionary<int, string> newsNow = new Dictionary<int, string>();
@@ -420,7 +422,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.0";
+            this.Text = "SRPRecorder2027 · 0.2.1";
             this.ClientSize = new Size(1180, 730);
             this.MinimumSize = new Size(1020, 680);
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -925,6 +927,7 @@ namespace SRLogbook
             header.Controls.Add(lblHeaderTitle);
 
             Button bWs = new Button();
+            btnWorkspaceHeader = bWs;
             bWs.Text = "更换工作文件夹";
             bWs.Font = Theme.F(8.8f);
             bWs.FlatStyle = FlatStyle.Flat;
@@ -939,6 +942,7 @@ namespace SRLogbook
             header.Controls.Add(bWs);
 
             Button bOpen = new Button();
+            btnOpenWorkspaceHeader = bOpen;
             bOpen.Text = "打开工作文件夹";
             bOpen.Font = Theme.F(8.8f);
             bOpen.FlatStyle = FlatStyle.Flat;
@@ -953,11 +957,27 @@ namespace SRLogbook
             header.Controls.Add(bOpen);
 
             // 窄窗口下标题不能压在右侧按钮下面：按剩余宽度收窄并省略。
-            header.Resize += delegate
-            {
-                int reserved = bWs.Width + bOpen.Width + Ui.S(28 + 14 + 26);
-                lblHeaderTitle.Width = Math.Max(Ui.S(120), header.Width - reserved);
-            };
+            header.Resize += delegate { LayoutHeader(); };
+            LayoutHeader();
+        }
+
+        private void LayoutHeader()
+        {
+            if (header == null || lblHeaderTitle == null || btnWorkspaceHeader == null || btnOpenWorkspaceHeader == null) return;
+            bool showWorkspaceActions = pageIndex == 0;
+            btnWorkspaceHeader.Visible = showWorkspaceActions;
+            btnOpenWorkspaceHeader.Visible = showWorkspaceActions;
+            int reserved = showWorkspaceActions
+                ? btnWorkspaceHeader.Width + btnOpenWorkspaceHeader.Width + Ui.S(28 + 14 + 26)
+                : Ui.S(56);
+            lblHeaderTitle.Width = Math.Max(Ui.S(120), header.ClientSize.Width - reserved - Ui.S(28));
+        }
+
+        private void LayoutActivePage()
+        {
+            if (pages == null || pageIndex < 0 || pageIndex >= pages.Length) return;
+            if (pageIndex == 1) LayoutPostsPage(pages[1]);
+            else if (pageIndex == 4) LayoutSyncPage(pages[4], syncCard);
         }
 
         private void BuildPages()
@@ -1293,29 +1313,33 @@ namespace SRLogbook
 
         private TextBox helpEditor;
         private bool helpDirty;
+        private FlowLayoutPanel helpToolbar;
+        private Button[] helpToolbarButtons;
 
         private Panel BuildHelpPage()
         {
             Panel page = new Panel();
             page.BackColor = Color.White;
 
-            Panel bar = new Panel();
-            bar.Dock = DockStyle.Top;
-            bar.Height = Ui.S(50);
-            bar.BackColor = Color.White;
+            helpToolbar = new FlowLayoutPanel();
+            helpToolbar.Dock = DockStyle.Top;
+            helpToolbar.AutoSize = true;
+            helpToolbar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            helpToolbar.FlowDirection = FlowDirection.LeftToRight;
+            helpToolbar.WrapContents = true;
+            helpToolbar.Padding = new Padding(Ui.S(8), Ui.S(6), Ui.S(8), Ui.S(6));
+            helpToolbar.BackColor = Color.White;
 
-            Button upload = HelpButton("上传到 GitHub", 12);
+            Button upload = CreateHelpButton("上传到 GitHub");
             upload.Click += delegate { UploadHelp(); };
-            Button reload = HelpButton("读取云端版本", 152);
+            Button reload = CreateHelpButton("读取云端版本");
             reload.Click += delegate { LoadHelpFromGitHub(true); };
-            Button reset = HelpButton("恢复默认", 292);
+            Button reset = CreateHelpButton("恢复默认");
             reset.Click += delegate { RestoreDefaultHelp(); };
-            Button history = HelpButton("改动日志", 402);
+            Button history = CreateHelpButton("改动日志");
             history.Click += delegate { ShowHelpChangelog(); };
-            bar.Controls.Add(upload);
-            bar.Controls.Add(reload);
-            bar.Controls.Add(reset);
-            bar.Controls.Add(history);
+            helpToolbarButtons = new Button[] { upload, reload, reset, history };
+            foreach (Button button in helpToolbarButtons) helpToolbar.Controls.Add(button);
 
             helpEditor = new TextBox();
             helpEditor.Dock = DockStyle.Fill;
@@ -1338,11 +1362,11 @@ namespace SRLogbook
             helpEditor.TextChanged += delegate { helpDirty = true; };
 
             page.Controls.Add(helpEditor);
-            page.Controls.Add(bar);
+            page.Controls.Add(helpToolbar);
             return page;
         }
 
-        private Button HelpButton(string text, int x)
+        private Button CreateHelpButton(string text)
         {
             Button b = new Button();
             b.Text = text;
@@ -1353,7 +1377,10 @@ namespace SRLogbook
             b.BackColor = Color.White;
             b.ForeColor = Theme.TextMain;
             b.Cursor = Cursors.Hand;
-            b.SetBounds(Ui.S(x), Ui.S(10), Ui.S(130), Ui.S(30));
+            b.AutoSize = true;
+            b.MinimumSize = new Size(Ui.S(130), Ui.S(34));
+            b.Padding = new Padding(Ui.S(8), Ui.S(2), Ui.S(8), Ui.S(2));
+            b.Margin = new Padding(Ui.S(4));
             return b;
         }
 
@@ -1451,6 +1478,8 @@ namespace SRLogbook
                 idx = 3;
             }
             pageIndex = idx;
+            LayoutHeader();
+            if (uiReady) LayoutActivePage();
             MarkNewsSeen(idx);
             for (int i = 0; i < pages.Length; i++)
             {
@@ -2042,6 +2071,8 @@ namespace SRLogbook
             }
             catch { }
             uiReady = true;
+            LayoutHeader();
+            LayoutActivePage();
             if (layoutLog != null) layoutLog();
             LayoutRefsPage();
             RebuildRefs();
@@ -2139,7 +2170,7 @@ namespace SRLogbook
                     return;
                 }
             Application.SetCompatibleTextRenderingDefault(false);
-            // 0.2.0 首次启动：清掉旧版本留下的配置、缓存与默认库副本，从干净状态开始。
+            // 0.2.0 的一次性迁移：清理更早版本留下的软件数据；后续更新保留用户状态。
             try { CleanUpgrade.Run(AppDomain.CurrentDomain.BaseDirectory); } catch { }
             MainForm f;
             try

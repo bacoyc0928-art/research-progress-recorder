@@ -162,7 +162,7 @@ namespace SRLogbook
             progList.BackColor = Color.White;
             progList.Columns.Add("名称 / Name", Ui.S(380), HorizontalAlignment.Left);
             progList.Columns.Add("大小 / Size", Ui.S(150), HorizontalAlignment.Left);
-            progList.Columns.Add("修改时间 / Modified", Ui.S(230), HorizontalAlignment.Left);
+            progList.Columns.Add("修改 / Modified", Ui.S(230), HorizontalAlignment.Left);
             progList.SetBounds(Ui.S(24), Ui.S(234), Ui.S(832), Ui.S(300));
             progList.DoubleClick += delegate { OpenProgressListItem(); };
             card.Controls.Add(progList);

@@ -6,7 +6,8 @@ using System.Text;
 namespace SRLogbook
 {
     /// <summary>
-    /// 0.2.0 首次启动：清除旧版本（0.0.x / 0.1.x）留在程序目录里的软件数据，保证新版本从一个干净状态开始。
+    /// 0.2.0 一次性升级：清除旧版本（0.0.x / 0.1.x）留在程序目录里的软件数据。
+    /// 后续版本必须保留 Target，避免普通升级再次清掉用户配置与缓存。
     /// 删除范围：程序自己生成的 JSON / 配置 / 日志、成员下载缓存（References/&lt;账号&gt;/TeamConRef）、
     /// 默认资料库副本（References/Default，保留包内 README.txt）。
     /// 不删除：用户自选的本地进度文件夹及其中的文档，以及个人文件夹里的 references 上传副本。

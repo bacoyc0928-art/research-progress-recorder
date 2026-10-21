@@ -30,6 +30,7 @@ namespace SRLogbook
         private Button btnUpProgress;
         private Button btnRemoveRefs;
         private Label boundLabel;
+        private Label syncHint;
         private Button btnActivity;
 
         private Panel BuildSyncPage()
@@ -59,16 +60,18 @@ namespace SRLogbook
             boundLabel.Font = Theme.F(8.6f);
             boundLabel.ForeColor = Theme.TextMuted;
             boundLabel.BackColor = Color.White;
+            boundLabel.AutoEllipsis = true;
             boundLabel.SetBounds(24, 48, 850, 40);
             card.Controls.Add(boundLabel);
 
-            Label tokenHint = new Label();
-            tokenHint.Text = "登录后在团队同步页操作即可；仓库已绑定，无需填写任何配置。";
-            tokenHint.Font = Theme.F(8.2f);
-            tokenHint.ForeColor = Theme.Warm;
-            tokenHint.BackColor = Color.White;
-            tokenHint.SetBounds(24, 88, 860, 18);
-            card.Controls.Add(tokenHint);
+            syncHint = new Label();
+            syncHint.Text = "登录后即可同步；仓库已绑定。 / Sign in to sync; repository is preconfigured.";
+            syncHint.Font = Theme.F(8.2f);
+            syncHint.ForeColor = Theme.Warm;
+            syncHint.BackColor = Color.White;
+            syncHint.AutoEllipsis = true;
+            syncHint.SetBounds(24, 88, 860, 18);
+            card.Controls.Add(syncHint);
 
             Label sc = new Label();
             sc.Text = "同步内容：";
@@ -123,10 +126,21 @@ namespace SRLogbook
 
             page.Resize += delegate
             {
-                card.Width = Math.Min(Ui.S(880), page.ClientSize.Width - Ui.S(2));
-                txtSLog.Width = Math.Max(Ui.S(300), card.Width - Ui.S(48));
+                LayoutSyncPage(page, card);
             };
             return page;
+        }
+
+        private void LayoutSyncPage(Panel page, Panel card)
+        {
+            card.Width = Math.Min(Ui.S(880), Math.Max(Ui.S(400), page.ClientSize.Width - Ui.S(2)));
+            card.Height = Math.Min(Ui.S(590), Math.Max(Ui.S(400), page.ClientSize.Height - Ui.S(2)));
+            int contentWidth = Math.Max(Ui.S(300), card.ClientSize.Width - Ui.S(48));
+            boundLabel.Width = contentWidth;
+            syncHint.Width = contentWidth;
+            lblSStatus.Width = contentWidth;
+            txtSLog.Width = contentWidth;
+            txtSLog.Height = Math.Max(Ui.S(80), card.ClientSize.Height - txtSLog.Top - Ui.S(12));
         }
 
         private void AddSLabel(Control parent, string text, int x, int y)
@@ -203,11 +217,10 @@ namespace SRLogbook
             if (txtSLog == null) return;
             SyncConfig c = GitHubSync.LoadConfig(appDir);
             if (boundLabel != null)
-                boundLabel.Text = "已绑定仓库 / Bound repository: "
+                boundLabel.Text = "已绑定仓库 / Repository: "
                     + (string.IsNullOrEmpty(c.owner) ? "bacoyc0928-art" : c.owner) + "/"
                     + (string.IsNullOrEmpty(c.repo) ? "research-data" : c.repo) + " · "
-                    + (string.IsNullOrEmpty(c.branch) ? "main" : c.branch)
-                    + "。请在左下角登录后使用下列操作 / Sign in at the bottom-left to use these actions.";
+                    + (string.IsNullOrEmpty(c.branch) ? "main" : c.branch);
             if (string.IsNullOrEmpty(txtSLog.Text))
                 txtSLog.Text = "提示：请先在左下角用本人的 GitHub 密钥登录 / Sign in with your own token first.";
         }

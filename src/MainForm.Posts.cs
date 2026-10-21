@@ -8,9 +8,13 @@ namespace SRLogbook
 {
     public partial class MainForm
     {
+        private Panel postCard;
         private TextBox postComposer;
+        private Button postPublishButton;
+        private Button postHistoryButton;
         private FlowLayoutPanel postFlow;
         private Label postStatus;
+        private Label postHint;
 
         private Panel BuildPostsPage()
         {
@@ -19,6 +23,7 @@ namespace SRLogbook
 
             Panel card = new Panel();
             card.SetBounds(0, 0, 900, 640);
+            postCard = card;
             card.BackColor = Color.White;
             card.Paint += delegate(object s, PaintEventArgs e)
             {
@@ -34,13 +39,14 @@ namespace SRLogbook
             h.SetBounds(Ui.S(24), Ui.S(16), Ui.S(300), Ui.S(28));
             card.Controls.Add(h);
 
-            Label hint = new Label();
-            hint.Text = "写下要告诉全组的信息；发布后所有人登录即可看到，已阅的帖子会收进右上角“历史记录”。";
-            hint.Font = Theme.F(8.6f);
-            hint.ForeColor = Theme.TextMuted;
-            hint.BackColor = Color.White;
-            hint.SetBounds(Ui.S(24), Ui.S(46), Ui.S(840), Ui.S(20));
-            card.Controls.Add(hint);
+            postHint = new Label();
+            postHint.Text = "向团队发布消息；已阅内容可在历史记录查看。 / Team notes; read items move to History.";
+            postHint.Font = Theme.F(8.6f);
+            postHint.ForeColor = Theme.TextMuted;
+            postHint.BackColor = Color.White;
+            postHint.AutoEllipsis = true;
+            postHint.SetBounds(Ui.S(24), Ui.S(46), Ui.S(840), Ui.S(20));
+            card.Controls.Add(postHint);
 
             postComposer = new TextBox();
             postComposer.Multiline = true;
@@ -49,13 +55,13 @@ namespace SRLogbook
             postComposer.SetBounds(Ui.S(24), Ui.S(74), Ui.S(620), Ui.S(84));
             card.Controls.Add(postComposer);
 
-            Button publish = PostButton("发布", 660, 74, 100);
-            publish.Click += delegate { PublishPost(); };
-            card.Controls.Add(publish);
+            postPublishButton = PostButton("发布", 660, 74, 100);
+            postPublishButton.Click += delegate { PublishPost(); };
+            card.Controls.Add(postPublishButton);
 
-            Button history = PostButton("历史记录", 766, 74, 114);
-            history.Click += delegate { ShowPostHistory(); };
-            card.Controls.Add(history);
+            postHistoryButton = PostButton("历史记录", 766, 74, 114);
+            postHistoryButton.Click += delegate { ShowPostHistory(); };
+            card.Controls.Add(postHistoryButton);
 
             postStatus = new Label();
             postStatus.Font = Theme.F(8.6f);
@@ -72,12 +78,26 @@ namespace SRLogbook
             postFlow.BackColor = Color.White;
             card.Controls.Add(postFlow);
 
-            page.Resize += delegate
-            {
-                card.Width = Math.Min(Ui.S(920), page.ClientSize.Width - Ui.S(2));
-                postFlow.Width = Math.Max(Ui.S(400), card.Width - Ui.S(48));
-            };
+            page.Resize += delegate { LayoutPostsPage(page); };
             return page;
+        }
+
+        private void LayoutPostsPage(Panel page)
+        {
+            if (postCard == null || postFlow == null) return;
+            postCard.Width = Math.Min(Ui.S(920), Math.Max(Ui.S(400), page.ClientSize.Width - Ui.S(2)));
+            postCard.Height = Math.Min(Ui.S(640), Math.Max(Ui.S(400), page.ClientSize.Height - Ui.S(2)));
+            int margin = Ui.S(24), gap = Ui.S(8);
+            int contentWidth = Math.Max(Ui.S(320), postCard.ClientSize.Width - margin * 2);
+            int publishWidth = Ui.S(100), historyWidth = Ui.S(114);
+            int composerWidth = Math.Max(Ui.S(120), contentWidth - publishWidth - historyWidth - gap * 2);
+            postHint.Width = contentWidth;
+            postComposer.SetBounds(margin, Ui.S(74), composerWidth, Ui.S(84));
+            postPublishButton.SetBounds(margin + composerWidth + gap, Ui.S(74), publishWidth, Ui.S(34));
+            postHistoryButton.SetBounds(margin + composerWidth + gap + publishWidth + gap, Ui.S(74), historyWidth, Ui.S(34));
+            postStatus.Width = contentWidth;
+            postFlow.Width = contentWidth;
+            postFlow.Height = Math.Max(Ui.S(140), postCard.ClientSize.Height - postFlow.Top - Ui.S(10));
         }
 
         private Button PostButton(string text, int x, int y, int w)
@@ -106,7 +126,7 @@ namespace SRLogbook
         private void AddPostCard(PostItem p)
         {
             Panel card = new Panel();
-            card.SetBounds(0, 0, Math.Max(Ui.S(600), postFlow.ClientSize.Width - Ui.S(30)), Ui.S(92));
+            card.SetBounds(0, 0, Math.Max(Ui.S(300), postFlow.ClientSize.Width - Ui.S(30)), Ui.S(92));
             card.Margin = new Padding(0, 0, 0, Ui.S(8));
             card.BackColor = Color.White;
             card.Cursor = Cursors.Hand;
