@@ -1,66 +1,56 @@
-# SRPRecorder2027 0.2.1 · 公开测试版 / Public Test
+# SRPRecorder2027 0.2.2 · 公开测试版 / Public Test
 
-发布日期 / Released: 2026-10-20
+发布日期 / Released: 2026-10-21
 
 ## 下载 / Download
 
 | 系统 | 文件 | 要求 |
 | --- | --- | --- |
-| Windows 10/11 | research-progress-recorder-0.2.1-Windows.zip | .NET Framework 4.8 |
-| Apple Silicon / M 系列 | research-progress-recorder-0.2.1-macOS-arm64.dmg | macOS 14+ |
-| Intel Mac | research-progress-recorder-0.2.1-macOS-x64.dmg | macOS 15+ |
+| Windows 10/11 | research-progress-recorder-0.2.2-Windows.zip | .NET Framework 4.8 |
+| Apple Silicon / M 系列 | research-progress-recorder-0.2.2-macOS-arm64.dmg | macOS 14+ |
+| Intel Mac | research-progress-recorder-0.2.2-macOS-x64.dmg | macOS 15+ |
 
 三个文件都在本 Release 的 Assets 里，另有 `SHA256SUMS.txt` 可核对摘要。下载不需要登录，也不需要令牌。
 
 ## 安装 / Install
 
-- **Windows**：关闭旧程序 → 解压 ZIP 到自己的可写文件夹 → 覆盖旧目录 → 运行 `SRCRec\SRPRecorder2027.exe`。必须保留随 exe 的 `.exe.config`，只拷 exe 会失去高 DPI 修复。
+- **Windows**：关闭旧程序 → 解压 ZIP 到自己的可写文件夹 → 覆盖旧目录 → 运行 `SRCRec\SRPRecorder2027.exe`。必须保留随 exe 的 `.exe.config`。
 - **macOS**：打开对应芯片的 DMG → 把 `ResearchProgressRecorder.app` 拖进 Applications 覆盖旧版 → 弹出镜像。首次打开若被系统拦截，右键 →“打开”。
 
-## 覆盖升级任何旧版本 / Upgrade from any older version
+可以直接覆盖任何旧版本（0.0.x / 0.1.x / 0.2.x），不需要先卸载。
 
-0.2.0 可以直接覆盖 **0.0.x / 0.1.0 / 0.1.1**（Windows 与 macOS 都一样），不需要先卸载。
+## 0.2.2 主要变化
 
-**首次启动会自动清除旧版软件数据**，让新版本从干净状态开始：
+### 工作区文件夹（Windows 与 macOS 同构）
 
-- 删除：程序生成的配置 JSON（工作文件夹、进度文件夹、个人文件夹、同步配置、未读状态、语言文件）、旧日志、成员下载缓存 `References/<账号>/TeamConRef/`、以及 `References/Default` 里旧版下载的默认资料库副本。
-- 保留：你自己的本地进度文件夹及其中的 Word/PDF 文档、个人文件夹 `references/` 里的上传副本。
-- 记录：删除项写入程序目录的 `upgrade_cleanup.log`，版本标记写入 `data_version.txt`（之后启动不再清理）。
-- 需要做的事：重新选择工作文件夹与本地进度文件夹、重新登录（令牌只在内存），登录后点“下载默认资料库”把默认库重新拉下来。
+程序位于用户选择的 `SRCRec` 下，默认本地进度文件夹固定为 `SRCRec\PersonalWorkspaceSRRec`，首次启动自动创建，内含：
 
-升级到 0.2.1 时，**不要再次清理数据**：Windows 和 macOS 均保留已经写入 `data_version.txt` 的 0.2.0 标记，因此工作文件夹、配置、下载缓存及其余本地数据会继续保留。每次启动仍需重新登录，因为令牌只保存在内存。
+```
+PersonalWorkspaceSRRec\
+├─ Mat_Local\     非参考资料的个人本地资料（上传本地进度的默认来源）
+├─ Reference\     个人参考资料（上传参考资料的默认来源）
+└─ Public_Temp\   他人内容临时区（退出时清空，下次启动前也清空）
+```
 
-## 0.2.1 修复
+- 上传参考资料默认从 `Reference` 列文件，上传本地进度默认从 `Mat_Local` 列文件，两者都能“添加文件”选别处。
+- 下载他人内容落到 `Public_Temp\<成员>`，只用于本次查看，程序关闭即清除。
+- 参考资料页 = 团队默认库 + 我的 `Reference` + `Public_Temp` 下各成员内容。
 
-- Quick Post 在最小窗口下按可用宽度排布输入框与按钮，不再把按钮推出卡片；页面卡片会跟随窗口缩放。
-- 帮助页的中英按钮按可用空间换行并随文字调整宽度，标题栏只在团队研究页显示工作文件夹操作，避免其他页面标题被挤窄。
-- 团队同步页的仓库说明、状态和日志框随窗口尺寸调整，不会越过卡片边界。
-- 本地进度列表缩短修改时间列标题，保留完整时间值。
-- macOS 将应用版本与数据迁移版本分开；0.2.1 不会因版本号变化而重复清除 0.2.0 数据。
+### 未读红点细分
 
-## 0.2.0 主要变化
+不再一律红在“团队同步”。团队研究=成员变化；Quick Post=未读帖子或其帖子日志；参考资料=上传/撤除参考资料、下载默认资料库的日志；本地进度=上传本地进度日志或 `Mat_Local`/`Reference` 文件变化；团队同步=活动日志；使用说明=`help.md` 或说明改动日志。点进对应栏目即消失。
 
-- 界面固定中英双语并显（去掉语言切换），提示、弹窗、活动日志同样双语。
-- 左下角独立登录面板；登录与仓库校验拆分，401/403/404 分别说明，404 明确提示外部协作者需 classic PAT；令牌只存内存。
-- 未登录全面拦截查看与改动；退出＝二次确认后关闭程序。
-- 团队研究列出全部协作者，除本人外统一“项目成员”。
-- 新增“撤除我上传的参考资料”。
-- 新增 **Quick Post**（便签卡片、已阅进历史、只能删自己的帖子）。
-- 新增活动日志（public 2000 / private 500 双写）。
-- 使用说明可编辑并上传 `help/help.md`，带 `help/changelog.json`。
-- 团队同步四个动作改为先预览再勾选，撤除只删勾选项。
-- 栏目未读红点（团队研究 / Quick Post / 团队同步），点进即消失。
-- 本地进度页直接列出文件夹内容（名称/大小/修改时间，双击打开）。
-- 新建 Word：项目 / 日期 / 目的 + 留白；中文楷体、西文 Times New Roman。
-- 修复：长路径报错、高 DPI 登录面板过大、未登录拦截弹模态导致自动化卡死、双语文案重叠。
+### 界面修复
+
+- 团队研究页“个人研究”一行的按钮不再压住路径文字，路径改为按钮下方整行显示并自动省略。
+- 其它页面沿用 0.2.1 的窄窗口布局修复。
+
+## 累积功能（相对 0.1.0）
+
+登录面板与未登录拦截、团队研究成员列表、撤除我上传的参考资料、Quick Post、活动日志、可编辑使用说明、同步动作先预览再勾选、双语界面、新建 Word 模板（项目/日期/目的 + 留白）。
 
 ## 限制 / Limitations
 
-- 两端都未做商业代码签名：Windows 首次运行会提示 SmartScreen（更多信息 → 仍要运行），macOS 为 ad-hoc 签名、无公证（右键打开）。这不影响本地数据。
+- 两端都未做商业代码签名：Windows 首次运行提示 SmartScreen（更多信息 → 仍要运行），macOS 为 ad-hoc 签名（右键打开）。不影响本地数据。
 - 仍需真实双账号、双设备同步验收；自动化检查不保证没有缺陷。
 - 公开包不含团队书籍、研究文档、个人 JSON 或令牌。
-
-## 已知问题
-
-- 红点只覆盖团队研究 / Quick Post / 团队同步三个栏目；参考资料与使用说明没有可靠的“新内容”信号。
-- 活动日志与帖子是“先读后写”，同一秒并发可能丢一条（已重试 3 次，未做乐观锁）。
