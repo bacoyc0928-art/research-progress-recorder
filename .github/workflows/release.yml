@@ -102,7 +102,7 @@ jobs:
           cp RELEASE_NOTES.md release-assets/
           cd release-assets
           sha256sum research-progress-recorder-0.2.1-Windows.zip research-progress-recorder-0.2.1-macOS-arm64.dmg research-progress-recorder-0.2.1-macOS-x64.dmg > SHA256SUMS.txt
-          cd ..
-          gh release create v0.2.1 release-assets/research-progress-recorder-0.2.1-Windows.zip release-assets/research-progress-recorder-0.2.1-macOS-arm64.dmg release-assets/research-progress-recorder-0.2.1-macOS-x64.dmg release-assets/SHA256SUMS.txt release-assets/RELEASE_NOTES.md --title 'SRPRecorder2027 0.2.1 · Public Test' --notes-file RELEASE_NOTES.md --latest
+          cd .. && gh release upload v0.2.1 release-assets/research-progress-recorder-0.2.1-Windows.zip release-assets/research-progress-recorder-0.2.1-macOS-arm64.dmg release-assets/research-progress-recorder-0.2.1-macOS-x64.dmg release-assets/SHA256SUMS.txt release-assets/RELEASE_NOTES.md --clobber
+          
         env:
           GH_TOKEN: ${{ github.token }}
