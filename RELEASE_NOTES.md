@@ -1,4 +1,4 @@
-# SRPRecorder2027 0.2.2 · 公开测试版 / Public Test
+# SRPRecorder2027 0.2.3 · 公开测试版 / Public Test
 
 发布日期 / Released: 2026-10-21
 
@@ -6,9 +6,9 @@
 
 | 系统 | 文件 | 要求 |
 | --- | --- | --- |
-| Windows 10/11 | research-progress-recorder-0.2.2-Windows.zip | .NET Framework 4.8 |
-| Apple Silicon / M 系列 | research-progress-recorder-0.2.2-macOS-arm64.dmg | macOS 14+ |
-| Intel Mac | research-progress-recorder-0.2.2-macOS-x64.dmg | macOS 15+ |
+| Windows 10/11 | research-progress-recorder-0.2.3-Windows.zip | .NET Framework 4.8 |
+| Apple Silicon / M 系列 | research-progress-recorder-0.2.3-macOS-arm64.dmg | macOS 14+ |
+| Intel Mac | research-progress-recorder-0.2.3-macOS-x64.dmg | macOS 15+ |
 
 三个文件都在本 Release 的 Assets 里，另有 `SHA256SUMS.txt` 可核对摘要。下载不需要登录，也不需要令牌。
 
@@ -19,7 +19,7 @@
 
 可以直接覆盖任何旧版本（0.0.x / 0.1.x / 0.2.x），不需要先卸载。
 
-## 0.2.2 主要变化
+## 0.2.3 主要变化
 
 ### 工作区文件夹（Windows 与 macOS 同构）
 
@@ -39,6 +39,10 @@ PersonalWorkspaceSRRec\
 ### 未读红点细分
 
 不再一律红在“团队同步”。团队研究=成员变化；Quick Post=未读帖子或其帖子日志；参考资料=上传/撤除参考资料、下载默认资料库的日志；本地进度=上传本地进度日志或 `Mat_Local`/`Reference` 文件变化；团队同步=活动日志；使用说明=`help.md` 或说明改动日志。点进对应栏目即消失。
+
+### Reference 目录冲突定稿（本版重点）
+
+个人参考资料固定为 `PersonalWorkspaceSRRec\Reference`，取消“个人文件夹”选择；`SRCRec\References` 只保留 `Default`（团队默认库），旧成员缓存、孤儿 `references` 目录、旧清单与 `personal.json` 启动时自动清除。详见协作约定 §1.1。
 
 ### 界面修复
 
