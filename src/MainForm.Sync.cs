@@ -534,11 +534,14 @@ namespace SRLogbook
             lblSStatus.Text = "正在列出可上传文件… / Listing files…";
             try
             {
-                List<string> files = FileTransfers.UploadFiles(folder);
-                if (files.Count == 0) { lblSStatus.Text = "本地进度文件夹为空，未上传 / Folder is empty."; return; }
+                // 默认来源是 PersonalWorkspaceSRRec\Mat_Local；也可以“添加文件”从别处选。
+                string matLocal = AppPaths.MatLocal(appDir);
+                List<string> files = FileTransfers.UploadFiles(matLocal);
+                if (files.Count == 0) files = FileTransfers.UploadFiles(folder);
+                if (files.Count == 0) { lblSStatus.Text = "Mat_Local 与进度文件夹都为空，未上传 / Nothing to upload."; return; }
                 List<string> picked = PickItems("上传本地进度 / Upload local progress",
-                    "勾选要上传的文件；未勾选的文件不会上传。 / Check the files to upload; unchecked files are not sent.",
-                    Rows(files, f => f.Substring(folder.Length).TrimStart('\\', '/') + "  ·  " + Math.Max(1, new FileInfo(f).Length / 1024) + " KB"), false);
+                    "默认列出 Mat_Local 里的文件；可勾选或用“添加文件”选别处，未勾选的不上传。 / Lists Mat_Local by default; check files or add others; unchecked files are not sent.",
+                    Rows(files, f => f.Substring(folder.Length).TrimStart('\\', '/') + "  ·  " + Math.Max(1, new FileInfo(f).Length / 1024) + " KB"), true);
                 if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
                 string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
                 await Task.Run(() => GitHubSync.EnsureProfile(owner, repo, branch, token, login));
@@ -674,13 +677,13 @@ namespace SRLogbook
                 int n = 0;
                 foreach (string member in picked)
                 {
-                    string dest = FileTransfers.Child(TeamConRefRoot(login), member);
+                    string dest = Path.Combine(AppPaths.PublicTemp(appDir), AppPaths.Sanitize(member));
                     if (await Task.Run(() => GitHubSync.DownloadMemberFiles(owner, repo, member, branch, token, dest))) n++;
                 }
                 SaveSyncConfig();
                 lblSStatus.Text = n == 0 ? "没有其他成员内容 / No other member content." : "已下载 / Downloaded: " + n;
                 if (n > 0) await LogActivityAsync("下载他人内容 / Download team files", n + " 位成员 / members");
-                string baseDir = Path.Combine(AppPaths.MemberReferences(appDir, login), "TeamConRef");
+                string baseDir = AppPaths.PublicTemp(appDir);
                 Log(lblSStatus.Text + " " + baseDir);
                 if (n > 0) OpenPath(baseDir);
             }
@@ -735,15 +738,15 @@ namespace SRLogbook
             if (syncBusy || teamLoading) return;
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
-            string folder = LoadPersonalFolder();
-            if (!Directory.Exists(folder)) { Msg.Show("请先在“团队研究”页选择个人文件夹；未选择时上传会失败 / Pick your personal folder on Team Research first.", "团队研究"); return; }
+            // 参考资料默认来自 PersonalWorkspaceSRRec\Reference，不再要求先选“个人文件夹”。
             List<string> candidates = new List<string>();
-            string previewDir = Path.Combine(folder, "references");
+            // 默认来源是 PersonalWorkspaceSRRec\Reference，也可以“添加文件”从别处选（用户 2026-10-21 要求）。
+            string previewDir = AppPaths.ReferenceDir(appDir);
             if (Directory.Exists(previewDir))
-                foreach (string f in Directory.GetFiles(previewDir)) candidates.Add(f);
+                foreach (string f in Directory.GetFiles(previewDir, "*", SearchOption.AllDirectories)) candidates.Add(f);
             candidates.Sort(StringComparer.OrdinalIgnoreCase);
             List<string> picked = PickItems("上传参考资料 / Upload references",
-                "勾选要上传的文件；也可以用“添加文件”从其他位置挑选。未勾选的不会上传。 / Check the files to upload, or add more from elsewhere; unchecked files are not sent.",
+                "默认列出 Reference 里的文件；也可用“添加文件”选别处。未勾选的不会上传。 / Lists Reference by default; check files or add others; unchecked files are not sent.",
                 Rows(candidates, f => Path.GetFileName(f) + "  ·  " + Math.Max(1, new FileInfo(f).Length / 1024) + " KB"), true);
             if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
             string[] files = picked.ToArray();
@@ -760,7 +763,7 @@ namespace SRLogbook
                 }
                 string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
                 await Task.Run(() => GitHubSync.EnsureProfile(owner, repo, branch, token, login));
-                string refDir = Path.Combine(folder, "references");
+                string refDir = AppPaths.ReferenceDir(appDir);
                 FileTransfers.NoLinks(refDir); Directory.CreateDirectory(refDir);
                 List<RefItem> selected = new List<RefItem>();
                 foreach (string file in files)
@@ -785,7 +788,7 @@ namespace SRLogbook
                     try { await Task.Run(() => GitHubSync.PutFile(owner, repo, metaPath, branch, token, json, sha)); break; }
                     catch (GitHubApiException ex) { if (attempt >= 2 || (ex.StatusCode != 409 && ex.StatusCode != 422)) throw; }
                 }
-                SyncData.WriteAtomic(Path.Combine(folder, "references.json"), SyncData.Serializer().Serialize(merged));
+                SyncData.WriteAtomic(Path.Combine(AppPaths.PersonalProgress(appDir), "references.json"), SyncData.Serializer().Serialize(merged));
                 foreach (RefItem item in selected)
                 {
                     string local = FileTransfers.Child(refDir, item.RelPath);
