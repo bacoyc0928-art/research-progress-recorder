@@ -24,7 +24,7 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.1'
+VERSION = '0.2.2'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
@@ -363,6 +363,13 @@ class Client:
         self.home.mkdir(parents=True,exist_ok=True)
         self.files_root=self.home/'SRCRec'; self.files_root.mkdir(exist_ok=True)
         self.default=self.files_root/'References'/'Default'; self.default.mkdir(parents=True,exist_ok=True)
+        # 工作区：PersonalWorkspaceSRRec + Mat_Local / Reference / Public_Temp（与 Windows 同构）
+        self.workspace=self.files_root/'PersonalWorkspaceSRRec'
+        self.mat_local=self.workspace/'Mat_Local'
+        self.reference_dir=self.workspace/'Reference'
+        self.public_temp=self.workspace/'Public_Temp'
+        for _folder in (self.workspace,self.mat_local,self.reference_dir,self.public_temp): _folder.mkdir(parents=True,exist_ok=True)
+        self.clear_public_temp()
         self.configfile=self.home/'config.json'; self.datafile=self.home/'research_log.json'
         self.clean_previous_data()
         self.config=json.loads(self.configfile.read_text(encoding='utf-8-sig')) if self.configfile.exists() else {}
@@ -386,6 +393,7 @@ class Client:
         except Exception as error: self.mb.showerror(self.tr('操作失败','Operation failed'),str(error),parent=self.root)
     def close(self):
         if self.busy: self.mb.showinfo('SRPRecorder2027',self.tr('请等待当前传输完成。','Wait for the current transfer to finish.')); return
+        self.clear_public_temp()
         self.root.destroy()
     def poll(self):
         try:
@@ -512,7 +520,21 @@ class Client:
         members=','.join(sorted(FileChannels(api).members()))
         acts=read_activity(api,'logs/public/activity.json')
         last=acts[-1].get('time') if acts else '-'
-        return {0:'team:'+members, 1:'posts:%d'%unread, 4:'act:%d:%s'%(len(acts),last)}
+        def fp(*keys):
+            rows=[a for a in acts if any(k in str(a.get('action') or '') for k in keys)]
+            return '%d:%s'%(len(rows),rows[-1].get('time') if rows else '-')
+        local=0
+        try:
+            for folder in (self.mat_local,self.reference_dir):
+                if folder.is_dir(): local+=len(upload_files(folder))
+        except Exception: pass
+        # 红点跟着“日志说的是哪个栏目”走，与 Windows 端规则一致
+        return {0:'team:'+members,
+                1:'posts:%d|%s'%(unread,fp('发布帖子','删除帖子')),
+                2:'refs:'+fp('上传参考资料','撤除参考资料','下载默认资料库'),
+                3:'progress:%s|%d'%(fp('上传本地进度'),local),
+                4:'act:%d:%s'%(len(acts),last),
+                5:'help:'+fp('更新使用说明')}
     def update_news(self):
         """栏目未读红点：后台线程取状态（不禁用界面），完成后回到主线程更新标签。"""
         if not self.session_token or not getattr(self,'tab_base',None): return
@@ -600,7 +622,16 @@ class Client:
     def personal_display(self): return (self.login or self.tr('未登录','Not configured'))+'  '+self.config.get('personal','')
     def personal_folder(self,login):
         folder=Path(self.config.get('personal') or member_folder(self.files_root,login)); no_links(folder); folder.mkdir(parents=True,exist_ok=True); return folder
-    def team_destination(self,me,member): return child(member_folder(self.files_root,me)/'TeamConRef',member)
+    def team_destination(self,me,member): return child(self.public_temp,member)
+    def clear_public_temp(self):
+        # Public_Temp 只放本次临时下载的他人内容：启动与退出时都清空。
+        try:
+            for item in self.public_temp.iterdir():
+                if item.is_dir(): shutil.rmtree(item,ignore_errors=True)
+                else:
+                    try: item.unlink()
+                    except Exception: pass
+        except Exception: pass
     def build_team(self):
         p=self.tabs[0]; bar=self.ttk.Frame(p); bar.pack(fill='x')
         self.button(bar,'选择个人文件夹','Choose Personal Folder',self.choose_personal)
@@ -804,6 +835,11 @@ class Client:
             if folder.is_dir():
                 for path in upload_files(folder):
                     ident=self.ref_tree.insert('', 'end',values=(path.name,str(path))); self.ref_paths[ident]=path
+        # 我的参考资料（工作区 Reference）+ 他人内容（Public_Temp\<成员>），与 Windows 一致
+        for label,folder in (('我的参考资料 / My References',self.reference_dir),('他人内容 / Others (temp)',self.public_temp)):
+            if not folder.is_dir(): continue
+            for path in sorted(upload_files(folder)):
+                ident=self.ref_tree.insert('', 'end',values=(path.name,label)); self.ref_paths[ident]=path
     def open_reference(self):
         selected=self.ref_tree.selection()
         if selected: self.open_path(self.ref_paths[selected[0]])
@@ -975,7 +1011,7 @@ class Client:
         folder=self.progress.get()
         if not folder:
             self.status.set(self.tr('请先选择本地进度文件夹。','Choose the local progress folder first.')); return
-        local=upload_files(Path(folder))
+        local=upload_files(self.mat_local) or upload_files(Path(folder))
         if not local:
             self.status.set(self.tr('本地进度文件夹为空。','The progress folder is empty.')); return
         root=Path(folder)
@@ -995,9 +1031,7 @@ class Client:
     def upload_references(self):
         login=self.session_login or self.login
         candidates=[]
-        if login:
-            refs=self.personal_folder(login)/'references'
-            if refs.is_dir(): candidates=[str(p) for p in sorted(refs.iterdir()) if p.is_file()]
+        if self.reference_dir.is_dir(): candidates=[str(p) for p in sorted(upload_files(self.reference_dir))]
         picked=self.pick(self.tr('上传参考资料','Upload references'),
             self.tr('勾选要上传的文件，也可以用“添加文件”从别处挑选。','Check the files to upload, or add more from elsewhere.'),candidates,extra_files=True)
         if not picked: return
@@ -1056,8 +1090,8 @@ class Client:
         self.help_text.bind('<<Modified>>',self.help_modified)
         text=self.help_text
         self.help_dirty=False
-        zh='SRPRecorder2027 0.2.1 公开测试版\n\n六页与 Windows 一致：团队研究、Quick Post、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证登录。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。0.2.0 首次升级的旧数据清理只执行一次；本次更新保留已标记 0.2.0 的数据。退出程序后再替换 .app。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
-        en='SRPRecorder2027 0.2.1 Public Test\n\nSix pages match Windows: Team Research, Quick Post, References, Local Progress, Team Sync, and Help.\n\nAccept the private research-data invitation, then sign in with your own classic PAT (repo scope). Browsing is read-only; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. The 0.2.0 cleanup runs once; this update preserves data already marked 0.2.0. Quit before replacing the .app.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
+        zh='SRPRecorder2027 0.2.2 公开测试版\n\n六页与 Windows 一致：团队研究、Quick Post、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证登录。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。0.2.0 首次升级的旧数据清理只执行一次；本次更新保留已标记 0.2.0 的数据。退出程序后再替换 .app。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
+        en='SRPRecorder2027 0.2.2 Public Test\n\nSix pages match Windows: Team Research, Quick Post, References, Local Progress, Team Sync, and Help.\n\nAccept the private research-data invitation, then sign in with your own classic PAT (repo scope). Browsing is read-only; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. The 0.2.0 cleanup runs once; this update preserves data already marked 0.2.0. Quit before replacing the .app.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
         self._help_zh=zh; self._help_en=en
         text.insert('1.0',en if self.en else zh); text.edit_modified(False)
 
