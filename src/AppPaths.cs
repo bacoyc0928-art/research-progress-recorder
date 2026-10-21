@@ -59,6 +59,28 @@ namespace SRLogbook
             catch { }
         }
 
+        /// <summary>
+        /// 0.2.2 起“个人参考资料”统一放在 PersonalWorkspaceSRRec\Reference，他人内容放 Public_Temp。
+        /// 这里清掉旧设计留在 References 根下的人员目录、遗留清单和误建的 references 子目录，只保留 Default。
+        /// </summary>
+        public static void MigrateLegacyReferences(string appDir)
+        {
+            try
+            {
+                string refs = Path.Combine(Root(appDir), "References");
+                if (!Directory.Exists(refs)) return;
+                foreach (string dir in Directory.GetDirectories(refs))
+                {
+                    string name = Path.GetFileName(dir);
+                    if (string.Equals(name, "Default", StringComparison.OrdinalIgnoreCase)) continue;
+                    try { Directory.Delete(dir, true); } catch { }
+                }
+                foreach (string file in Directory.GetFiles(refs, "*.json")) { try { File.Delete(file); } catch { } }
+                try { File.Delete(Path.Combine(Root(appDir), "personal.json")); } catch { }
+            }
+            catch { }
+        }
+
         public static string DefaultReferences(string appDir)
         {
             Ensure(appDir);
