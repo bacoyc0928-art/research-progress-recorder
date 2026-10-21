@@ -580,8 +580,7 @@ namespace SRLogbook
             using (Form dialog = new Form())
             {
                 dialog.Text = Lang.T(title);
-                dialog.Size = new Size(780, 580);
-                dialog.StartPosition = FormStartPosition.CenterParent;
+                Dlg.Fit(dialog, 780, 580);
                 dialog.BackColor = Color.White;
                 Label tip = new Label();
                 tip.Text = Lang.T(hint);
@@ -591,16 +590,19 @@ namespace SRLogbook
                 list.Dock = DockStyle.Fill; list.CheckOnClick = true; list.IntegralHeight = false;
                 list.Font = Theme.F(9f);
                 foreach (KeyValuePair<string, string> it in items) list.Items.Add(it.Value, true);
-                Panel bottom = new Panel(); bottom.Dock = DockStyle.Bottom; bottom.Height = 56; bottom.BackColor = Color.White;
-                int x = 14;
-                Button all = new Button(); all.Text = "全选 / Select All"; all.FlatStyle = FlatStyle.Flat; all.SetBounds(x, 12, 128, 30); x += 136;
-                Button none = new Button(); none.Text = "全不选 / Select None"; none.FlatStyle = FlatStyle.Flat; none.SetBounds(x, 12, 148, 30); x += 156;
+                Button all = Dlg.Button("全选 / Select All");
+                Button none = Dlg.Button("全不选 / Select None");
                 all.Click += delegate { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, true); };
                 none.Click += delegate { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, false); };
-                bottom.Controls.Add(all); bottom.Controls.Add(none);
+                Button ok = Dlg.Button("确定 / OK");
+                Button cancel = Dlg.Button("取消 / Cancel");
+                ok.Click += delegate { dialog.DialogResult = DialogResult.OK; dialog.Close(); };
+                cancel.Click += delegate { dialog.Close(); };
+                List<Button> buttons = new List<Button>();
+                buttons.Add(ok); buttons.Add(cancel); buttons.Add(none); buttons.Add(all);
                 if (allowBrowse)
                 {
-                    Button browse = new Button(); browse.Text = "添加文件 / Add files"; browse.FlatStyle = FlatStyle.Flat; browse.SetBounds(x, 12, 150, 30);
+                    Button browse = Dlg.Button("添加文件 / Add files");
                     browse.Click += delegate
                     {
                         using (OpenFileDialog od = new OpenFileDialog())
@@ -618,16 +620,10 @@ namespace SRLogbook
                             }
                         }
                     };
-                    bottom.Controls.Add(browse);
+                    buttons.Add(browse);
                 }
-                Button ok = new Button(); ok.Text = "确定 / OK"; ok.FlatStyle = FlatStyle.Flat; ok.SetBounds(bottom.Width - 236, 12, 104, 30);
-                Button cancel = new Button(); cancel.Text = "取消 / Cancel"; cancel.FlatStyle = FlatStyle.Flat; cancel.SetBounds(bottom.Width - 124, 12, 110, 30);
-                ok.Anchor = AnchorStyles.Top | AnchorStyles.Right; cancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-                ok.Click += delegate { dialog.DialogResult = DialogResult.OK; dialog.Close(); };
-                cancel.Click += delegate { dialog.Close(); };
-                bottom.Controls.Add(ok); bottom.Controls.Add(cancel);
+                Dlg.BottomBar(dialog, buttons.ToArray());
                 dialog.Controls.Add(tip);
-                dialog.Controls.Add(bottom);
                 dialog.Controls.Add(list);
                 dialog.AcceptButton = ok; dialog.CancelButton = cancel;
                 if (dialog.ShowDialog(this) != DialogResult.OK) return picked;
@@ -885,7 +881,7 @@ namespace SRLogbook
             using (Form dialog = new Form())
             {
                 dialog.Text = "撤除我上传的参考资料";
-                dialog.Size = new Size(620, 460);
+                Dlg.Fit(dialog, 720, 520);
                 dialog.StartPosition = FormStartPosition.CenterParent;
                 dialog.BackColor = Color.White;
                 CheckedListBox list = new CheckedListBox();
@@ -941,7 +937,7 @@ namespace SRLogbook
             using (Form dialog = new Form())
             {
                 dialog.Text = "活动日志";
-                dialog.Size = new Size(900, 560);
+                Dlg.Fit(dialog, 920, 600);
                 dialog.StartPosition = FormStartPosition.CenterParent;
                 dialog.BackColor = Color.White;
                 ListView list = new ListView();
