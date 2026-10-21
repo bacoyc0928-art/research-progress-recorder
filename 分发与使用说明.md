@@ -1,52 +1,46 @@
-# Research Progress Recorder / SRPRecorder2027 · 0.1.0（装补丁后为 0.1.1）
+# Research Progress Recorder / SRPRecorder2027 · 0.2.0
 
 **公开测试版 / Public Test**
 
 警告：当前版本为测试版本，上传的所有数据信息，以及程序运行时的信息和内容随时有可能丢失。后续代码以及程序功能的根本性变更有可能随时发生。
 
-## 版本状态（0.1.0 / 0.1.1）
+## 版本状态（0.2.0）
 
-- **没装补丁 = 0.1.0**：直接用下方 Release 里的安装包。
-- **装了 0.1.1 补丁 = 0.1.1**：程序标题显示 `0.1.1`，文件/内部版本 `0.1.1.0`；功能与修复见“0.1.1 补丁”一节。
-- 补丁只替换程序本体，**不新建 Release、不改数据结构**；0.1.0 与 0.1.1 的数据完全互通，装与不装都能读写同一份研究数据。
+- 当前版本 **0.2.0**：程序标题显示 `0.2.0`，文件/内部版本 `0.2.0.0`（macOS 为 `0.2.0`）。
+- **可以覆盖任何旧版本**（0.0.x / 0.1.0 / 0.1.1，Windows 与 macOS 均可）：直接覆盖安装即可。
+- **0.2.0 首次启动会清除旧版软件数据**：程序自己生成的配置 JSON、日志、成员下载缓存、以及 `References/Default` 里旧版下载的默认资料库副本都会被删除，然后写入版本标记 `data_version.txt`；清理清单见 `upgrade_cleanup.log`。
+- **不会删除**你自己的本地进度文件夹及其中的文档、个人文件夹里 `references/` 的上传副本。默认资料库可在登录后重新下载。
+- 首次启动需要重新选择工作文件夹与本地进度文件夹，并重新登录（令牌只在内存）。
 
 ## 下载与安装
 
 安装文件统一位于 [最新发布页](https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest)，下载不需要 GitHub 登录或令牌。请勿使用仓库根目录历史遗留的 0.0.2 exe/ZIP。
 
-| 系统 | 0.1.0 下载 | 要求 |
+| 系统 | 0.2.0 下载 | 要求 |
 | --- | --- | --- |
-| Windows | [Windows ZIP](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.1.0/research-progress-recorder-0.1.0-Windows.zip) | Windows 10/11，.NET Framework 4.8 |
-| Apple Silicon / M 系列 | [arm64 DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.1.0/research-progress-recorder-0.1.0-macOS-arm64.dmg) | macOS 14+ |
-| Intel Mac | [x64 DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.1.0/research-progress-recorder-0.1.0-macOS-x64.dmg) | macOS 15+ |
+| Windows | [Windows ZIP](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.0/research-progress-recorder-0.2.0-Windows.zip) | Windows 10/11，.NET Framework 4.8 |
+| Apple Silicon / M 系列 | [arm64 DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.0/research-progress-recorder-0.2.0-macOS-arm64.dmg) | macOS 14+ |
+| Intel Mac | [x64 DMG](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.0/research-progress-recorder-0.2.0-macOS-x64.dmg) | macOS 15+ |
 
-Windows：将 ZIP 完整解压到自己的可写文件夹，运行 SRCRec/SRPRecorder2027.exe。Mac：打开 DMG，将 ResearchProgressRecorder.app 拖到 Applications 后弹出镜像；无需另装 Python。Mac 目前只有临时签名，没有 Apple Developer ID 签名或公证，系统可能拦截首次运行；请核对来源及 SHA256SUMS.txt，并遵循所在单位安全政策。本程序不会修改系统安全设置。Windows 也未购买代码签名证书。
+Windows：将 ZIP 完整解压到自己的可写文件夹，运行 SRCRec/SRPRecorder2027.exe；覆盖旧版时关闭程序后整目录替换（务必保留随 exe 的 `.exe.config`）。Mac：打开 DMG，将 ResearchProgressRecorder.app 拖到 Applications 覆盖旧版；无需另装 Python。Mac 只有临时签名，没有 Apple Developer ID 签名或公证，首次运行可能被拦截，请右键“打开”。请核对来源与 `SHA256SUMS.txt`，遵循所在单位安全政策；本程序不会修改系统安全设置。Windows 也未购买代码签名证书。
 
-## 0.1.1 补丁 / Patch
+## 0.2.0 更新内容
 
-0.1.0 存在登录缺陷：程序要求“令牌身份”和“仓库访问”两步同时成功才保存令牌。仓库检查失败时（尤其是外部协作者用 fine-grained 令牌访问他人私有仓库，GitHub 一律返回 404）令牌根本没有保存，团队页就永远显示“（未登录）”。
+相对 0.1.0，累积了完整的一轮功能与修复：
 
-0.1.1 是**补丁**，不是新版本：不建 0.1.1 Release，只替换程序本体，不改变数据结构、配置格式和文件位置。装上它就是 0.1.1，不装仍是 0.1.0。
-
-| 平台 | 0.1.1 补丁下载 | 覆盖方式 |
-| --- | --- | --- |
-| Windows | [Windows 补丁 ZIP](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/main/patches/0.1.1/research-progress-recorder-0.1.1-Windows.zip) | 解压后覆盖 SRCRec 内同名 exe 与 .exe.config |
-| Apple Silicon / M 系列 | [macOS arm64 补丁](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/main/patches/0.1.1/research-progress-recorder-0.1.1-macOS-arm64.dmg) | 打开 DMG，把 app 拖到 Applications 覆盖旧版 |
-| Intel Mac | [macOS x64 补丁](https://raw.githubusercontent.com/bacoyc0928-art/research-progress-recorder/main/patches/0.1.1/research-progress-recorder-0.1.1-macOS-x64.dmg) | 同上 |
-
-三个文件的大小与 SHA-256 见仓库内 [`patches/0.1.1/SHA256SUMS.txt`](https://github.com/bacoyc0928-art/research-progress-recorder/blob/main/patches/0.1.1/SHA256SUMS.txt)。raw 直链走 CDN，刚更新过可能短暂返回旧文件；遇到时用该文件核对摘要，或稍后重试。
-
-补丁内容（0.1.1 相对 0.1.0）：
-- 登录改成窗口左下角独立面板，令牌只存在内存，每次启动重新登录；“退出”＝二次确认后关闭程序。
-- 登录与“仓库是否可见”拆成两步（先校验令牌身份并立即保存，再单独检查仓库）；失败按 HTTP 401/403/404 说明原因（404 明确提示外部协作者必须用 classic PAT）。
-- 未登录时全面拦截：不能进“参考文献与资料”、帮助只读、工作/个人/进度文件夹、新建文档、类别增删改、文档移除、发帖与所有同步动作，且不写任何 JSON。
-- 团队研究页列出全部协作者，除本人外统一显示“项目成员”。
-- 新增“撤除我上传的参考资料”（只删除本人 `team/<账号>/references/` 下的文件与清单条目）。
-- 新增 **Quick Post**：帖子便签、已阅进历史、只能删自己的帖子。
-- 新增活动日志：`logs/public/activity.json`（全员，2000 条）与 `logs/private/<账号>/activity.json`（本人，500 条）。
-- 使用说明改为可编辑并上传 `help/help.md`，附 `help/changelog.json` 改动日志。
-- 修复 Windows 长路径导致的“未能找到路径…的一部分”、高 DPI 下登录面板被二次放大、以及未登录拦截弹模态对话框导致截图自检/CI 卡死。
-
+- **界面固定中英双语并显**，去掉语言切换；提示、弹窗、活动日志同样双语。
+- **左下角独立登录面板**；登录与“仓库是否可见”拆成两步，401/403/404 分别说明（404 提示外部协作者必须用 classic PAT）；令牌只存在内存。
+- **未登录全面拦截**查看与改动；退出＝二次确认后关闭程序。
+- **团队研究**列出全部协作者，除本人外统一“项目成员”。
+- 新增**撤除我上传的参考资料**（只删本人目录）。
+- 新增 **Quick Post**（原“快速发行”）：便签卡片、已阅进历史、只能删自己的帖子。
+- 新增**活动日志**：`logs/public/activity.json`（全员 2000 条）与 `logs/private/<账号>/activity.json`（本人 500 条）。
+- **使用说明可编辑**并上传 `help/help.md`，附 `help/changelog.json`。
+- 团队同步的四个动作改为**先预览再勾选**，撤除也只删勾选项。
+- **栏目未读红点**：团队研究 / Quick Post / 团队同步 有新内容时亮红点，点进即消失。
+- **本地进度页直接列出文件夹内容**（名称 / 大小 / 修改时间，双击打开）。
+- 新建 Word：项目 / 日期 / 目的 + 留白，中文楷体 + 西文 Times New Roman。
+- 修复：长路径“未能找到路径…的一部分”、高 DPI 登录面板过大、未登录拦截弹模态导致自动化卡死、双语文案重叠/被遮挡。
 ## 两个仓库
 
 本仓库是公开的程序源码、构建流程和安装包仓库；普通下载者不会获得修改源码的权限。团队研究文件放在**私有**数据仓库 `bacoyc0928-art/research-data`。邀请仅针对数据仓库。`team/<login>` 是程序使用的路径，不是仓库权限边界；数据仓库写入者可在 GitHub 修改其他成员文件，请只邀请信任的协作者。
