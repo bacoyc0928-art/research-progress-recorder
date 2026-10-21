@@ -35,7 +35,7 @@ namespace SRLogbook
             top.Controls.Add(h);
 
             Label sub = new Label();
-            sub.Text = "成员内容下载到 References/<账号>/TeamConRef/。";
+            sub.Text = "他人内容下载到 PersonalWorkspaceSRRec\\Public_Temp（退出即清空）。";
             sub.Font = Theme.F(8.4f);
             sub.ForeColor = Theme.TextMuted;
             sub.BackColor = Color.White;
@@ -69,7 +69,7 @@ namespace SRLogbook
 
             Panel pp = new Panel();
             pp.Dock = DockStyle.Top;
-            pp.Height = Ui.S(76);
+            pp.Height = Ui.S(92);
             pp.BackColor = Color.White;
 
             Label ph = new Label();
@@ -85,7 +85,7 @@ namespace SRLogbook
             lblPersonal.Font = Theme.FB(10f);
             lblPersonal.LinkColor = Theme.Accent;
             lblPersonal.BackColor = Color.White;
-            lblPersonal.SetBounds(Ui.S(240), Ui.S(8), Ui.S(520), Ui.S(22));
+            lblPersonal.SetBounds(Ui.S(240), Ui.S(8), Ui.S(360), Ui.S(22));
             lblPersonal.AutoEllipsis = false;
             lblPersonal.LinkClicked += delegate { OpenPersonalFolder(); };
             pp.Controls.Add(lblPersonal);
@@ -95,7 +95,8 @@ namespace SRLogbook
             lblPersonalPath.Font = Theme.F(8.6f);
             lblPersonalPath.ForeColor = Theme.TextMuted;
             lblPersonalPath.BackColor = Color.White;
-            lblPersonalPath.SetBounds(Ui.S(2), Ui.S(36), Ui.S(600), Ui.S(18));
+            lblPersonalPath.SetBounds(Ui.S(2), Ui.S(56), Ui.S(880), Ui.S(18));
+            lblPersonalPath.AutoEllipsis = true;
             pp.Controls.Add(lblPersonalPath);
             personalFolder = LoadPersonalFolder();
             UpdatePersonalLabels();
@@ -272,7 +273,8 @@ namespace SRLogbook
 
         private string TeamConRefRoot(string myLogin)
         {
-            return Path.Combine(AppPaths.MemberReferences(appDir, myLogin), "TeamConRef");
+            // 他人内容只放在临时区 Public_Temp，退出/启动时清空（用户 2026-10-21 要求）。
+            return AppPaths.PublicTemp(appDir);
         }
 
         private void ShowMemberFiles(string login, string dir)
