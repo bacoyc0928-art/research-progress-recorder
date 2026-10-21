@@ -73,7 +73,7 @@ namespace SRLogbook
             pp.BackColor = Color.White;
 
             Label ph = new Label();
-            ph.Text = "个人研究";
+            ph.Text = "我的参考资料";
             ph.Font = Theme.FB(10.5f);
             ph.ForeColor = Theme.Navy;
             ph.BackColor = Color.White;
@@ -81,7 +81,7 @@ namespace SRLogbook
             pp.Controls.Add(ph);
 
             lblPersonal = new LinkLabel();
-            lblPersonal.Text = "（未登录）";
+            lblPersonal.Text = "打开 Reference 文件夹";
             lblPersonal.Font = Theme.FB(10f);
             lblPersonal.LinkColor = Theme.Accent;
             lblPersonal.BackColor = Color.White;
@@ -91,11 +91,11 @@ namespace SRLogbook
             pp.Controls.Add(lblPersonal);
 
             lblPersonalPath = new Label();
-            lblPersonalPath.Text = "个人文件夹未选 / No folder chosen.";
+            lblPersonalPath.Text = "";
             lblPersonalPath.Font = Theme.F(8.6f);
             lblPersonalPath.ForeColor = Theme.TextMuted;
             lblPersonalPath.BackColor = Color.White;
-            lblPersonalPath.SetBounds(Ui.S(2), Ui.S(56), Ui.S(880), Ui.S(18));
+            lblPersonalPath.SetBounds(Ui.S(2), Ui.S(40), Ui.S(880), Ui.S(18));
             lblPersonalPath.AutoEllipsis = true;
             pp.Controls.Add(lblPersonalPath);
             personalFolder = LoadPersonalFolder();
@@ -103,17 +103,14 @@ namespace SRLogbook
 
             FlowLayoutPanel ppRight = new FlowLayoutPanel();
             ppRight.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            ppRight.Size = new Size(Ui.S(480), Ui.S(46));
+            ppRight.Size = new Size(Ui.S(300), Ui.S(46));
             ppRight.FlowDirection = FlowDirection.RightToLeft;
             ppRight.WrapContents = false;
             ppRight.BackColor = Color.White;
             ppRight.Padding = new Padding(0, Ui.S(6), Ui.S(10), 0);
-            Button bOpenP = TeamBtn("打开个人文件夹");
+            Button bOpenP = TeamBtn("打开 Reference");
             bOpenP.Click += delegate { OpenPersonalFolder(); };
-            Button bChoose = TeamBtn("选择个人文件夹");
-            bChoose.Click += delegate { ChoosePersonalFolder(); };
             ppRight.Controls.Add(bOpenP);
-            ppRight.Controls.Add(bChoose);
             pp.Controls.Add(ppRight);
 
             teamFlow = new FlowLayoutPanel();
@@ -147,18 +144,8 @@ namespace SRLogbook
 
         private string LoadPersonalFolder()
         {
-            try
-            {
-                string p = Path.Combine(appDir, "personal.json");
-                if (File.Exists(p))
-                {
-                    JavaScriptSerializer ser = new JavaScriptSerializer();
-                    Dictionary<string, object> d = ser.Deserialize<Dictionary<string, object>>(File.ReadAllText(p, System.Text.Encoding.UTF8));
-                    if (d != null && d.ContainsKey("folder")) return Convert.ToString(d["folder"]);
-                }
-            }
-            catch { }
-            return "";
+            // 0.2.2 规则：个人参考资料固定放在 PersonalWorkspaceSRRec\Reference，不再允许自选。
+            return AppPaths.ReferenceDir(appDir);
         }
 
         private void SavePersonalFolder(string f)
@@ -176,37 +163,21 @@ namespace SRLogbook
         private void UpdatePersonalLabels()
         {
             if (lblPersonalPath == null) return;
-            if (Directory.Exists(personalFolder))
-            {
-                lblPersonalPath.Text = "个人文件夹 / Folder：" + personalFolder;
-                lblPersonalPath.ForeColor = Theme.TextMuted;
-            }
-            else
-            {
-                lblPersonalPath.Text = "个人文件夹未选 / No folder chosen.";
-                lblPersonalPath.ForeColor = Color.FromArgb(179, 69, 63);
-            }
+            lblPersonalPath.Text = "PersonalWorkspaceSRRec\\Reference：" + personalFolder;
+            lblPersonalPath.ForeColor = Theme.TextMuted;
         }
 
         private void ChoosePersonalFolder()
         {
-            if (!RequireLogin("团队研究")) return;
-            using (FolderBrowserDialog d = new FolderBrowserDialog())
-            {
-                d.Description = "选择个人研究文件夹（存放你上传到 GitHub 的个人资料）";
-                if (Directory.Exists(personalFolder)) d.SelectedPath = personalFolder;
-                if (d.ShowDialog(this) != DialogResult.OK) return;
-                personalFolder = d.SelectedPath;
-                try { Directory.CreateDirectory(personalFolder); } catch { }
-                SavePersonalFolder(personalFolder);
-                UpdatePersonalLabels();
-            }
+            // 规则固定：个人参考资料目录不可更换；此方法仅保留给旧调用点，直接打开 Reference。
+            OpenPath(AppPaths.ReferenceDir(appDir));
         }
 
         private void OpenPersonalFolder()
         {
-            if (!Directory.Exists(personalFolder)) { ChoosePersonalFolder(); if (!Directory.Exists(personalFolder)) return; }
-            OpenPath(personalFolder);
+            string dir = AppPaths.ReferenceDir(appDir);
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            OpenPath(dir);
         }
 
         private async void RefreshTeamPage()
@@ -282,7 +253,7 @@ namespace SRLogbook
             using (Form dialog = new Form())
             {
                 dialog.Text = login + " - 团队内容";
-                dialog.Size = new Size(760, 520);
+                Dlg.Fit(dialog, 800, 560);
                 dialog.StartPosition = FormStartPosition.CenterParent;
                 dialog.BackColor = Color.White;
                 ListView list = new ListView();
@@ -323,7 +294,8 @@ namespace SRLogbook
                 Button close = new Button();
                 close.Text = "关闭";
                 close.FlatStyle = FlatStyle.Flat;
-                close.SetBounds(660, 10, 80, 30);
+                close.SetBounds(Math.Max(Ui.S(12), dialog.ClientSize.Width - Ui.S(94)), 10, 80, 30);
+                close.Anchor = AnchorStyles.Top | AnchorStyles.Right;
                 close.Click += delegate { dialog.Close(); };
                 bottom.Controls.Add(open);
                 bottom.Controls.Add(openDir);
@@ -348,7 +320,7 @@ namespace SRLogbook
                 {
                     // Your own uploads are already on this machine; re-downloading them only adds a long staging path.
                     string personal = LoadPersonalFolder();
-                    string refs = string.IsNullOrEmpty(personal) ? null : Path.Combine(personal, "references");
+                    string refs = AppPaths.ReferenceDir(appDir);
                     if (refs != null && Directory.Exists(refs) && Directory.GetFiles(refs, "*", SearchOption.AllDirectories).Length > 0)
                     { ShowMemberFiles(login + "（我）", refs); return; }
                     Msg.Show("这是你自己的账号。你上传的副本在个人文件夹的 references 子目录；团队区的文件请用“撤除我上传的参考资料”管理。 / These are your own files; use Remove My Uploaded References to manage the team area.", "团队研究");
