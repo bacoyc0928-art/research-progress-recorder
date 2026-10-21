@@ -420,7 +420,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.1.1";
+            this.Text = "SRPRecorder2027 · 0.2.0";
             this.ClientSize = new Size(1180, 730);
             this.MinimumSize = new Size(1020, 680);
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -2139,6 +2139,8 @@ namespace SRLogbook
                     return;
                 }
             Application.SetCompatibleTextRenderingDefault(false);
+            // 0.2.0 首次启动：清掉旧版本留下的配置、缓存与默认库副本，从干净状态开始。
+            try { CleanUpgrade.Run(AppDomain.CurrentDomain.BaseDirectory); } catch { }
             MainForm f;
             try
             {
