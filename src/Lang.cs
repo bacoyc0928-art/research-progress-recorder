@@ -285,7 +285,7 @@ namespace SRLogbook
 
 
 
-        private const string HelpBoth = "SRPRecorder2027 · 0.2.2 · 中英双语界面 / Bilingual UI\r\n\r\n" +
+        private const string HelpBoth = "SRPRecorder2027 · 0.2.3 · 中英双语界面 / Bilingual UI\r\n\r\n" +
             "1. 登录 / Sign in\r\n" +
             "在窗口左下角粘贴自己的 GitHub 访问密钥，点“登录 / Sign In”。令牌只保存在内存，每次启动都要重新登录；未登录时不能进入参考文献页，也不能发起任何同步、发帖或改动。\r\n" +
             "Paste your own GitHub token at the bottom-left of the window and press Sign In. The token stays in memory only, so every launch needs a fresh sign-in. While signed out you cannot open References or start any sync, post or edit.\r\n\r\n" +
