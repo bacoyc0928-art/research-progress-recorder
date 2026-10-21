@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.1.1. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.0. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import queue
 import re
+import shutil
 import ssl
 import subprocess
 import sys
@@ -23,7 +24,7 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.1.1'
+VERSION = '0.2.0'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
@@ -308,6 +309,42 @@ def delete_post(api,pid):
     api.request('DELETE',endpoint,{'message':'post: delete','branch':api.branch,'sha':info['sha']})
 
 class Client:
+    def clean_previous_data(self):
+        """0.2.0 首次启动：清掉旧版本的软件数据（配置、日志、默认库副本、成员缓存），
+        保留用户自己的本地进度文件夹。清理清单写到 upgrade_cleanup.log。"""
+        marker=self.home/'data_version.txt'
+        try:
+            if marker.exists() and marker.read_text(encoding='utf-8-sig',errors='ignore').strip()==VERSION: return
+        except Exception: pass
+        removed=[]
+        for name in ('config.json','research_log.json','progress.json','personal.json','workspace.json',
+                     'sync_config.json','news.json','help_local.md','startup_error.txt'):
+            p=self.home/name
+            if p.exists():
+                try: p.unlink(); removed.append(str(p))
+                except Exception: pass
+        refs=self.home/'SRCRec'/'References'
+        if refs.is_dir():
+            default=refs/'Default'
+            if default.is_dir():
+                for f in default.rglob('*'):
+                    if f.is_file() and f.name.lower()!='readme.txt':
+                        try: f.unlink(); removed.append(str(f))
+                        except Exception: pass
+            for d in refs.iterdir():
+                if not d.is_dir(): continue
+                team=d/'TeamConRef'
+                if team.is_dir():
+                    try: shutil.rmtree(team); removed.append(str(team))
+                    except Exception: pass
+                try:
+                    for f in d.glob('references.json'):
+                        f.unlink(); removed.append(str(f))
+                except Exception: pass
+        try: marker.write_text(VERSION,encoding='utf-8')
+        except Exception: pass
+        try: (self.home/'upgrade_cleanup.log').write_text('\n'.join(removed),encoding='utf-8')
+        except Exception: pass
     def __init__(self, root, home=None, smoke=False):
         import tkinter as tk
         from tkinter import ttk, filedialog, messagebox, simpledialog
@@ -317,6 +354,7 @@ class Client:
         self.files_root=self.home/'SRCRec'; self.files_root.mkdir(exist_ok=True)
         self.default=self.files_root/'References'/'Default'; self.default.mkdir(parents=True,exist_ok=True)
         self.configfile=self.home/'config.json'; self.datafile=self.home/'research_log.json'
+        self.clean_previous_data()
         self.config=json.loads(self.configfile.read_text(encoding='utf-8-sig')) if self.configfile.exists() else {}
         # Keep legacy research JSON intact. 0.1.0 file channels never rewrite it.
         if self.datafile.exists(): normalize(json.loads(self.datafile.read_text(encoding='utf-8-sig')))
@@ -1008,8 +1046,8 @@ class Client:
         self.help_text.bind('<<Modified>>',self.help_modified)
         text=self.help_text
         self.help_dirty=False
-        zh='SRPRecorder2027 0.1.1 公开测试版\n\n五栏与 Windows 一致：团队研究、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证保存配置。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。旧 0.0.2 的研究 JSON 和配置保留。升级退出后替换 .app 即可。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
-        en='SRPRecorder2027 0.1.1 Public Test\n\nFive pages match Windows: Team Research, References, Local Progress, Team Sync, Help.\n\nAccept the private research-data invitation, then validate your own classic PAT (repo scope). Refresh only reads; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. Legacy 0.0.2 JSON and settings are preserved. Quit before replacing the .app to upgrade.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
+        zh='SRPRecorder2027 0.2.0 公开测试版\n\n五栏与 Windows 一致：团队研究、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证保存配置。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。旧 0.0.2 的研究 JSON 和配置保留。升级退出后替换 .app 即可。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
+        en='SRPRecorder2027 0.2.0 Public Test\n\nFive pages match Windows: Team Research, References, Local Progress, Team Sync, Help.\n\nAccept the private research-data invitation, then validate your own classic PAT (repo scope). Refresh only reads; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. Legacy 0.0.2 JSON and settings are preserved. Quit before replacing the .app to upgrade.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
         self._help_zh=zh; self._help_en=en
         text.insert('1.0',en if self.en else zh); text.edit_modified(False)
 
@@ -1081,7 +1119,7 @@ def main():
                 client=Client(root,tmp,smoke=True); root.update()
                 assert len(client.tabs)==6
                 for index in range(6): client.book.select(index); root.update()
-                root.destroy(); print('SRPRecorder2027 0.1.1: six pages and the bilingual UI passed')
+                root.destroy(); print('SRPRecorder2027 0.2.0: six pages and the bilingual UI passed')
         else:
             Client(root); root.deiconify(); root.mainloop()
     except Exception as error:
