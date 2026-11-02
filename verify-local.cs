@@ -75,10 +75,14 @@ public class Verify002
             f.SetPagePublic(5); Application.DoEvents();
             var toolbar = (FlowLayoutPanel)typeof(MainForm).GetField("helpToolbar", fields).GetValue(f);
             foreach (Control button in toolbar.Controls) Application.DoEvents();
-            bool helpButtonsFit = toolbar.Controls.Count == 5;
+            bool helpButtonsFit = toolbar.Controls.Count == 4;
             foreach (Control button in toolbar.Controls)
                 helpButtonsFit = helpButtonsFit && toolbar.ClientRectangle.Contains(button.Bounds);
-            Check(helpButtonsFit, "all five bilingual Help toolbar buttons fit without clipping");
+            Check(helpButtonsFit, "all four bilingual Help toolbar buttons fit without clipping");
+            var updateButton = (Button)typeof(MainForm).GetField("updateButton", fields).GetValue(f);
+            var sidebarPanel = (Panel)typeof(MainForm).GetField("sidebar", fields).GetValue(f);
+            Check(updateButton != null && updateButton.Parent == sidebarPanel && sidebarPanel.ClientRectangle.Contains(updateButton.Bounds),
+                "update button sits in the bottom-left sidebar");
             f.SetPagePublic(4); Application.DoEvents();
             var syncCard = (Panel)typeof(MainForm).GetField("syncCard", fields).GetValue(f);
             Check(pagePanels[4].ClientRectangle.Contains(syncCard.Bounds), "Team Sync card fits inside the page at minimum size");
