@@ -922,8 +922,8 @@ namespace SRLogbook
             {
                 foot.Top = sidebar.Height - Ui.S(62);
                 versionLabel.Top = foot.Top - Ui.S(20);
-                loginPanel.Top = Math.Max(320, foot.Top - loginPanel.Height - 10);
-                updateButton.Top = loginPanel.Top + loginPanel.Height + Ui.S(8);
+                updateButton.Top = versionLabel.Top - Ui.S(38);
+                loginPanel.Top = Math.Max(320, updateButton.Top - loginPanel.Height - Ui.S(8));
             };
         }
 
