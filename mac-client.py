@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.2.4. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.5. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -10,6 +10,7 @@ import hmac
 import json
 import os
 from pathlib import Path
+import platform
 import queue
 import re
 import shutil
@@ -26,14 +27,14 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.4'
+VERSION = '0.2.5'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
-HELP_TEXT = """SRPRecorder2027 · 0.2.4 · 中英双语界面 / Bilingual UI
+HELP_TEXT = """SRPRecorder2027 · 0.2.5 · 中英双语界面 / Bilingual UI
 数据架构与使用说明 / Data architecture and usage guide
 
 【0】总览 / Overview
@@ -50,7 +51,7 @@ First run: sign in at the bottom-left (optionally tick Remember and set a 6-digi
 
 【1】Windows 本机目录 / Windows local layout
 SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）
-├─ SRPRecorder2027.exe             程序 0.2.4
+├─ SRPRecorder2027.exe             程序 0.2.5
 ├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留
 ├─ research_log.json               旧版研究记录
 ├─ workspace.json                  工作区路径
@@ -112,7 +113,7 @@ Quick Post：发布 posts\\<id>.txt；已阅 posts\\read\\<我>.json；只能删
 【5】清理、保留与升级 / Cleanup, retention and upgrade
 - Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。
 - References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。
-- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.4 不会重复清理。
+- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.5 不会重复清理。
 - 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。
 - 远端上传只新增或覆盖，不自动删除旧文件。
 Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.
@@ -126,7 +127,9 @@ Limits: 50 MiB per file; symlinks and invalid filenames are rejected; while sign
 
 【7】本页 / This help page
 本页可编辑：点“上传到 GitHub”写入 help\\help.md，全员登录后读到同一份，并在 help\\changelog.json 留下改动日志；“恢复默认”回到本文件，“读取云端版本”重新拉取。
-This page is editable: Upload to GitHub writes help\\help.md for everyone and appends help\\changelog.json; Restore Default returns to this built-in text; Load From GitHub re-fetches the cloud copy."""
+“检查更新 / Check updates”会从 GitHub 读取最新版本、按 SHA-256 校验后下载，重启时只替换程序文件；本地进度、参考资料与配置不会被删除。
+This page is editable: Upload to GitHub writes help\\help.md for everyone and appends help\\changelog.json; Restore Default returns to this built-in text; Load From GitHub re-fetches the cloud copy.
+“检查更新 / Check updates” downloads the latest release from GitHub, verifies its SHA-256 and replaces only program files after restart; local progress, references and settings are not touched."""
 
 
 def version_key(value):
@@ -287,6 +290,71 @@ def remembered_unlock(pin):
 def remembered_delete():
     try: Keychain(REMEMBER_SERVICE, REMEMBER_ACCOUNT).delete()
     except Exception: pass
+
+def version_tuple(value):
+    parts=[int(x) for x in re.findall(r'\d+', value or '')]
+    return tuple((parts+[0,0,0])[:3])
+
+def release_info():
+    """公开 Release，无需令牌。"""
+    req=urllib.request.Request('https://api.github.com/repos/'+DEFAULT_REPO.replace('/research-data','/research-progress-recorder')+'/releases/latest',
+        headers={'User-Agent':APP_ID,'Accept':'application/vnd.github+json'})
+    with urllib.request.urlopen(req,timeout=30) as resp: return json.loads(resp.read().decode('utf-8'))
+
+def update_asset(rel):
+    arch='arm64' if platform.machine()=='arm64' else 'x64'
+    for asset in rel.get('assets') or []:
+        if str(asset.get('name','')).endswith('macOS-'+arch+'.dmg'): return asset
+    return None
+
+def download_update(rel, asset):
+    """下载 DMG，并用同一 Release 的 SHA256SUMS.txt 校验；返回本地路径。"""
+    folder=Path(tempfile.mkdtemp(prefix='SRPRecorder2027-update-'))
+    target=folder/asset['name']
+    with urllib.request.urlopen(urllib.request.Request(asset['browser_download_url'],headers={'User-Agent':APP_ID}),timeout=120) as resp, open(target,'wb') as out:
+        shutil.copyfileobj(resp,out)
+    sums=None
+    for extra in rel.get('assets') or []:
+        if str(extra.get('name',''))=='SHA256SUMS.txt': sums=extra
+    if sums:
+        with urllib.request.urlopen(urllib.request.Request(sums['browser_download_url'],headers={'User-Agent':APP_ID}),timeout=60) as resp:
+            lines=resp.read().decode('utf-8').splitlines()
+        expected=None
+        for line in lines:
+            parts=line.split()
+            if len(parts)>=2 and parts[-1].lstrip('*')==asset['name']: expected=parts[0].lower()
+        digest=hashlib.sha256(target.read_bytes()).hexdigest()
+        if not expected or digest!=expected:
+            shutil.rmtree(folder,ignore_errors=True)
+            raise ValueError('SHA-256 mismatch; the download was discarded.')
+    return str(target)
+
+def app_bundle_path():
+    exe=Path(sys.executable).resolve()
+    if exe.parent.name=='MacOS' and exe.parent.parent.name=='Contents' and exe.parents[2].suffix=='.app':
+        return exe.parents[2]
+    return None
+
+def install_update(dmg):
+    """退出后由脚本替换 .app；用户数据在 Application Support，不会被触碰。"""
+    app=app_bundle_path()
+    if not app:
+        subprocess.Popen(['open',dmg]); return False
+    script=Path(tempfile.mkdtemp(prefix='SRPRecorder2027-apply-'))/'apply-update.sh'
+    script.write_text('#!/bin/sh\nPID="$1"; DMG="$2"; APP="$3"\n'
+        'while kill -0 "$PID" 2>/dev/null; do sleep 0.5; done\n'
+        'MNT=$(hdiutil attach -nobrowse -readonly "$DMG" | grep -o "/Volumes/.*" | tail -1)\n'
+        'if [ -d "$MNT/ResearchProgressRecorder.app" ] && [ -d "$APP" ]; then\n'
+        '  OLD="$APP.old.$$"\n'
+        '  mv "$APP" "$OLD" 2>/dev/null\n'
+        '  if ditto "$MNT/ResearchProgressRecorder.app" "$APP"; then rm -rf "$OLD"; else mv "$OLD" "$APP"; fi\n'
+        '  xattr -dr com.apple.quarantine "$APP" 2>/dev/null\n'
+        'fi\n'
+        'hdiutil detach "$MNT" >/dev/null 2>&1\n'
+        'open "$APP" 2>/dev/null || open "$DMG"\n',encoding='utf-8')
+    script.chmod(0o755)
+    subprocess.Popen(['/bin/sh',str(script),str(os.getpid()),dmg,str(app)],start_new_session=True)
+    return True
 
 class GitHub:
     def __init__(self, config, token):
@@ -1323,6 +1391,7 @@ class Client:
         self.button(bar,'读取云端版本','Load From GitHub',self.load_help)
         self.button(bar,'恢复默认','Restore Default',self.default_help)
         self.button(bar,'改动日志','Change Log',self.show_help_changelog)
+        self.button(bar,'检查更新','Check updates',self.check_updates)
         self.help_text=self.tk.Text(panel,wrap='word',padx=16,pady=16); self.help_text.pack(fill='both',expand=True)
         self.help_text.bind('<<Modified>>',self.help_modified)
         text=self.help_text
@@ -1339,6 +1408,30 @@ class Client:
         except Exception: pass
     def default_help_text(self):
         return self._help_en if self.en else self._help_zh
+    def check_updates(self):
+        def done(rel):
+            tag=str(rel.get('tag_name') or '')
+            if version_tuple(tag)<=version_tuple(VERSION):
+                self.mb.showinfo('SRPRecorder2027',self.tr('已是最新版本 ','Up to date: ')+VERSION,parent=self.root); return
+            asset=update_asset(rel)
+            if not asset:
+                self.mb.showerror('SRPRecorder2027',self.tr('该版本没有适用于本机架构的安装包。','This release has no package for this architecture.'),parent=self.root); return
+            notes=(rel.get('body') or '').strip()
+            if len(notes)>1200: notes=notes[:1200]+'…'
+            message=(self.tr('发现新版本 ','New version ')+tag+self.tr('（当前 ',' (current ')+VERSION+self.tr('）。\n\n',').\n\n')
+                     +notes+self.tr('\n\n下载并在重启后安装？本地资料不会被删除。','\n\nDownload and install after restart? Local data is preserved.'))
+            if not self.mb.askyesno('SRPRecorder2027',message,parent=self.root): return
+            self.status.set(self.tr('正在下载更新…','Downloading update…'))
+            def done2(path):
+                self.status.set(self.tr('更新已下载并通过校验。','Update downloaded and verified.'))
+                if not self.mb.askyesno('SRPRecorder2027',self.tr('现在关闭程序并安装？安装后会自动重新打开。','Close and install now? The app reopens automatically.'),parent=self.root): return
+                auto=install_update(path)
+                if auto:
+                    self.root.destroy()
+                else:
+                    self.mb.showinfo('SRPRecorder2027',self.tr('已打开 DMG：把 ResearchProgressRecorder.app 拖到 Applications 覆盖旧版，数据不会丢失。','The DMG is open: drag ResearchProgressRecorder.app to Applications to replace the old version. Your data is not affected.'),parent=self.root)
+            self.run(lambda: download_update(rel,asset),done2)
+        self.run(release_info,done)
     def default_help(self):
         self.help_text.delete('1.0','end'); self.help_text.insert('1.0',self.default_help_text()); self.help_dirty=False
         self.status.set(self.tr('已恢复软件自带的使用说明。','Restored built-in help.'))
