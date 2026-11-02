@@ -431,7 +431,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.4";
+            this.Text = "SRPRecorder2027 · 0.2.5";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
@@ -1524,7 +1524,9 @@ namespace SRLogbook
             reset.Click += delegate { RestoreDefaultHelp(); };
             Button history = CreateHelpButton("改动日志");
             history.Click += delegate { ShowHelpChangelog(); };
-            helpToolbarButtons = new Button[] { upload, reload, reset, history };
+            Button update = CreateHelpButton("检查更新");
+            update.Click += delegate { CheckForUpdates(); };
+            helpToolbarButtons = new Button[] { upload, reload, reset, history, update };
             foreach (Button button in helpToolbarButtons) helpToolbar.Controls.Add(button);
 
             helpEditor = new TextBox();
@@ -1615,6 +1617,50 @@ namespace SRLogbook
                 if (manual) Msg.Show("已读取云端使用说明。", "使用说明");
             }
             catch (Exception ex) { if (manual) Msg.Show("读取失败：" + ex.Message, "使用说明"); }
+        }
+
+        /// <summary>应用内更新：从公开 Release 下载、校验并在重启后替换程序文件；不触碰用户数据。</summary>
+        private async void CheckForUpdates()
+        {
+            if (syncBusy || teamLoading) { Msg.Show("请等待当前操作完成。/ Wait for the current operation to finish.", "检查更新"); return; }
+            Cursor = Cursors.WaitCursor;
+            try
+            {
+                Updater.Release rel = await Task.Run(() => Updater.Check());
+                Cursor = Cursors.Default;
+                if (rel == null)
+                {
+                    Msg.Show("检查更新失败：无法读取 GitHub 发布信息（请确认网络可用）。 / Update check failed: cannot read GitHub releases (check your connection).", "检查更新", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                if (!Updater.IsNewer(rel.tag_name))
+                {
+                    Msg.Show("已是最新版本 / Up to date: " + Updater.CurrentText(), "检查更新");
+                    return;
+                }
+                string notes = (rel.body ?? "").Trim();
+                if (notes.Length > 1200) notes = notes.Substring(0, 1200) + "…";
+                string ask = "发现新版本 " + rel.tag_name + "（当前 " + Updater.CurrentText() + "）。\n\n" + notes +
+                    "\n\n下载并在重启后安装？本地进度、参考资料与配置不会被删除。 / Download and install after restart? Local progress, references and settings are preserved.";
+                if (Msg.Show(ask, "检查更新", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                using (UpdateProgressForm form = new UpdateProgressForm(rel))
+                {
+                    if (form.ShowDialog(this) != DialogResult.OK)
+                    {
+                        Msg.Show("下载或校验失败 / Download or verification failed: " + (form.Error == null ? "cancelled" : form.Error.Message), "检查更新", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    if (Msg.Show("更新已下载并通过 SHA-256 校验。现在关闭程序并安装？安装后会自动重新打开。 / The update is downloaded and verified. Close and install now? The app reopens automatically.", "检查更新", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                    Updater.ApplyAndRestart(form.Source, appDir, Application.ExecutablePath);
+                }
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Cursor = Cursors.Default;
+                Msg.Show("检查更新失败 / Update failed: " + ex.Message, "检查更新", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally { Cursor = Cursors.Default; }
         }
 
         private void RestoreDefaultHelp()
