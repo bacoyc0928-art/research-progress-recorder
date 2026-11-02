@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.2.6. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.7. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -27,14 +27,14 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.6'
+VERSION = '0.2.7'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
-HELP_TEXT = """SRPRecorder2027 · 0.2.6 · 中英双语界面 / Bilingual UI
+HELP_TEXT = """SRPRecorder2027 · 0.2.7 · 中英双语界面 / Bilingual UI
 数据架构与使用说明 / Data architecture and usage guide
 
 【0】总览 / Overview
@@ -51,7 +51,7 @@ First run: sign in at the bottom-left (optionally tick Remember and set a 6-digi
 
 【1】Windows 本机目录 / Windows local layout
 SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）
-├─ SRPRecorder2027.exe             程序 0.2.6
+├─ SRPRecorder2027.exe             程序 0.2.7
 ├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留
 ├─ research_log.json               旧版研究记录
 ├─ workspace.json                  工作区路径
@@ -113,7 +113,7 @@ Quick Post：发布 posts\\<id>.txt；已阅 posts\\read\\<我>.json；只能删
 【5】清理、保留与升级 / Cleanup, retention and upgrade
 - Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。
 - References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。
-- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.6 不会重复清理。
+- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.7 不会重复清理。
 - 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。
 - 远端上传只新增或覆盖，不自动删除旧文件。
 Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.
@@ -127,9 +127,9 @@ Limits: 50 MiB per file; symlinks and invalid filenames are rejected; while sign
 
 【7】本页 / This help page
 本页可编辑：点“上传到 GitHub”写入 help\\help.md，全员登录后读到同一份，并在 help\\changelog.json 留下改动日志；“恢复默认”回到本文件，“读取云端版本”重新拉取。
-左下角（登录面板下方）的“检查更新 / Check updates”会从 GitHub 读取最新版本、按 SHA-256 校验后下载，重启时只替换程序文件；本地进度、参考资料与配置不会被删除。左侧栏底部同时显示当前版本号。
+Windows 左下侧栏（登录面板下方）与 macOS 窗口底部左侧的“检查更新 / Check updates”会从 GitHub 读取最新版本、按 SHA-256 校验后下载，重启时只替换程序文件；本地进度、参考资料与配置不会被删除。两处都显示当前版本号。
 This page is editable: Upload to GitHub writes help\\help.md for everyone and appends help\\changelog.json; Restore Default returns to this built-in text; Load From GitHub re-fetches the cloud copy.
-“Check updates” at the bottom-left of the sidebar (under the sign-in panel) downloads the latest release from GitHub, verifies its SHA-256 and replaces only program files after restart; local progress, references and settings are not touched. The current version is shown at the bottom-left."""
+“Check updates” in the bottom-left of the sidebar on Windows and at the bottom-left of the window on macOS downloads the latest release from GitHub, verifies its SHA-256 and replaces only program files after restart; local progress, references and settings are not touched. Both show the current version."""
 
 
 def version_key(value):
@@ -654,7 +654,13 @@ class Client:
             panel=ttk.Frame(self.book,padding=16); self.book.add(panel,text=label); self.tabs.append(panel); self.tab_base.append(label)
         self.news_seen=dict(self.config.get('news') or {})
         self.build_login_bar()
-        self.status=self.tk.StringVar(value=self.tr('就绪','Ready')); ttk.Label(self.root,textvariable=self.status,padding=8).pack(fill='x')
+        self.status=self.tk.StringVar(value=self.tr('就绪','Ready'))
+        bottom=ttk.Frame(self.root,padding=(12,2)); bottom.pack(fill='x')
+        self.update_btn=ttk.Button(bottom,text=self.tr('检查更新','Check updates'),command=self.check_updates)
+        self.update_btn.pack(side='left',pady=2)
+        ttk.Label(bottom,textvariable=self.status,padding=6).pack(side='left',fill='x',expand=True)
+        self.version_label=ttk.Label(bottom,text='v'+VERSION,foreground='#8a93a3')
+        self.version_label.pack(side='right',padx=6)
         self.build_team(); self.build_posts(); self.build_references(); self.build_progress(); self.build_sync(); self.build_help()
         self.update_login_ui()
     def build_login_bar(self):
@@ -1391,7 +1397,6 @@ class Client:
         self.button(bar,'读取云端版本','Load From GitHub',self.load_help)
         self.button(bar,'恢复默认','Restore Default',self.default_help)
         self.button(bar,'改动日志','Change Log',self.show_help_changelog)
-        self.button(bar,'检查更新','Check updates',self.check_updates)
         self.help_text=self.tk.Text(panel,wrap='word',padx=16,pady=16); self.help_text.pack(fill='both',expand=True)
         self.help_text.bind('<<Modified>>',self.help_modified)
         text=self.help_text
