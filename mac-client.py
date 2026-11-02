@@ -31,6 +31,102 @@ DATA_VERSION = '0.2.0'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
+HELP_TEXT = """SRPRecorder2027 · 0.2.3 · 中英双语界面 / Bilingual UI
+数据架构与使用说明 / Data architecture and usage guide
+
+【0】总览 / Overview
+本程序没有自建服务器：团队数据全部存放在私有 GitHub 仓库 bacoyc0928-art/research-data，本机只保留工作副本、缓存与配置；程序源码、安装包和文档在公开仓库 research-progress-recorder，下载不需要登录。
+There is no self-hosted server: all team data lives in the private GitHub repository bacoyc0928-art/research-data; each machine keeps only working copies, caches and settings. Source, installers and docs live in the public repository research-progress-recorder and need no sign-in.
+
+  本机 Local  ⇄  api.github.com  ⇄  私有仓库 research-data  ⇄  其他成员 other members
+                        └─ 公开仓库 research-progress-recorder：只放程序与说明 / program and docs only
+
+同步是手动的：上传＝把勾选的文件复制到远端；下载＝把远端文件复制到本机（临时区或默认库）。没有后台实时同步，也没有自动冲突合并。
+Sync is manual: upload copies checked files to the remote; download copies remote files to this machine (temp area or default library). There is no background sync and no automatic conflict merging.
+第一次使用：左下角登录 → 团队研究刷新成员 → 本地进度选择专用文件夹 → 团队同步按需上传/下载。
+First run: sign in at the bottom-left → refresh members on Team Research → pick a dedicated folder on Local Progress → upload/download from Team Sync.
+
+【1】Windows 本机目录 / Windows local layout
+SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）
+├─ SRPRecorder2027.exe             程序 0.2.3
+├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留
+├─ research_log.json               旧版研究记录
+├─ workspace.json                  工作区路径
+├─ progress.json                   进度文件夹路径（改过文件夹才有）
+├─ sync_config.json                绑定仓库信息（owner/repo/branch，无令牌）
+├─ news.json                       各栏目未读红点状态
+├─ data_version.txt                一次性迁移标记，固定 0.2.0
+├─ upgrade_cleanup.log             迁移删除记录
+├─ help_local.md                   使用说明本机草稿
+├─ References\\
+│  └─ Default\\                    团队默认资料库镜像（只读）
+└─ PersonalWorkspaceSRRec\\        默认本地进度文件夹
+   ├─ Mat_Local\\                  个人非参考资料（上传本地进度的默认来源）
+   ├─ Reference\\                  个人参考资料（上传参考资料的默认来源）
+   ├─ Public_Temp\\                他人内容临时区（启动清空、退出清空）
+   └─ references.json             上传后缓存的资料清单
+SRCRec\\ is the program and data root next to the exe; the whole folder is portable. References\\Default is the read-only team library. PersonalWorkspaceSRRec is the default progress workspace: Mat_Local for non-reference files (default progress-upload source), Reference for personal references (default reference-upload source), Public_Temp for other members' files (cleared on start and exit).
+
+【2】macOS 本机目录 / macOS local layout
+/Applications/ResearchProgressRecorder.app        只放程序 / program only
+~/Library/Application Support/ResearchProgressRecorder/
+├─ config.json                     进度文件夹、登录名、未读状态
+├─ research_log.json               旧版研究记录
+├─ data_version.txt                迁移标记 0.2.0
+├─ upgrade_cleanup.log
+└─ SRCRec\\
+   ├─ References\\Default\\          团队默认资料库
+   └─ PersonalWorkspaceSRRec\\
+      ├─ Mat_Local\\                个人非参考资料
+      ├─ Reference\\                个人参考资料（上传副本暂存 Reference\\references\\）
+      └─ Public_Temp\\              他人内容（启动/退出清空）
+macOS keeps user data in Application Support; the app bundle holds only the program. The SRCRec subfolder mirrors the Windows layout with the same three workspace folders (the local copy of uploaded references is currently kept in Reference\\references\\).
+
+【3】私有仓库 research-data / Private team repository
+team\\<账号>\\
+├─ references\\<文件>               上传的参考资料本体
+├─ references.json                 该账号的资料清单
+├─ progress\\<相对路径>             本地进度文件夹的镜像
+└─ profile.json                    首次上传时自动创建
+default\\<文件>                     团队默认资料库（成员只读）
+logs\\public\\activity.json          公开活动日志（≤2000 条，全员可见）
+logs\\private\\<账号>\\activity.json  本人明细（≤500 条）
+help\\help.md                       全员共享的使用说明（本页）
+help\\changelog.json                说明改动日志（≤200 条）
+posts\\<UTC时间>-<账号>-<4位随机>.txt  Quick Post 帖子
+posts\\read\\<账号>.json             该账号已阅的帖子 id
+sync\\                              0.0.2 遗留，只读保留
+team/<login>/references holds your uploaded files and references.json is their manifest; progress mirrors your progress folder; default is the team library; logs/public is shared and logs/private/<login> is yours; help and posts are shared; sync/ is 0.0.2 legacy and read-only.
+
+【4】同步动作与数据流向 / Sync actions and data flow
+上传参考资料 Upload refs：Reference\\ → 勾选 → team\\<我>\\references\\ + references.json（同时在本机 Reference 留一份副本 / also keeps a local copy）
+上传本地进度 Upload progress：Mat_Local\\ → 勾选 → team\\<我>\\progress\\<相对路径>（按进度文件夹的相对路径镜像 / mirrors the relative path）
+下载他人内容 Download team：team\\<成员>\\ → Public_Temp\\<成员>\\（退出即清空 / cleared on exit）
+下载默认库 Download default：default\\ → References\\Default\\（覆盖前保留 .bak-时间戳 / keeps a .bak copy）
+撤除参考资料 Remove refs：只删本人上传的文件与清单条目，团队区立即不可下载；本机 Reference 中的副本需自行清理 / removes your own remote files and manifest entries only; delete local copies manually
+Quick Post：发布 posts\\<id>.txt；已阅 posts\\read\\<我>.json；只能删自己的帖子 / publish, mark read, delete your own posts
+活动日志 Activity log：登录、上传、下载、撤除、发帖、删帖、改说明 → logs\\public + logs\\private\\<我> / sign-in, uploads, downloads, removals, posts, help edits
+
+【5】清理、保留与升级 / Cleanup, retention and upgrade
+- Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。
+- References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。
+- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.3 不会重复清理。
+- 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。
+- 远端上传只新增或覆盖，不自动删除旧文件。
+Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.
+
+【6】限制与安全 / Limits and safety
+- 单文件上限 50 MiB；不支持符号链接/目录联接；非法文件名会被拒绝。
+- 未登录不能进入“参考文献与资料”，不能上传、下载、发帖、改说明，也不会写任何 JSON。
+- 令牌只保存在内存，每次启动都要重新登录；不写磁盘、不写钥匙串、不进日志。
+- 同一文件被两人先后上传时，后上传覆盖先上传，请按成员目录分工并备份。
+Limits: 50 MiB per file; symlinks and invalid filenames are rejected; while signed out you cannot open References, upload, download, post or edit this page, and no JSON is written; the token lives only in memory and every launch needs a new sign-in; if two people upload the same path the later upload wins, so divide work by member folder and keep backups.
+
+【7】本页 / This help page
+本页可编辑：点“上传到 GitHub”写入 help\\help.md，全员登录后读到同一份，并在 help\\changelog.json 留下改动日志；“恢复默认”回到本文件，“读取云端版本”重新拉取。
+This page is editable: Upload to GitHub writes help\\help.md for everyone and appends help\\changelog.json; Restore Default returns to this built-in text; Load From GitHub re-fetches the cloud copy."""
+
+
 def version_key(value):
     try:
         parts = [int(part) for part in re.findall(r'\d+', value or '')]
@@ -1097,8 +1193,8 @@ class Client:
         self.help_text.bind('<<Modified>>',self.help_modified)
         text=self.help_text
         self.help_dirty=False
-        zh='SRPRecorder2027 0.2.3 公开测试版\n\n六页与 Windows 一致：团队研究、Quick Post、参考资料、本地进度、团队同步、使用说明。\n\n先接受 research-data 邀请，使用自己的 classic PAT（repo）验证登录。浏览成员只读取；上传时才创建个人档案。\n\n本地进度以文件夹为中心；参考资料与本地进度的上传按钮会传输文件本体，每文件最大 50 MiB，不自动删除远端旧文件。上传多文件非事务，失败后可能部分成功，重试会更新同名文件。\n\n默认资料库属于私有团队，在登录后下载。下载先暂存，成功后替换并保留 .backup-* 旧副本；网络失败或空库不会清空旧资料。\n\n数据保留在 ~/Library/Application Support/ResearchProgressRecorder；新文件区为其 SRCRec 子目录。0.2.0 首次升级的旧数据清理只执行一次；本次更新保留已标记 0.2.0 的数据。退出程序后再替换 .app。\n\n令牌只在 macOS 钥匙串。程序公开下载不授予私有数据权限。每个仓库写入者仍可修改仓库其他目录，team/ 分隔是应用行为。\n\n关闭应用后可运行 DMG 中的卸载脚本；默认把应用移到废纸篓，研究数据与外部自选目录保留。\n\n本测试包使用临时签名，未经 Apple Developer ID 签名或公证。'
-        en='SRPRecorder2027 0.2.3 Public Test\n\nSix pages match Windows: Team Research, Quick Post, References, Local Progress, Team Sync, and Help.\n\nAccept the private research-data invitation, then sign in with your own classic PAT (repo scope). Browsing is read-only; uploads create your profile.\n\nReferences and progress upload actual files (50 MiB per file). Remote older files are not deleted. Multi-file uploads are not transactional: failures may be partial; retry to update files.\n\nDownload the private default library after signing in. Downloads use staging and preserve .backup-* copies; failures/empty results do not erase existing files.\n\nData stays under ~/Library/Application Support/ResearchProgressRecorder. The SRCRec subfolder holds new file channels. The 0.2.0 cleanup runs once; this update preserves data already marked 0.2.0. Quit before replacing the .app.\n\nTokens stay in Keychain. Public program downloads do not grant private data access. GitHub writers can edit other directories; team/ separation is an app convention.\n\nThe DMG includes an uninstall script. By default it moves the app to Trash and preserves research data and external folders.\n\nThis test app has an ad-hoc signature and is not Apple Developer ID signed or notarized.'
+        zh=HELP_TEXT
+        en=HELP_TEXT
         self._help_zh=zh; self._help_en=en
         text.insert('1.0',en if self.en else zh); text.edit_modified(False)
 
