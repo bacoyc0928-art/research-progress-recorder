@@ -372,6 +372,8 @@ namespace SRLogbook
         private Button useTokenButton;
         private Button forgetButton;
         private Button usePinButton;
+        private Button updateButton;
+        private Label versionLabel;
         private bool savedLoginExists;
         private string savedLoginName;
         private bool useTokenMode;
@@ -431,7 +433,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.5";
+            this.Text = "SRPRecorder2027 · 0.2.6";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
@@ -886,6 +888,27 @@ namespace SRLogbook
             usePinButton.Click += delegate { useTokenMode = false; UpdateLoginUi(); loginPinBox.Focus(); };
             loginPanel.Controls.Add(usePinButton);
 
+            updateButton = new Button();
+            updateButton.Text = "检查更新 / Check updates";
+            updateButton.Font = Theme.F(8.6f);
+            updateButton.FlatStyle = FlatStyle.Flat;
+            updateButton.FlatAppearance.BorderColor = Color.FromArgb(90, 106, 134);
+            updateButton.FlatAppearance.BorderSize = 1;
+            updateButton.BackColor = Color.FromArgb(48, 62, 92);
+            updateButton.ForeColor = Color.White;
+            updateButton.Cursor = Cursors.Hand;
+            updateButton.SetBounds(14, 0, 224, 30);
+            updateButton.Click += delegate { CheckForUpdates(); };
+            sidebar.Controls.Add(updateButton);
+
+            versionLabel = new Label();
+            versionLabel.Text = "v" + Updater.CurrentText();
+            versionLabel.Font = Theme.F(7.5f);
+            versionLabel.ForeColor = Color.FromArgb(120, 136, 164);
+            versionLabel.BackColor = Theme.Navy;
+            versionLabel.SetBounds(22, 0, 190, 16);
+            sidebar.Controls.Add(versionLabel);
+
             Label foot = new Label();
             foot.Text = "Synchrotron Radiation\r\nProject 2027";
             foot.Font = Theme.F(8f);
@@ -898,7 +921,9 @@ namespace SRLogbook
             sidebar.Resize += delegate
             {
                 foot.Top = sidebar.Height - Ui.S(62);
+                versionLabel.Top = foot.Top - Ui.S(20);
                 loginPanel.Top = Math.Max(320, foot.Top - loginPanel.Height - 10);
+                updateButton.Top = loginPanel.Top + loginPanel.Height + Ui.S(8);
             };
         }
 
@@ -1524,9 +1549,7 @@ namespace SRLogbook
             reset.Click += delegate { RestoreDefaultHelp(); };
             Button history = CreateHelpButton("改动日志");
             history.Click += delegate { ShowHelpChangelog(); };
-            Button update = CreateHelpButton("检查更新");
-            update.Click += delegate { CheckForUpdates(); };
-            helpToolbarButtons = new Button[] { upload, reload, reset, history, update };
+            helpToolbarButtons = new Button[] { upload, reload, reset, history };
             foreach (Button button in helpToolbarButtons) helpToolbar.Controls.Add(button);
 
             helpEditor = new TextBox();
