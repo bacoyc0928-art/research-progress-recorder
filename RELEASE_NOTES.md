@@ -1,4 +1,4 @@
-# SRPRecorder2027 0.2.6 · 公开测试版 / Public Test
+# SRPRecorder2027 0.2.7 · 公开测试版 / Public Test
 
 发布日期 / Released: 2026-11-02
 
@@ -6,9 +6,9 @@
 
 | 系统 | 文件 | 要求 |
 | --- | --- | --- |
-| Windows 10/11 | research-progress-recorder-0.2.6-Windows.zip | .NET Framework 4.8 |
-| Apple Silicon / M 系列 | research-progress-recorder-0.2.6-macOS-arm64.dmg | macOS 14+ |
-| Intel Mac | research-progress-recorder-0.2.6-macOS-x64.dmg | macOS 15+ |
+| Windows 10/11 | research-progress-recorder-0.2.7-Windows.zip | .NET Framework 4.8 |
+| Apple Silicon / M 系列 | research-progress-recorder-0.2.7-macOS-arm64.dmg | macOS 14+ |
+| Intel Mac | research-progress-recorder-0.2.7-macOS-x64.dmg | macOS 15+ |
 
 三个文件都在本 Release 的 Assets 里，另有 `SHA256SUMS.txt` 可核对摘要。下载不需要登录，也不需要令牌。
 
@@ -17,23 +17,20 @@
 - **Windows**：关闭旧程序 → 解压 ZIP 到自己的可写文件夹 → 覆盖旧目录 → 运行 `SRCRec\SRPRecorder2027.exe`。必须保留随 exe 的 `.exe.config`。
 - **macOS**：打开对应芯片的 DMG → 把 `ResearchProgressRecorder.app` 拖进 Applications 覆盖旧版 → 弹出镜像。首次打开若被系统拦截，右键 →“打开”。
 
-可直接覆盖任何旧版本；配置、日志、下载缓存与个人资料保留。
+可直接覆盖任何旧版本；配置、日志、下载缓存与个人资料保留。0.2.6 用户可直接点「检查更新」升级。
 
-## 0.2.6 主要变化
+## 0.2.7 主要变化
 
-### 「检查更新」移到左下角
+### macOS 也把「检查更新」放到窗口左下角
 
-- 按钮从「使用说明」页工具栏移到**窗口左下角**（登录面板正下方），所有页面都能看到，不再受帮助页布局影响。
-- 左侧栏底部新增当前版本号（例如 `v0.2.6`）。
-- 使用说明页恢复为 4 个按钮：上传到 GitHub、读取云端版本、恢复默认、改动日志。
+- 窗口底部新增状态栏：最左侧是 **「检查更新 / Check updates」**，右侧是状态文字，最右显示 `v0.2.7`。
+- 不再放在「使用说明」页工具栏；帮助页恢复为 4 个按钮。
+- 与 Windows 的左下角按钮行为一致：读取最新 Release → 下载 DMG → 按 `SHA256SUMS.txt` 校验 → 退出后替换 `.app`，失败则打开 DMG。
+- 不删除用户数据：`~/Library/Application Support/ResearchProgressRecorder/` 不受影响。
 
-### 应用内更新（0.2.5 起）
+### Windows 保持 0.2.6 布局
 
-- 点左下角「检查更新 / Check updates」→ 读取公开仓库最新 Release → 显示版本与说明 → 下载对应安装包 → 按 `SHA256SUMS.txt` 校验 SHA-256。
-- Windows：退出后脚本只替换程序文件并自动重启；上一版 exe 保留为 `SRPRecorder2027.exe.previous`。
-- macOS：退出后替换 `.app`，失败则打开 DMG 让用户拖入 Applications。
-- **不删除用户数据**：`PersonalWorkspaceSRRec`、`References`、`*.json` 与 macOS `Application Support` 均保留。
-- **0.2.4 及更早版本没有这个按钮**，需要手动安装一次 0.2.6；之后即可用左下角按钮更新。
+- 左下侧栏「检查更新」+ `v0.2.7` 版本号不变；0.2.6 的按钮遮挡问题已在该版本重发的附件中修复。
 
 ## 工作区与存储
 
