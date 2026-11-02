@@ -34,6 +34,42 @@ namespace SRLogbook
             return result;
         }
 
+        public static string ProgressRelativePath(string file, string sourceRoot)
+        {
+            string full = Path.GetFullPath(file);
+            string root = Path.GetFullPath(sourceRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            NoLinks(full);
+            string rel = SyncData.IsWithin(full, root)
+                ? full.Substring(root.Length).TrimStart('\\', '/') : Path.GetFileName(full);
+            foreach (string segment in rel.Replace('\\', '/').Split('/')) Child(root, segment);
+            return rel.Replace('\\', '/');
+        }
+
+        public static List<KeyValuePair<string, string>> ProgressUploads(string sourceRoot, IEnumerable<string> files)
+        {
+            List<KeyValuePair<string, string>> result = new List<KeyValuePair<string, string>>();
+            HashSet<string> paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string file in files)
+            {
+                string full = Path.GetFullPath(file);
+                string rel = ProgressRelativePath(full, sourceRoot);
+                if (!File.Exists(full) || new FileInfo(full).Length > MaxUploadBytes)
+                    throw new IOException("Missing or oversized upload file: " + full);
+                if (!paths.Add(rel)) throw new IOException("Selected progress files have duplicate destination names; rename them first: " + rel);
+                result.Add(new KeyValuePair<string, string>(full, rel));
+            }
+            return result;
+        }
+
+        public static string LocalReferenceCopy(string referenceRoot, string name)
+        {
+            string direct = Child(referenceRoot, name);
+            if (File.Exists(direct)) return direct;
+            // Older macOS clients kept upload copies one level too deep.
+            string legacy = Child(Child(referenceRoot, "references"), name);
+            return File.Exists(legacy) ? legacy : direct;
+        }
+
         private static void Collect(string folder, List<string> result)
         {
             NoLinks(folder);

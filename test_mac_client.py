@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 import urllib.error
 import zipfile
 import xml.etree.ElementTree as ET
@@ -12,6 +14,35 @@ m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 OLD='2026-10-20T10:00:00.0000000Z'; NEW='2026-10-20T10:00:00.0000001Z'
 def entry(ident,title='A',updated=OLD): return dict(Id=ident,Title=title,Updated=updated,Category='',Content='',Date='2026-10-20',Progress=0)
 class SyncTests(unittest.TestCase):
+    def test_badges_use_the_module_github_client(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            client=m.Client.__new__(m.Client); client.session_token='offline'; client.session_login='me'
+            client.mat_local=client.reference_dir=Path(tmp)
+            with patch.object(m,'GitHub',return_value=object()) as github, patch.object(m,'list_posts',return_value=[]), patch.object(m,'read_ids',return_value=[]), patch.object(m,'read_activity',return_value=[]), patch.object(m,'FileChannels') as channels:
+                channels.return_value.members.return_value=['me','colleague']
+                self.assertEqual(set(client.news_state()),set(range(6)))
+                github.assert_called_once()
+    def test_sign_out_uses_normal_exit_cleanup(self):
+        client=m.Client.__new__(m.Client); client.root=object(); client.mb=SimpleNamespace(askyesno=lambda *a,**k:True)
+        client.session_login=client.login='me'; client.session_token='offline'; closed=[]
+        client.close=lambda:closed.append(True)
+        client.sign_out(); self.assertEqual(closed,[True]); self.assertEqual(client.session_token,'')
+    def test_progress_picker_supports_external_files_and_custom_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); client=m.Client.__new__(m.Client); client.files_root=root/'SRCRec'; client.files_root.mkdir()
+            client.mat_local=client.files_root/'PersonalWorkspaceSRRec/Mat_Local'; client.mat_local.mkdir(parents=True)
+            note=client.mat_local/'note.txt'; note.write_text('note')
+            custom=root/'custom'; custom.mkdir(); extra=root/'extra.txt'; extra.write_text('extra')
+            client.progress=SimpleNamespace(get=lambda:str(custom)); picked=[]; uploaded=[]
+            def pick(title,hint,items,extra_files=False):
+                picked.append(extra_files); return items+[str(extra)]
+            client.pick=pick; api=SimpleNamespace(); client.api=lambda:(api,{})
+            files=SimpleNamespace(identity=lambda:'me',upload_selected_progress=lambda folder,paths:uploaded.append((folder,paths)) or len(paths))
+            client.channels=lambda _:files; client.log_activity=lambda *a:None; client.finish=lambda *a:None
+            client.run=lambda work,done:done(work())
+            client.upload_progress()
+            self.assertEqual(picked,[True]); self.assertEqual(uploaded,[(client.mat_local,[note,extra])])
+
     def test_021_upgrade_preserves_020_user_data(self):
         with tempfile.TemporaryDirectory() as tmp:
             home=Path(tmp)

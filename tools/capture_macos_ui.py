@@ -11,7 +11,7 @@ import tempfile
 import time
 
 def main():
-    p=argparse.ArgumentParser(); p.add_argument('--output',default='ui-captures'); p.add_argument('--label',default='baseline'); a=p.parse_args()
+    p=argparse.ArgumentParser(); p.add_argument('--output',default='ui-captures'); p.add_argument('--label',default='baseline'); p.add_argument('--strict',action='store_true'); a=p.parse_args()
     if sys.platform!='darwin': raise RuntimeError('This capture must run on real macOS')
     out=Path(a.output).resolve(); out.mkdir(parents=True,exist_ok=True)
     repo=Path.cwd(); sys.path.insert(0,str(repo))
@@ -46,17 +46,25 @@ def main():
             clipped=[]
             def inspect(widget):
                 if widget.winfo_ismapped() and widget.winfo_class() in ('TButton','TCheckbutton','TEntry','TLabel'):
-                    if widget.winfo_reqwidth()>widget.winfo_width()+6:
+                    left=widget.winfo_rootx(); top=widget.winfo_rooty(); right=left+widget.winfo_width(); bottom=top+widget.winfo_height()
+                    parent=widget.master
+                    while parent is not None:
+                        left=max(left,parent.winfo_rootx()); top=max(top,parent.winfo_rooty())
+                        right=min(right,parent.winfo_rootx()+parent.winfo_width()); bottom=min(bottom,parent.winfo_rooty()+parent.winfo_height())
+                        parent=parent.master
+                    if widget.winfo_reqwidth()>right-left+6 or widget.winfo_reqheight()>bottom-top+3:
                         try: text=str(widget.cget('text'))
                         except Exception: text=''
-                        clipped.append({'class':widget.winfo_class(),'text':text,'requested':widget.winfo_reqwidth(),'allocated':widget.winfo_width()})
+                        clipped.append({'class':widget.winfo_class(),'text':text,'requested':[widget.winfo_reqwidth(),widget.winfo_reqheight()],'visible':[right-left,bottom-top]})
                 for child in widget.winfo_children(): inspect(child)
             inspect(root)
             manifest['captures'].append({'file':target.name,'pixels':size,'geometry':root.geometry(),'clipped_controls':clipped})
+        assert str(client.help_text.cget('state'))=='disabled', 'Help must be read-only while signed out'
         root.geometry('1120x760+30+40'); pump(); capture('00-signed-out-1120')
         root.geometry('940x640+30+40'); pump(); capture('00-signed-out-940')
         client.session_login=client.login='demo-researcher'; client.session_token='offline-preview-not-a-credential'
         client.update_login_ui(); client.personal_label.configure(text=client.personal_display())
+        assert str(client.help_text.cget('state'))=='normal', 'Help must be editable after sign-in'
         (client.reference_dir/'Example reference.txt').write_text('Synthetic sample reference.',encoding='utf-8')
         (client.default/'Default library overview.txt').write_text('Synthetic team default library.',encoding='utf-8')
         (client.mat_local/'Research progress.txt').write_text('Synthetic progress example.',encoding='utf-8')
@@ -74,5 +82,7 @@ def main():
         root.destroy()
     (out/'capture-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps(manifest,ensure_ascii=False))
+    issues=[(c['file'],w['text']) for c in manifest['captures'] for w in c['clipped_controls'] if w['class'] in ('TButton','TCheckbutton')]
+    if a.strict and issues: raise RuntimeError('Clipped actions: '+str(issues))
 
 if __name__=='__main__': main()

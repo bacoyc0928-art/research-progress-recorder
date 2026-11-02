@@ -25,6 +25,8 @@ class Fake:
         if method=='PUT':
             if self.conflict: self.conflict=False; raise urllib.error.HTTPError('',409,'conflict',{},None)
             self.files[path]=base64.b64decode(data['content']); return {}
+        if method=='DELETE':
+            del self.files[path]; return {}
         if path in self.files:
             if raw: return self.files[path] if binary else self.files[path].decode()
             return dict(sha='sha',encoding='none' if path in self.force_raw else 'base64',content=base64.b64encode(self.files[path]).decode())
@@ -114,8 +116,32 @@ class FileChannelTests(unittest.TestCase):
         rows=self.files.upload_references([file],self.root/'personal')
         self.assertEqual({x['Path'] for x in rows},{'team/me/references/old.pdf','team/me/references/new.pdf'})
     def test_reference_upload_same_source_target(self):
-        folder=self.root/'personal'; (folder/'references').mkdir(parents=True); file=folder/'references/new.pdf'; file.write_bytes(b'pdf')
+        folder=self.root/'Reference'; folder.mkdir(); file=folder/'new.pdf'; file.write_bytes(b'pdf')
         self.files.upload_references([file],folder); self.assertEqual(file.read_bytes(),b'pdf')
+        self.assertFalse((folder/'references').exists())
+    def test_reference_copy_matches_windows_directory(self):
+        file=self.root/'source.pdf'; file.write_bytes(b'pdf')
+        folder=self.root/'Reference'; self.files.upload_references([file],folder)
+        self.assertEqual((folder/'source.pdf').read_bytes(),b'pdf')
+        self.assertFalse((folder/'references').exists())
+    def test_remove_direct_and_legacy_reference_copies(self):
+        folder=self.root/'Reference'; (folder/'references').mkdir(parents=True)
+        for name,local in (('direct.pdf',folder/'direct.pdf'),('legacy.pdf',folder/'references/legacy.pdf')):
+            local.write_bytes(b'pdf'); self.api.files['team/me/references/'+name]=b'pdf'
+            self.assertEqual(self.files.remove_references([name],folder),1)
+            self.assertFalse(local.exists()); self.assertNotIn('team/me/references/'+name,self.api.files)
+    def test_selected_progress_maps_nested_and_external_paths(self):
+        folder=self.root/'Mat_Local'; (folder/'nested').mkdir(parents=True)
+        nested=folder/'nested/note.txt'; nested.write_bytes(b'note')
+        external=self.root/'added.txt'; external.write_bytes(b'external')
+        self.assertEqual(self.files.upload_selected_progress(folder,[nested,external]),2)
+        self.assertEqual(self.api.files['team/me/progress/nested/note.txt'],b'note')
+        self.assertEqual(self.api.files['team/me/progress/added.txt'],b'external')
+    def test_selected_progress_duplicate_destinations_preflight(self):
+        folder=self.root/'Mat_Local'; folder.mkdir(); a=folder/'same.txt'; a.write_bytes(b'a')
+        b=self.root/'same.txt'; b.write_bytes(b'b')
+        with self.assertRaises(ValueError): self.files.upload_selected_progress(folder,[a,b])
+        self.assertFalse(self.api.calls)
     def test_duplicate_reference_names(self):
         a=self.root/'a'; b=self.root/'b'; a.mkdir(); b.mkdir(); (a/'same.pdf').write_bytes(b'a'); (b/'same.pdf').write_bytes(b'b')
         with self.assertRaises(ValueError): self.files.upload_references([a/'same.pdf',b/'same.pdf'],self.root/'personal')
