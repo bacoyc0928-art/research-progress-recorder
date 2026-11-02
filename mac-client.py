@@ -617,7 +617,7 @@ class Client:
         self.pin_entry.bind('<Return>',lambda e:self.unlock_saved())
         self.unlock_btn=self.ttk.Button(self.pin_frame,text=self.tr('解锁','Unlock'),command=self.unlock_saved)
         self.unlock_btn.pack(side='left',padx=3)
-        self.use_token_btn=self.ttk.Button(self.pin_frame,text=self.tr('改用令牌','Use token'),command=self.use_token_mode)
+        self.use_token_btn=self.ttk.Button(self.pin_frame,text=self.tr('改用令牌','Use token'),command=self.switch_to_token)
         self.use_token_btn.pack(side='left',padx=3)
         self.forget_btn=self.ttk.Button(self.pin_frame,text=self.tr('忘记','Forget'),command=self.forget_saved)
         self.forget_btn.pack(side='left',padx=3)
@@ -722,7 +722,7 @@ class Client:
                 append_activity(api,self.session_login,'登录 / Sign in','PIN 解锁 / unlocked with PIN')
             except Exception: pass
         threading.Thread(target=bg,daemon=True).start()
-    def use_token_mode(self):
+    def switch_to_token(self):
         self.use_token_mode=True; self.update_login_ui()
     def forget_saved(self):
         if not self.saved: return
