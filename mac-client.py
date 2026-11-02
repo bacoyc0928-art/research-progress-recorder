@@ -1,10 +1,12 @@
-"""SRPRecorder2027 0.2.1. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.4. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
 import ctypes
 import datetime as dt
 from decimal import Decimal
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -24,14 +26,14 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.3'
+VERSION = '0.2.4'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
-HELP_TEXT = """SRPRecorder2027 · 0.2.3 · 中英双语界面 / Bilingual UI
+HELP_TEXT = """SRPRecorder2027 · 0.2.4 · 中英双语界面 / Bilingual UI
 数据架构与使用说明 / Data architecture and usage guide
 
 【0】总览 / Overview
@@ -43,12 +45,12 @@ There is no self-hosted server: all team data lives in the private GitHub reposi
 
 同步是手动的：上传＝把勾选的文件复制到远端；下载＝把远端文件复制到本机（临时区或默认库）。没有后台实时同步，也没有自动冲突合并。
 Sync is manual: upload copies checked files to the remote; download copies remote files to this machine (temp area or default library). There is no background sync and no automatic conflict merging.
-第一次使用：左下角登录 → 团队研究刷新成员 → 本地进度选择专用文件夹 → 团队同步按需上传/下载。
-First run: sign in at the bottom-left → refresh members on Team Research → pick a dedicated folder on Local Progress → upload/download from Team Sync.
+第一次使用：左下角登录（可勾选“记住登录”，设置 6 位 PIN）→ 团队研究刷新成员 → 本地进度选择专用文件夹 → 团队同步按需上传/下载。
+First run: sign in at the bottom-left (optionally tick Remember and set a 6-digit PIN) → refresh members on Team Research → pick a dedicated folder on Local Progress → upload/download from Team Sync.
 
 【1】Windows 本机目录 / Windows local layout
 SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）
-├─ SRPRecorder2027.exe             程序 0.2.3
+├─ SRPRecorder2027.exe             程序 0.2.4
 ├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留
 ├─ research_log.json               旧版研究记录
 ├─ workspace.json                  工作区路径
@@ -110,7 +112,7 @@ Quick Post：发布 posts\\<id>.txt；已阅 posts\\read\\<我>.json；只能删
 【5】清理、保留与升级 / Cleanup, retention and upgrade
 - Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。
 - References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。
-- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.3 不会重复清理。
+- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.4 不会重复清理。
 - 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。
 - 远端上传只新增或覆盖，不自动删除旧文件。
 Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.
@@ -118,9 +120,9 @@ Cleanup rules: Public_Temp is cleared on every start and exit; under References 
 【6】限制与安全 / Limits and safety
 - 单文件上限 50 MiB；不支持符号链接/目录联接；非法文件名会被拒绝。
 - 未登录不能进入“参考文献与资料”，不能上传、下载、发帖、改说明，也不会写任何 JSON。
-- 令牌只保存在内存，每次启动都要重新登录；不写磁盘、不写钥匙串、不进日志。
+- 令牌默认只保存在内存，每次启动重新登录；勾选“记住登录”后，令牌存入系统凭据库（Windows 凭据管理器 / macOS 钥匙串），用 6 位 PIN 解锁，连续 5 次错误会清除。PIN 只是本机便捷锁，真正的保护是系统账户。
 - 同一文件被两人先后上传时，后上传覆盖先上传，请按成员目录分工并备份。
-Limits: 50 MiB per file; symlinks and invalid filenames are rejected; while signed out you cannot open References, upload, download, post or edit this page, and no JSON is written; the token lives only in memory and every launch needs a new sign-in; if two people upload the same path the later upload wins, so divide work by member folder and keep backups.
+Limits: 50 MiB per file; symlinks and invalid filenames are rejected; while signed out you cannot open References, upload, download, post or edit this page, and no JSON is written. The token lives only in memory by default; with Remember ticked it is stored in the system credential store (Windows Credential Manager / macOS Keychain) and unlocked with a 6-digit PIN after five wrong attempts clear it. The PIN is a local convenience lock; the real protection is your system account. If two people upload the same path the later upload wins, so divide work by member folder and keep backups.
 
 【7】本页 / This help page
 本页可编辑：点“上传到 GitHub”写入 help\\help.md，全员登录后读到同一份，并在 help\\changelog.json 留下改动日志；“恢复默认”回到本文件，“读取云端版本”重新拉取。
@@ -208,12 +210,13 @@ def atomic(path, data):
 
 class Keychain:
     """Use macOS Keychain directly; never pass a token through a shell or command line."""
-    service = b'SRLogbook.github_token'; account = b'ResearchProgressRecorder'
-    def __init__(self):
+    def __init__(self, service=b'SRLogbook.github_token', account=b'ResearchProgressRecorder'):
+        self.service=service; self.account=account
         self.lib = ctypes.CDLL('/System/Library/Frameworks/Security.framework/Security')
         self.lib.SecKeychainFindGenericPassword.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_uint32, ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p)]
         self.lib.SecKeychainAddGenericPassword.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_void_p]
         self.lib.SecKeychainItemModifyAttributesAndData.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p]
+        self.lib.SecKeychainItemDelete.argtypes = [ctypes.c_void_p]
         self.lib.SecKeychainItemFreeContent.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
         self.cf = ctypes.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation'); self.cf.CFRelease.argtypes = [ctypes.c_void_p]
     def find(self):
@@ -234,6 +237,56 @@ class Keychain:
             if code: raise RuntimeError(f'Keychain error {code}')
         finally:
             if item: self.cf.CFRelease(item)
+    def delete(self):
+        _, item = self.find()
+        if not item: return
+        try: self.lib.SecKeychainItemDelete(item)
+        finally: self.cf.CFRelease(item)
+
+REMEMBER_SERVICE = b'SRLogbook.remembered_login'
+REMEMBER_ACCOUNT = b'ResearchProgressRecorder'
+PIN_ITERATIONS = 120000
+
+def valid_pin(pin):
+    return bool(re.fullmatch(r'\d{6}', pin or ''))
+
+def pin_hash(pin, salt, iterations=PIN_ITERATIONS):
+    return hashlib.pbkdf2_hmac('sha256', pin.encode('utf-8'), salt, iterations, 32)
+
+def remembered_save(login, token, pin):
+    """把令牌存进钥匙串，并用 6 位 PIN 的 PBKDF2 校验值做应用层锁。"""
+    if not valid_pin(pin) or not login or not token: return False
+    salt=os.urandom(16)
+    blob=dict(v=1, login=login, token=token,
+              salt=base64.b64encode(salt).decode(),
+              hash=base64.b64encode(pin_hash(pin,salt)).decode(),
+              iter=PIN_ITERATIONS)
+    try:
+        Keychain(REMEMBER_SERVICE, REMEMBER_ACCOUNT).save(json.dumps(blob, ensure_ascii=False))
+        return True
+    except Exception:
+        return False
+
+def remembered_blob():
+    try: raw=Keychain(REMEMBER_SERVICE, REMEMBER_ACCOUNT).load()
+    except Exception: return None
+    if not raw: return None
+    try: return json.loads(raw)
+    except Exception: return None
+
+def remembered_unlock(pin):
+    blob=remembered_blob()
+    if not blob or not valid_pin(pin): return None
+    try:
+        salt=base64.b64decode(blob['salt']); expected=base64.b64decode(blob['hash'])
+        actual=pin_hash(pin, salt, int(blob.get('iter', PIN_ITERATIONS)))
+        return blob if hmac.compare_digest(expected, actual) else None
+    except Exception:
+        return None
+
+def remembered_delete():
+    try: Keychain(REMEMBER_SERVICE, REMEMBER_ACCOUNT).delete()
+    except Exception: pass
 
 class GitHub:
     def __init__(self, config, token):
@@ -475,6 +528,7 @@ class Client:
         self.en=self.config.get('language','zh')=='en'; self.busy=False; self.events=queue.Queue()
         self.smoke=smoke; self.disabled=[]; self.login=''
         self.session_token=''; self.session_login=''
+        self.saved=remembered_blob(); self.use_token_mode=False
         progress=Path(self.config.get('progress') or self.files_root/'PersonalWorkspaceSRRec')
         if not progress.is_dir(): progress=self.files_root/'PersonalWorkspaceSRRec'
         progress.mkdir(parents=True,exist_ok=True); self.config['progress']=str(progress)
@@ -544,35 +598,71 @@ class Client:
         info=self.ttk.Frame(bar); info.pack(side='left',padx=10,anchor='w')
         self.login_name=self.ttk.Label(info,text='',font=('',11,'bold')); self.login_name.pack(anchor='w')
         self.login_hint=self.ttk.Label(info,text='',foreground='#5e697a'); self.login_hint.pack(anchor='w')
+        self.token_frame=self.ttk.Frame(bar)
         self.login_token=self.tk.StringVar()
-        self.login_entry=self.ttk.Entry(bar,textvariable=self.login_token,show='●',width=46)
-        self.login_entry.pack(side='left',padx=8)
+        self.login_entry=self.ttk.Entry(self.token_frame,textvariable=self.login_token,show='●',width=40)
+        self.login_entry.pack(side='left',padx=6)
         self.login_show=self.tk.BooleanVar(value=False)
-        self.login_show_btn=self.ttk.Checkbutton(bar,text=self.tr('显示','Show'),variable=self.login_show,command=self.toggle_login_show)
-        self.login_show_btn.pack(side='left',padx=4)
-        self.login_btn=self.ttk.Button(bar,text=self.tr('登录','Sign In'),command=self.sign_in)
+        self.login_show_btn=self.ttk.Checkbutton(self.token_frame,text=self.tr('显示','Show'),variable=self.login_show,command=self.toggle_login_show)
+        self.login_show_btn.pack(side='left',padx=3)
+        self.remember_var=self.tk.BooleanVar(value=False)
+        self.remember_btn=self.ttk.Checkbutton(self.token_frame,text=self.tr('记住登录','Remember'),variable=self.remember_var)
+        self.remember_btn.pack(side='left',padx=3)
+        self.login_btn=self.ttk.Button(self.token_frame,text=self.tr('登录','Sign In'),command=self.sign_in)
         self.login_btn.pack(side='left',padx=4)
+        self.pin_frame=self.ttk.Frame(bar)
+        self.login_pin=self.tk.StringVar()
+        self.pin_entry=self.ttk.Entry(self.pin_frame,textvariable=self.login_pin,show='●',width=8,validate='key',validatecommand=(self.root.register(self.validate_pin),'%P'))
+        self.pin_entry.pack(side='left',padx=6)
+        self.pin_entry.bind('<Return>',lambda e:self.unlock_saved())
+        self.unlock_btn=self.ttk.Button(self.pin_frame,text=self.tr('解锁','Unlock'),command=self.unlock_saved)
+        self.unlock_btn.pack(side='left',padx=3)
+        self.use_token_btn=self.ttk.Button(self.pin_frame,text=self.tr('改用令牌','Use token'),command=self.use_token_mode)
+        self.use_token_btn.pack(side='left',padx=3)
+        self.forget_btn=self.ttk.Button(self.pin_frame,text=self.tr('忘记','Forget'),command=self.forget_saved)
+        self.forget_btn.pack(side='left',padx=3)
         self.logout_btn=self.ttk.Button(bar,text=self.tr('退出','Sign Out'),command=self.sign_out)
-        self.logout_btn.pack(side='left',padx=4)
+    def validate_pin(self,value):
+        return value=='' or (value.isdigit() and len(value)<=6)
+    def saved_login(self):
+        return (self.saved or {}).get('login')
     def draw_avatar(self):
         if not hasattr(self,'avatar'): return
         c=self.avatar; c.delete('all')
-        initial=(self.session_login[:1].upper() if self.session_login else '?')
-        color='#2d6cdf' if self.session_login else '#404e68'
+        who=self.session_login or self.saved_login()
+        initial=(who[:1].upper() if who else '?')
+        color='#2d6cdf' if who else '#404e68'
         c.create_oval(2,2,38,38,fill=color,outline='')
         c.create_text(20,20,text=initial,fill='white',font=('',13,'bold'))
     def update_login_ui(self):
         if not hasattr(self,'login_name'): return
         signed=bool(self.session_login)
-        self.login_name.configure(text=self.session_login if signed else self.tr('未登录','Not signed in'))
-        self.login_hint.configure(text=self.tr('已登录 GitHub','Signed in with GitHub') if signed else self.tr('输入密钥后登录','Enter token, then Sign In'))
+        saved=(self.saved is not None) and not getattr(self,'use_token_mode',False) and not signed
+        who=self.session_login if signed else (self.saved_login() if saved else None)
+        self.login_name.configure(text=who if who else self.tr('未登录','Not signed in'))
+        self.login_hint.configure(text=self.tr('已登录 GitHub','Signed in with GitHub') if signed else (self.tr('6 位 PIN 解锁','Unlock with PIN') if saved else self.tr('输入密钥后登录','Enter token, then Sign In')))
         if signed:
-            self.login_entry.pack_forget(); self.login_show_btn.pack_forget(); self.login_btn.pack_forget(); self.logout_btn.pack(side='left',padx=4)
+            self.token_frame.pack_forget(); self.pin_frame.pack_forget(); self.logout_btn.pack(side='left',padx=4)
+        elif saved:
+            self.token_frame.pack_forget(); self.logout_btn.pack_forget(); self.pin_frame.pack(side='left',padx=4)
+            self.pin_entry.focus_set()
         else:
-            self.logout_btn.pack_forget(); self.login_entry.pack(side='left',padx=8); self.login_show_btn.pack(side='left',padx=4); self.login_btn.pack(side='left',padx=4)
+            self.pin_frame.pack_forget(); self.logout_btn.pack_forget(); self.token_frame.pack(side='left',padx=0)
         self.draw_avatar()
     def toggle_login_show(self):
         self.login_entry.configure(show='' if self.login_show.get() else '●')
+    def ask_pin(self,confirm=True):
+        pin=self.ask.askstring(self.tr('设置 6 位 PIN','Set a 6-digit PIN'),self.tr('下次启动用这个 PIN 解锁；忘记只能重新输入令牌。','You will unlock with this PIN next time; if you forget it, sign in with your token again.'),show='●',parent=self.root)
+        if pin is None: return None
+        pin=pin.strip()
+        if not valid_pin(pin):
+            self.mb.showinfo('SRPRecorder2027',self.tr('请输入 6 位数字。','Enter exactly 6 digits.'),parent=self.root); return None
+        if confirm:
+            again=self.ask.askstring(self.tr('确认 PIN','Confirm PIN'),self.tr('再次输入 6 位 PIN','Enter the 6 digits again'),show='●',parent=self.root)
+            if again is None: return None
+            if again.strip()!=pin:
+                self.mb.showinfo('SRPRecorder2027',self.tr('两次输入不一致。','The two PINs do not match.'),parent=self.root); return None
+        return pin
     def sign_in(self):
         token=self.login_token.get().strip()
         if not token:
@@ -592,9 +682,53 @@ class Client:
                 self.mb.showerror('SRPRecorder2027',self.tr('登录失败：','Sign-in failed: ')+error,parent=self.root)
                 return
             self.session_login=login; self.session_token=token; self.login=login
-            self.login_token.set(''); self.update_login_ui(); self.team(); self.refresh_posts(); self.update_news(); self._news_tick()
+            self.login_token.set(''); self.use_token_mode=False
+            if self.remember_var.get():
+                pin=self.ask_pin(True)
+                if pin and remembered_save(login, token, pin):
+                    self.saved=remembered_blob(); self.config['pin_fails']=0; atomic(self.configfile,self.config)
+                    self.mb.showinfo('SRPRecorder2027',self.tr('已保存登录，下次用 6 位 PIN 解锁。','Saved; next time unlock with your 6-digit PIN.'),parent=self.root)
+                elif pin:
+                    self.mb.showwarning('SRPRecorder2027',self.tr('保存到钥匙串失败。','Could not save to the Keychain.'),parent=self.root)
+                self.remember_var.set(False)
+            self.update_login_ui(); self.team(); self.refresh_posts(); self.update_news(); self._news_tick()
             self.status.set(self.tr('已登录 ','Signed in as ')+login)
         self.run(work,done)
+    def unlock_saved(self):
+        if not self.saved or self.busy: return
+        pin=self.login_pin.get().strip()
+        if not valid_pin(pin):
+            self.status.set(self.tr('请输入 6 位数字。','Enter 6 digits.')); return
+        blob=remembered_unlock(pin)
+        self.login_pin.set('')
+        if not blob:
+            fails=int(self.config.get('pin_fails',0))+1
+            self.config['pin_fails']=fails; atomic(self.configfile,self.config)
+            if fails>=5:
+                remembered_delete(); self.saved=None; self.use_token_mode=False
+                self.config['pin_fails']=0; atomic(self.configfile,self.config); self.update_login_ui()
+                self.mb.showwarning('SRPRecorder2027',self.tr('连续 5 次 PIN 错误，已清除保存的登录。请改用令牌登录。','Too many wrong PINs; the saved sign-in was cleared. Sign in with your token.'),parent=self.root)
+            else:
+                self.login_hint.configure(text=self.tr('PIN 错误，还可尝试 ','Wrong PIN, tries left: ')+str(5-fails)+self.tr(' 次',''))
+            return
+        self.config['pin_fails']=0; atomic(self.configfile,self.config)
+        self.session_login=blob.get('login',''); self.session_token=blob.get('token',''); self.login=self.session_login
+        self.use_token_mode=False; self.update_login_ui()
+        self.team(); self.refresh_posts(); self.update_news(); self._news_tick()
+        self.status.set(self.tr('已解锁：','Unlocked: ')+self.session_login)
+        def bg():
+            try:
+                api=GitHub({'repo':DEFAULT_REPO,'branch':'main'},self.session_token)
+                append_activity(api,self.session_login,'登录 / Sign in','PIN 解锁 / unlocked with PIN')
+            except Exception: pass
+        threading.Thread(target=bg,daemon=True).start()
+    def use_token_mode(self):
+        self.use_token_mode=True; self.update_login_ui()
+    def forget_saved(self):
+        if not self.saved: return
+        if not self.mb.askyesno('SRPRecorder2027',self.tr('忘记这台电脑上保存的登录？下次需要用令牌登录。','Forget the saved sign-in? You will need your token next time.'),parent=self.root): return
+        remembered_delete(); self.saved=None; self.use_token_mode=False
+        self.config['pin_fails']=0; atomic(self.configfile,self.config); self.update_login_ui()
     def sign_out(self):
         if not self.mb.askyesno('SRPRecorder2027',self.tr('退出登录将直接关闭程序，确定退出？','Signing out closes the app. Continue?'),parent=self.root): return
         self.session_login=''; self.session_token=''; self.login=''
