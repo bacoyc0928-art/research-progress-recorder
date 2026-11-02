@@ -366,6 +366,15 @@ namespace SRLogbook
         private Button loginButton;
         private Button loginShowButton;
         private Button logoutButton;
+        private CheckBox rememberCheck;
+        private TextBox loginPinBox;
+        private Button unlockButton;
+        private Button useTokenButton;
+        private Button forgetButton;
+        private Button usePinButton;
+        private bool savedLoginExists;
+        private string savedLoginName;
+        private bool useTokenMode;
         private string sessionToken;
         private string sessionLogin;
         private Panel header;
@@ -422,7 +431,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.3";
+            this.Text = "SRPRecorder2027 · 0.2.4";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
@@ -440,6 +449,7 @@ namespace SRLogbook
 
             BuildHeader();
             BuildSidebar();
+            RefreshSavedLogin();
             UpdateLoginUi();
             Ui.StaticBuild = true;
             BuildPages();
@@ -727,7 +737,7 @@ namespace SRLogbook
 
             loginPanel = new Panel();
             loginPanel.BackColor = Theme.Navy;
-            loginPanel.SetBounds(14, 0, 224, 122);
+            loginPanel.SetBounds(14, 0, 224, 152);
             sidebar.Controls.Add(loginPanel);
 
             avatarPanel = new Panel();
@@ -737,8 +747,9 @@ namespace SRLogbook
             {
                 e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 string initial = "?";
-                if (!string.IsNullOrEmpty(sessionLogin)) initial = sessionLogin.Substring(0, 1).ToUpperInvariant();
-                using (SolidBrush b = new SolidBrush(string.IsNullOrEmpty(sessionLogin) ? Color.FromArgb(64, 78, 104) : Theme.Accent))
+                string who = !string.IsNullOrEmpty(sessionLogin) ? sessionLogin : savedLoginName;
+                if (!string.IsNullOrEmpty(who)) initial = who.Substring(0, 1).ToUpperInvariant();
+                using (SolidBrush b = new SolidBrush(string.IsNullOrEmpty(who) ? Color.FromArgb(64, 78, 104) : Theme.Accent))
                     e.Graphics.FillEllipse(b, 0, 0, avatarPanel.Width - 1, avatarPanel.Height - 1);
                 using (StringFormat sf = new StringFormat())
                 {
@@ -799,6 +810,15 @@ namespace SRLogbook
             };
             loginPanel.Controls.Add(loginShowButton);
 
+            rememberCheck = new CheckBox();
+            rememberCheck.Text = "记住登录 / Remember";
+            rememberCheck.Font = Theme.F(7.2f);
+            rememberCheck.ForeColor = Color.FromArgb(170, 186, 210);
+            rememberCheck.BackColor = Theme.Navy;
+            rememberCheck.SetBounds(0, 78, 156, 22);
+            rememberCheck.FlatStyle = FlatStyle.Flat;
+            loginPanel.Controls.Add(rememberCheck);
+
             loginButton = new Button();
             loginButton.Text = "登录";
             loginButton.Font = Theme.F(9f);
@@ -807,7 +827,7 @@ namespace SRLogbook
             loginButton.BackColor = Theme.Accent;
             loginButton.ForeColor = Color.White;
             loginButton.Cursor = Cursors.Hand;
-            loginButton.SetBounds(0, 82, 92, 28);
+            loginButton.SetBounds(0, 106, 92, 28);
             loginButton.Click += delegate { SignIn(); };
             loginPanel.Controls.Add(loginButton);
 
@@ -820,9 +840,51 @@ namespace SRLogbook
             logoutButton.BackColor = Color.FromArgb(48, 62, 92);
             logoutButton.ForeColor = Color.White;
             logoutButton.Cursor = Cursors.Hand;
-            logoutButton.SetBounds(100, 82, 92, 28);
+            logoutButton.SetBounds(100, 106, 92, 28);
             logoutButton.Click += delegate { SignOut(); };
             loginPanel.Controls.Add(logoutButton);
+
+            loginPinBox = new TextBox();
+            loginPinBox.Font = Theme.F(10f);
+            loginPinBox.UseSystemPasswordChar = true;
+            loginPinBox.MaxLength = 6;
+            loginPinBox.TextAlign = HorizontalAlignment.Center;
+            loginPinBox.ShortcutsEnabled = true;
+            loginPinBox.SetBounds(0, 50, 118, 26);
+            loginPinBox.KeyPress += delegate(object s, KeyPressEventArgs e)
+            {
+                if (char.IsControl(e.KeyChar)) return;
+                if (e.KeyChar < '0' || e.KeyChar > '9') e.Handled = true;
+            };
+            loginPinBox.KeyDown += delegate(object s, KeyEventArgs e)
+            {
+                if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UnlockSaved(); }
+            };
+            loginPanel.Controls.Add(loginPinBox);
+
+            unlockButton = new Button();
+            unlockButton.Text = "解锁 / Unlock";
+            unlockButton.Font = Theme.F(8.4f);
+            unlockButton.FlatStyle = FlatStyle.Flat;
+            unlockButton.FlatAppearance.BorderSize = 0;
+            unlockButton.BackColor = Theme.Accent;
+            unlockButton.ForeColor = Color.White;
+            unlockButton.Cursor = Cursors.Hand;
+            unlockButton.SetBounds(122, 50, 102, 26);
+            unlockButton.Click += delegate { UnlockSaved(); };
+            loginPanel.Controls.Add(unlockButton);
+
+            useTokenButton = SmallLoginButton("改用令牌 / Use token", 0, 82, 108);
+            useTokenButton.Click += delegate { useTokenMode = true; UpdateLoginUi(); loginTokenBox.Focus(); };
+            loginPanel.Controls.Add(useTokenButton);
+
+            forgetButton = SmallLoginButton("忘记 / Forget", 114, 82, 110);
+            forgetButton.Click += delegate { ForgetSaved(); };
+            loginPanel.Controls.Add(forgetButton);
+
+            usePinButton = SmallLoginButton("用 PIN / PIN", 160, 78, 64);
+            usePinButton.Click += delegate { useTokenMode = false; UpdateLoginUi(); loginPinBox.Focus(); };
+            loginPanel.Controls.Add(usePinButton);
 
             Label foot = new Label();
             foot.Text = "Synchrotron Radiation\r\nProject 2027";
@@ -847,19 +909,48 @@ namespace SRLogbook
             return false;
         }
 
+        private Button SmallLoginButton(string text, int x, int y, int w)
+        {
+            Button b = new Button();
+            b.Text = text;
+            b.Font = Theme.F(7.4f);
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderColor = Color.FromArgb(90, 106, 134);
+            b.FlatAppearance.BorderSize = 1;
+            b.BackColor = Color.FromArgb(48, 62, 92);
+            b.ForeColor = Color.White;
+            b.Cursor = Cursors.Hand;
+            b.SetBounds(x, y, w, 22);
+            return b;
+        }
+
+        private void RefreshSavedLogin()
+        {
+            savedLoginExists = RememberedLogin.Exists();
+            savedLoginName = savedLoginExists ? RememberedLogin.SavedLogin() : null;
+            if (!savedLoginExists) { savedLoginName = null; useTokenMode = false; }
+        }
+
         private void UpdateLoginUi()
         {
             if (loginNameLabel == null) return;
             bool signed = !string.IsNullOrEmpty(sessionLogin);
-            loginNameLabel.Text = signed ? sessionLogin : "未登录 / Not signed in";
+            bool saved = !signed && savedLoginExists && !useTokenMode;
+            loginNameLabel.Text = signed ? sessionLogin : (saved ? savedLoginName : "未登录 / Not signed in");
             loginHintLabel.Text = signed
                 ? "已登录 / Signed in"
-                : "输入密钥登录 / Sign in";
-            if (loginTokenBox != null) loginTokenBox.Visible = !signed;
-            if (loginShowButton != null) loginShowButton.Visible = !signed;
-            if (helpEditor != null) helpEditor.ReadOnly = !signed;
-            if (loginButton != null) loginButton.Visible = !signed;
+                : (saved ? "6 位 PIN 解锁 / Unlock with PIN" : "输入密钥登录 / Sign in");
+            if (loginTokenBox != null) loginTokenBox.Visible = !signed && !saved;
+            if (loginShowButton != null) loginShowButton.Visible = !signed && !saved;
+            if (rememberCheck != null) rememberCheck.Visible = !signed && !saved;
+            if (loginButton != null) loginButton.Visible = !signed && !saved;
+            if (loginPinBox != null) loginPinBox.Visible = saved;
+            if (unlockButton != null) unlockButton.Visible = saved;
+            if (useTokenButton != null) useTokenButton.Visible = saved;
+            if (forgetButton != null) forgetButton.Visible = saved;
+            if (usePinButton != null) usePinButton.Visible = !signed && useTokenMode && savedLoginExists;
             if (logoutButton != null) logoutButton.Visible = signed;
+            if (helpEditor != null) helpEditor.ReadOnly = !signed;
             if (avatarPanel != null) avatarPanel.Invalidate();
             UpdateSyncActionState();
         }
@@ -886,6 +977,7 @@ namespace SRLogbook
                 RefreshNews();
                 StartNewsTimer();
                 await LogActivityAsync("登录", "身份验证成功");
+                if (rememberCheck.Checked) SaveLoginWithPin(login, token);
             }
             catch (Exception ex)
             {
@@ -895,6 +987,91 @@ namespace SRLogbook
                 Msg.Show("登录失败 / Sign-in failed: " + ex.Message, "登录", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally { loginButton.Enabled = true; Lang.Apply(this); }
+        }
+
+        /// <summary>首次使用令牌登录后，可选地设置 6 位 PIN 并把登录保存在系统凭据库。</summary>
+        private void SaveLoginWithPin(string login, string token)
+        {
+            string pin = PinDialog.Ask(this, "设置 6 位 PIN / Set a 6-digit PIN",
+                "下次启动时用这个 PIN 解锁。PIN 只是本机便捷锁，令牌由系统凭据库保护；忘记 PIN 只能重新输入令牌。 / Used to unlock next time. The PIN is a local convenience lock; the token is protected by the system credential store. If you forget the PIN, sign in with your token again.",
+                true);
+            if (pin == null) { rememberCheck.Checked = false; return; }
+            if (!RememberedLogin.Save(login, token, pin))
+            {
+                Msg.Show("保存失败：系统凭据库不可用。 / Could not save to the credential store.", "登录", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                rememberCheck.Checked = false;
+                return;
+            }
+            savedLoginExists = true;
+            savedLoginName = login;
+            useTokenMode = false;
+            RememberedLogin.ResetFailures(appDir);
+            rememberCheck.Checked = false;
+            UpdateLoginUi();
+            Msg.Show("已保存登录，下次用 6 位 PIN 解锁。 / Saved; next time unlock with your 6-digit PIN.", "登录");
+        }
+
+        private async void UnlockSaved()
+        {
+            if (!savedLoginExists || string.IsNullOrEmpty(savedLoginName) || unlockButton == null || !unlockButton.Enabled) return;
+            string pin = (loginPinBox.Text ?? "").Trim();
+            if (!RememberedLogin.ValidPin(pin))
+            {
+                loginHintLabel.Text = "请输入 6 位数字 / Enter 6 digits";
+                loginPinBox.Focus();
+                return;
+            }
+            unlockButton.Enabled = false;
+            loginHintLabel.Text = "正在解锁… / Unlocking…";
+            try
+            {
+                RememberedLogin.Saved saved = await Task.Run(() => RememberedLogin.Unlock(pin));
+                loginPinBox.Text = "";
+                if (saved == null)
+                {
+                    int fails = RememberedLogin.RecordFailure(appDir);
+                    if (fails >= RememberedLogin.MaxAttempts)
+                    {
+                        RememberedLogin.Delete(appDir);
+                        savedLoginExists = false;
+                        savedLoginName = null;
+                        useTokenMode = false;
+                        UpdateLoginUi();
+                        Msg.Show("连续 5 次 PIN 错误，已清除保存的登录。请改用 GitHub 令牌登录。 / Too many wrong PINs; the saved sign-in was cleared. Sign in with your token.", "登录", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        UpdateLoginUi();
+                        loginHintLabel.Text = "PIN 错误，还可尝试 " + (RememberedLogin.MaxAttempts - fails) + " 次 / Wrong PIN";
+                        loginPinBox.Focus();
+                    }
+                    return;
+                }
+                RememberedLogin.ResetFailures(appDir);
+                sessionToken = saved.Token;
+                sessionLogin = saved.Login;
+                useTokenMode = false;
+                UpdateLoginUi();
+                RefreshTeamPage();
+                RefreshNews();
+                StartNewsTimer();
+                await LogActivityAsync("登录", "PIN 解锁");
+            }
+            catch (Exception ex)
+            {
+                Msg.Show("解锁失败 / Unlock failed: " + ex.Message, "登录", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally { unlockButton.Enabled = true; Lang.Apply(this); }
+        }
+
+        private void ForgetSaved()
+        {
+            if (Msg.Show("忘记这台电脑上保存的登录？下次需要用 GitHub 令牌重新登录。 / Forget the saved sign-in? You will need your token next time.", "忘记登录", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            RememberedLogin.Delete(appDir);
+            savedLoginExists = false;
+            savedLoginName = null;
+            useTokenMode = false;
+            UpdateLoginUi();
         }
 
         private void SignOut()
