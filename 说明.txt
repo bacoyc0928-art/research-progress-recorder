@@ -1,12 +1,14 @@
-SRPRecorder2027 · 0.2.5 · 公开测试版
+SRPRecorder2027 · 0.2.6 · 公开测试版
 Windows ZIP 与 macOS arm64 / x64 DMG 由 GitHub Releases 发布；公开下载无需登录或令牌。
 
-0.2.5 新增应用内更新：使用说明页的“检查更新 / Check updates”会读取最新 Release，下载对应安装包并按 SHA256SUMS.txt 校验。Windows 退出后由脚本只替换程序文件并自动重启；macOS 退出后替换 .app（失败则打开 DMG）。PersonalWorkspaceSRRec、References、*.json 配置与 macOS Application Support 数据都不会被删除，上一版 exe 保留为 SRPRecorder2027.exe.previous。0.2.4 及更早版本没有该按钮，需要手动安装一次 0.2.5。
+0.2.6 把“检查更新 / Check updates”从使用说明页移到窗口左下角（登录面板正下方），所有页面可见；左侧栏底部显示当前版本号（如 v0.2.6）。使用说明页恢复为上传到 GitHub、读取云端版本、恢复默认、改动日志四个按钮。
 
-0.2.4 的“记住登录 + 6 位 PIN”继续保留：令牌存系统凭据库（Windows 凭据管理器 / macOS 钥匙串），连续 5 次 PIN 错误清除。
+应用内更新（0.2.5 起）：左下角按钮读取最新 Release，下载安装包并按 SHA256SUMS.txt 校验；Windows 退出后只替换程序文件并重启，旧 exe 保留为 SRPRecorder2027.exe.previous；macOS 替换 .app，失败则打开 DMG。PersonalWorkspaceSRRec、References、*.json 与 Application Support 数据都不会被删除。
 
-0.2.0 的一次性清理只面向更早版本；0.2.5 可覆盖旧版本并保留配置、日志与缓存。数据仓库 bacoyc0928-art/research-data 已内置绑定。
+0.2.4 及更早版本没有该按钮，需要手动安装一次 0.2.6；之后即可用左下角按钮更新。0.2.4 的“记住登录 + 6 位 PIN”继续保留。
 
-程序包含六页：团队研究、Quick Post、参考资料、本地进度、团队同步、使用说明。同步必须手动发起；上传前选择文件，单文件上限 50 MiB。公开程序仓库不应包含研究文档、PDF、个人配置或令牌。
+0.2.0 的一次性清理只面向更早版本；0.2.6 可覆盖旧版本并保留配置、日志与缓存。数据仓库 bacoyc0928-art/research-data 已内置绑定。
+
+程序包含六页：团队研究、Quick Post、参考资料、本地进度、团队同步、使用说明。同步必须手动发起；单文件上限 50 MiB。公开程序仓库不应包含研究文档、PDF、个人配置或令牌。
 
 构建与验证：Windows 使用 build.ps1 / test-local.ps1 / package-local.ps1；Mac 使用 py_compile、test_mac_client.py、test_file_channels.py 与 --smoke-test。正式发布附件须包含 Windows ZIP、arm64 DMG、x64 DMG 和 SHA256SUMS.txt。
