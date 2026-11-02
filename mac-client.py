@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.2.7. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.8. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -27,14 +27,14 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.7'
+VERSION = '0.2.8'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
-HELP_TEXT = """SRPRecorder2027 · 0.2.7 · 中英双语界面 / Bilingual UI
+HELP_TEXT = """SRPRecorder2027 · 0.2.8 · 中英双语界面 / Bilingual UI
 数据架构与使用说明 / Data architecture and usage guide
 
 【0】总览 / Overview
@@ -51,7 +51,7 @@ First run: sign in at the bottom-left (optionally tick Remember and set a 6-digi
 
 【1】Windows 本机目录 / Windows local layout
 SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）
-├─ SRPRecorder2027.exe             程序 0.2.7
+├─ SRPRecorder2027.exe             程序 0.2.8
 ├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留
 ├─ research_log.json               旧版研究记录
 ├─ workspace.json                  工作区路径
@@ -81,9 +81,9 @@ SRCRec\\ is the program and data root next to the exe; the whole folder is porta
    ├─ References\\Default\\          团队默认资料库
    └─ PersonalWorkspaceSRRec\\
       ├─ Mat_Local\\                个人非参考资料
-      ├─ Reference\\                个人参考资料（上传副本暂存 Reference\\references\\）
+      ├─ Reference\\                个人参考资料（上传副本直接放在 Reference\\）
       └─ Public_Temp\\              他人内容（启动/退出清空）
-macOS keeps user data in Application Support; the app bundle holds only the program. The SRCRec subfolder mirrors the Windows layout with the same three workspace folders (the local copy of uploaded references is currently kept in Reference\\references\\).
+macOS keeps user data in Application Support; the app bundle holds only the program. The SRCRec subfolder mirrors the Windows layout with the same three workspace folders (uploaded reference copies are stored directly in Reference\\ on both platforms).
 
 【3】私有仓库 research-data / Private team repository
 team\\<账号>\\
@@ -113,7 +113,7 @@ Quick Post：发布 posts\\<id>.txt；已阅 posts\\read\\<我>.json；只能删
 【5】清理、保留与升级 / Cleanup, retention and upgrade
 - Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。
 - References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。
-- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.7 不会重复清理。
+- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.8 不会重复清理。
 - 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。
 - 远端上传只新增或覆盖，不自动删除旧文件。
 Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.
@@ -605,7 +605,32 @@ class Client:
         self.build(); root.protocol('WM_DELETE_WINDOW',self.close); root.after(100,self.poll)
     def tr(self,zh,en): return zh+' / '+en
     def button(self,parent,zh,en,command):
-        b=self.ttk.Button(parent,text=self.tr(zh,en),command=lambda:self.guarded(command)); b.pack(side='left',padx=4,pady=5); return b
+        b=self.ttk.Button(parent,text=self.tr(zh,en),command=lambda:self.guarded(command))
+        if hasattr(parent,'_flow_buttons'):
+            parent._flow_buttons.append(b); self.root.after_idle(parent._reflow)
+        else: b.pack(side='left',padx=4,pady=5)
+        return b
+    def flow_bar(self,parent,**pack_options):
+        bar=self.ttk.Frame(parent,height=34); bar.pack(fill='x',**pack_options)
+        bar._flow_buttons=[]; bar._flow_key=None
+        def reflow(event=None):
+            available=max(1,bar.winfo_width())
+            key=(available,tuple((b.winfo_reqwidth(),b.winfo_reqheight()) for b in bar._flow_buttons))
+            if key==bar._flow_key: return
+            bar._flow_key=key; x=4; y=5; line=0
+            for b in bar._flow_buttons:
+                width=min(b.winfo_reqwidth(),max(1,available-8)); height=b.winfo_reqheight()
+                if x>4 and x+width+4>available: x=4; y+=line+10; line=0
+                b.place(x=x,y=y,width=width,height=height)
+                x+=width+8; line=max(line,height)
+            bar.configure(height=y+line+5)
+        bar._reflow=reflow; bar.bind('<Configure>',reflow)
+        return bar
+    def wrapped_label(self,parent,text,pack_options=None,**options):
+        label=self.ttk.Label(parent,text=text,wraplength=100,**options)
+        label.pack(fill='x',**(pack_options or {}))
+        label.bind('<Configure>',lambda e:label.configure(wraplength=max(100,e.width-4)))
+        return label
     def guarded(self,fn):
         if self.busy: return
         try: fn()
@@ -643,10 +668,11 @@ class Client:
         threading.Thread(target=job,daemon=True).start()
     def build(self):
         ttk=self.ttk
-        header=ttk.Frame(self.root,padding=12); header.pack(fill='x')
+        self.root.columnconfigure(0,weight=1); self.root.rowconfigure(1,weight=1)
+        header=ttk.Frame(self.root,padding=12); header.grid(row=0,column=0,sticky='ew')
         ttk.Label(header,text='SRPRecorder2027  '+VERSION,font=('',17,'bold')).pack(side='left')
         self.button(header,'更换工作文件夹','Change Workspace',self.choose_workspace)
-        self.book=ttk.Notebook(self.root); self.book.pack(fill='both',expand=True,padx=12,pady=6)
+        self.book=ttk.Notebook(self.root); self.book.grid(row=1,column=0,sticky='nsew',padx=12,pady=6)
         self.book.bind('<<NotebookTabChanged>>', lambda e:self.on_tab_changed(e))
         self.tabs=[]; self.tab_base=[]
         for zh,en in [('团队研究','Team'),('Quick Post','Quick Post'),('参考资料','Refs'),('本地进度','Progress'),('团队同步','Sync'),('使用说明','Help')]:
@@ -655,16 +681,19 @@ class Client:
         self.news_seen=dict(self.config.get('news') or {})
         self.build_login_bar()
         self.status=self.tk.StringVar(value=self.tr('就绪','Ready'))
-        bottom=ttk.Frame(self.root,padding=(12,2)); bottom.pack(fill='x')
+        bottom=ttk.Frame(self.root,padding=(12,4)); bottom.grid(row=3,column=0,sticky='ew')
+        bottom.columnconfigure(1,weight=1)
         self.update_btn=ttk.Button(bottom,text=self.tr('检查更新','Check updates'),command=self.check_updates)
-        self.update_btn.pack(side='left',pady=2)
-        ttk.Label(bottom,textvariable=self.status,padding=6).pack(side='left',fill='x',expand=True)
+        self.update_btn.grid(row=0,column=0,pady=2,sticky='w')
+        status_label=ttk.Label(bottom,textvariable=self.status,padding=6,width=1)
+        status_label.grid(row=0,column=1,sticky='ew')
+        status_label.bind('<Configure>',lambda e:status_label.configure(wraplength=max(100,e.width-12)))
         self.version_label=ttk.Label(bottom,text='v'+VERSION,foreground='#8a93a3')
-        self.version_label.pack(side='right',padx=6)
+        self.version_label.grid(row=0,column=2,padx=6,sticky='e')
         self.build_team(); self.build_posts(); self.build_references(); self.build_progress(); self.build_sync(); self.build_help()
         self.update_login_ui()
     def build_login_bar(self):
-        bar=self.ttk.Frame(self.root,padding=(12,6)); bar.pack(fill='x')
+        bar=self.ttk.Frame(self.root,padding=(12,6)); bar.grid(row=2,column=0,sticky='ew')
         self.avatar=self.tk.Canvas(bar,width=40,height=40,highlightthickness=0)
         try: self.avatar.configure(bg=self.root.cget('bg'))
         except Exception: pass
@@ -674,8 +703,8 @@ class Client:
         self.login_hint=self.ttk.Label(info,text='',foreground='#5e697a'); self.login_hint.pack(anchor='w')
         self.token_frame=self.ttk.Frame(bar)
         self.login_token=self.tk.StringVar()
-        self.login_entry=self.ttk.Entry(self.token_frame,textvariable=self.login_token,show='●',width=40)
-        self.login_entry.pack(side='left',padx=6)
+        self.login_entry=self.ttk.Entry(self.token_frame,textvariable=self.login_token,show='●',width=16)
+        self.login_entry.pack(side='left',padx=6,fill='x',expand=True)
         self.login_show=self.tk.BooleanVar(value=False)
         self.login_show_btn=self.ttk.Checkbutton(self.token_frame,text=self.tr('显示','Show'),variable=self.login_show,command=self.toggle_login_show)
         self.login_show_btn.pack(side='left',padx=3)
@@ -721,7 +750,9 @@ class Client:
             self.token_frame.pack_forget(); self.logout_btn.pack_forget(); self.pin_frame.pack(side='left',padx=4)
             self.pin_entry.focus_set()
         else:
-            self.pin_frame.pack_forget(); self.logout_btn.pack_forget(); self.token_frame.pack(side='left',padx=0)
+            self.pin_frame.pack_forget(); self.logout_btn.pack_forget(); self.token_frame.pack(side='left',padx=0,fill='x',expand=True)
+        if hasattr(self,'help_text'): self.help_text.configure(state='normal' if signed else 'disabled')
+        for action in getattr(self,'sync_actions',[]): action.configure(state='normal' if signed else 'disabled')
         self.draw_avatar()
     def toggle_login_show(self):
         self.login_entry.configure(show='' if self.login_show.get() else '●')
@@ -806,7 +837,7 @@ class Client:
     def sign_out(self):
         if not self.mb.askyesno('SRPRecorder2027',self.tr('退出登录将直接关闭程序，确定退出？','Signing out closes the app. Continue?'),parent=self.root): return
         self.session_login=''; self.session_token=''; self.login=''
-        self.root.destroy()
+        self.close()
     def require_login(self):
         if self.session_token: return True
         self.mb.showinfo('SRPRecorder2027',self.tr('请先在窗口底部登录 GitHub 账号。','Sign in at the bottom first.'),parent=self.root)
@@ -819,7 +850,7 @@ class Client:
             self.book.select(0); return
         self.mark_news_seen(index)
     def news_state(self):
-        api=self.GitHub({'repo':DEFAULT_REPO,'branch':'main'}, self.session_token)
+        api=GitHub({'repo':DEFAULT_REPO,'branch':'main'}, self.session_token)
         posts=list_posts(api); read=set(read_ids(api,self.session_login))
         unread=len([p for p in posts if p.get('id') not in read])
         members=','.join(sorted(FileChannels(api).members()))
@@ -828,16 +859,19 @@ class Client:
         def fp(*keys):
             rows=[a for a in acts if any(k in str(a.get('action') or '') for k in keys)]
             return '%d:%s'%(len(rows),rows[-1].get('time') if rows else '-')
-        local=0
+        local=[]
         try:
             for folder in (self.mat_local,self.reference_dir):
-                if folder.is_dir(): local+=len(upload_files(folder))
+                if folder.is_dir():
+                    for file in upload_files(folder):
+                        stat=file.stat(); local.append((str(file),stat.st_size,stat.st_mtime_ns))
         except Exception: pass
+        local_signature=hashlib.sha256(repr(sorted(local)).encode('utf-8')).hexdigest()
         # 红点跟着“日志说的是哪个栏目”走，与 Windows 端规则一致
         return {0:'team:'+members,
                 1:'posts:%d|%s'%(unread,fp('发布帖子','删除帖子')),
                 2:'refs:'+fp('上传参考资料','撤除参考资料','下载默认资料库'),
-                3:'progress:%s|%d'%(fp('上传本地进度'),local),
+                3:'progress:%s|%s'%(fp('上传本地进度'),local_signature),
                 4:'act:%d:%s'%(len(acts),last),
                 5:'help:'+fp('更新使用说明')}
     def update_news(self):
@@ -869,8 +903,9 @@ class Client:
             try: self.book.tab(idx,text=self.tab_base[idx])
             except Exception: pass
         sig=getattr(self,'news_sig',None)
-        if sig and str(idx) in sig and self.news_seen.get(str(idx))!=sig[str(idx)]:
-            self.news_seen[str(idx)]=sig[str(idx)]; self.config['news']=self.news_seen; atomic(self.configfile,self.config)
+        value=sig.get(idx,sig.get(str(idx))) if sig else None
+        if value is not None and self.news_seen.get(str(idx))!=value:
+            self.news_seen[str(idx)]=value; self.config['news']=self.news_seen; atomic(self.configfile,self.config)
     def _news_tick(self):
         try: self.update_news()
         finally:
@@ -953,12 +988,12 @@ class Client:
                     except Exception: pass
         except Exception: pass
     def build_team(self):
-        p=self.tabs[0]; bar=self.ttk.Frame(p); bar.pack(fill='x')
+        p=self.tabs[0]; bar=self.flow_bar(p)
         self.button(bar,'打开 Reference','Open Reference',self.open_personal)
         self.button(bar,'刷新成员','Refresh Members',self.team)
         self.button(bar,'打开成员文件','Open Member Files',self.member_research)
         self.button(bar,'下载并合并团队参考资料','Download Team References',self.team_references)
-        self.personal_label=self.ttk.Label(p,text=self.personal_display(),wraplength=980); self.personal_label.pack(anchor='w',pady=10)
+        self.personal_label=self.wrapped_label(p,self.personal_display(),pack_options={'pady':10})
         self.members_tree=self.table(p,[self.tr('GitHub 账号','GitHub login')])
         self.members_tree.bind('<Double-1>',lambda _:self.guarded(self.member_research))
     def choose_personal(self):
@@ -1131,7 +1166,8 @@ class Client:
         post=self._history_posts.get(selection[0])
         if post: self.view_post(post,login)
     def build_references(self):
-        p=self.tabs[2]; self.ttk.Label(p,text=self.tr('参考资料只读。默认库需登录私有团队仓库后下载；个人资料在团队同步上传。','Read-only references. Download the default library after joining the private data repository; upload personal files on Team Sync.'),wraplength=980).pack(anchor='w',pady=8)
+        p=self.tabs[2]
+        self.wrapped_label(p,self.tr('参考资料只读。默认库需登录私有团队仓库后下载；个人资料在团队同步上传。','Read-only references. Download the default library after joining the private data repository; upload personal files on Team Sync.'),pack_options={'pady':8})
         bar=self.ttk.Frame(p); bar.pack(fill='x'); self.button(bar,'刷新本地资料','Refresh Local Files',self.refresh_references)
         self.button(bar,'打开文件','Open File',self.open_reference); self.button(bar,'打开默认资料库','Open Default Library',lambda:self.open_path(self.default))
         self.ref_tree=self.table(p,[self.tr('文件','File'),self.tr('位置','Location')]); self.ref_tree.bind('<Double-1>',lambda _:self.guarded(self.open_reference))
@@ -1158,14 +1194,14 @@ class Client:
         p=self.tabs[3]; self.progress=self.tk.StringVar(value=self.config['progress'])
         self.ttk.Label(p,text=self.tr('本地进度文件夹','Local Progress Folder'),font=('',14,'bold')).pack(anchor='w',pady=12)
         self.ttk.Entry(p,textvariable=self.progress,state='readonly').pack(fill='x')
-        bar=self.ttk.Frame(p); bar.pack(fill='x',pady=10)
+        bar=self.flow_bar(p,pady=10)
         self.button(bar,'选择文件夹','Choose Folder',self.choose_progress); self.button(bar,'新建文档','New Document',self.new_document)
         self.button(bar,'打开本地资料文件夹','Open Progress Folder',lambda:self.open_path(self.progress.get()))
         self.button(bar,'刷新','Refresh',self.refresh_progress_files)
         self.progress_tree=self.table(p,[self.tr('名称','Name'),self.tr('大小','Size'),self.tr('修改','Modified')])
         self.progress_tree.column('0',width=420); self.progress_tree.column('1',width=140); self.progress_tree.column('2',width=200)
         self.progress_tree.bind('<Double-1>',lambda _:self.open_progress_item())
-        self.ttk.Label(p,text=self.tr('在此文件夹编辑文件，完成后到团队同步上传。本机自动保存不等于云端上传。','Edit files in this dedicated folder; upload them from Team Sync when ready. Local saves do not upload automatically.'),wraplength=980).pack(anchor='w',pady=12)
+        self.wrapped_label(p,self.tr('在此文件夹编辑文件，完成后到团队同步上传。本机自动保存不等于云端上传。','Edit files in this dedicated folder; upload them from Team Sync when ready. Local saves do not upload automatically.'),pack_options={'pady':12})
         self.refresh_progress_files()
     def refresh_progress_files(self):
         tree=getattr(self,'progress_tree',None)
@@ -1180,7 +1216,7 @@ class Client:
             for f in sorted([x for x in root.iterdir() if x.is_file()],key=lambda x:x.name.lower()):
                 tree.insert('','end',values=(f.name,str(max(1,f.stat().st_size//1024))+' KB',dt.datetime.fromtimestamp(f.stat().st_mtime).strftime('%Y-%m-%d %H:%M')),tags=(str(f),))
         except Exception as error:
-            self.status.set(self.tr('读取文件夹失败 / Failed to list folder: ')+str(error))
+            self.status.set(self.tr('读取文件夹失败：','Failed to list folder: ')+str(error))
     def open_progress_item(self):
         tree=getattr(self,'progress_tree',None)
         if tree is None: return
@@ -1203,18 +1239,21 @@ class Client:
             self.open_path(target)
     def build_sync(self):
         p=self.tabs[4]
+        self.sync_actions=[]
+        def action(parent,zh,en,command):
+            button=self.button(parent,zh,en,command); self.sync_actions.append(button)
         self.ttk.Label(p,text=self.tr('已绑定仓库：','Bound repository: ')+DEFAULT_REPO+' · main',font=('',11,'bold')).pack(anchor='w')
         self.ttk.Label(p,text=self.tr('登录后在下方直接操作，无需填写任何配置。','Sign in first; no configuration needed below.'),foreground='#c47a2a').pack(anchor='w',pady=(4,10))
-        downloads=self.ttk.Frame(p); downloads.pack(fill='x',pady=(8,0))
-        self.button(downloads,'从 GitHub 下载他人内容','Download Team Files',self.pull_others)
-        self.button(downloads,'从 GitHub 下载默认资料库','Download Default Library',self.pull_default)
-        uploads=self.ttk.Frame(p); uploads.pack(fill='x')
-        self.button(uploads,'上传参考资料','Upload References',self.upload_references); self.button(uploads,'上传本地进度','Upload Local Progress',self.upload_progress)
-        removals=self.ttk.Frame(p); removals.pack(fill='x')
-        self.button(removals,'撤除我上传的参考资料','Remove My Uploaded References',self.remove_my_references)
-        self.button(removals,'查看活动日志','View Activity Log',self.view_activity)
-        self.ttk.Label(p,text=self.tr('每个上传文件最大 50 MiB；不自动删除远端旧文件。下载成功后替换并保留旧副本；部分上传失败时请重试。','Maximum 50 MiB per uploaded file. Remote old files are not deleted. Downloads replace only after success and keep backups. Retry after partial upload failures.'),wraplength=980).pack(anchor='w',pady=16)
-        self.ttk.Label(p,text=self.tr('个人仓库协作者使用 classic PAT 的 repo 权限。不要共享令牌。','Personal-repository collaborators use a classic PAT with repo scope. Never share tokens.'),wraplength=980).pack(anchor='w')
+        downloads=self.flow_bar(p,pady=(8,0))
+        action(downloads,'从 GitHub 下载他人内容','Download Team Files',self.pull_others)
+        action(downloads,'从 GitHub 下载默认资料库','Download Default Library',self.pull_default)
+        uploads=self.flow_bar(p)
+        action(uploads,'上传参考资料','Upload References',self.upload_references); action(uploads,'上传本地进度','Upload Local Progress',self.upload_progress)
+        removals=self.flow_bar(p)
+        action(removals,'撤除我上传的参考资料','Remove My Uploaded References',self.remove_my_references)
+        action(removals,'查看活动日志','View Activity Log',self.view_activity)
+        self.wrapped_label(p,self.tr('每个上传文件最大 50 MiB；不自动删除远端旧文件。下载成功后替换并保留旧副本；部分上传失败时请重试。','Maximum 50 MiB per uploaded file. Remote old files are not deleted. Downloads replace only after success and keep backups. Retry after partial upload failures.'),pack_options={'pady':16})
+        self.wrapped_label(p,self.tr('个人仓库协作者使用 classic PAT 的 repo 权限。不要共享令牌。','Personal-repository collaborators use a classic PAT with repo scope. Never share tokens.'))
     def save_sync(self):
         api,config=self.api()
         def work():
@@ -1319,27 +1358,32 @@ class Client:
             return count
         self.run(work,lambda count:self.finish(api,config,self.tr('团队参考资料下载完成：','Team reference downloads completed: ')+str(count)))
     def upload_progress(self):
+        if not self.require_login(): return
         folder=self.progress.get()
         if not folder:
             self.status.set(self.tr('请先选择本地进度文件夹。','Choose the local progress folder first.')); return
-        local=upload_files(self.mat_local) or upload_files(Path(folder))
+        chosen=no_links(folder)
+        protected=no_links(self.files_root)
+        if chosen==protected or chosen in protected.parents:
+            raise ValueError('Choose a dedicated progress folder, not the application folder or its parents')
+        root=self.mat_local
+        local=upload_files(root)
         if not local:
-            self.status.set(self.tr('本地进度文件夹为空。','The progress folder is empty.')); return
-        root=Path(folder)
+            root=Path(folder); local=upload_files(root)
         picked=self.pick(self.tr('上传本地进度','Upload progress'),
             self.tr('勾选要上传的文件；未勾选的不上传。','Check the files to upload; unchecked files are not sent.'),
-            [p.relative_to(root).as_posix() for p in local])
+            [str(p) for p in local],extra_files=True)
         if not picked: return
         api,config=self.api()
         def work():
-            files=self.channels(api); login=files.ensure_profile(); api.login_cached=login
-            count=0
-            for rel in picked:
-                files.upload_bytes('team/'+login+'/progress/'+rel,(root/rel).read_bytes()); count+=1
+            files=self.channels(api)
+            count=files.upload_selected_progress(root,[Path(p) for p in picked])
+            login=files.identity(); api.login_cached=login
             self.log_activity(api,login,'上传本地进度 / Upload progress',str(count)+' 个文件 / files')
             return count
         self.run(work,lambda count:self.finish(api,config,self.tr('本地进度已上传：','Progress files uploaded: ')+str(count)))
     def upload_references(self):
+        if not self.require_login(): return
         login=self.session_login or self.login
         candidates=[]
         if self.reference_dir.is_dir(): candidates=[str(p) for p in sorted(upload_files(self.reference_dir))]
@@ -1392,12 +1436,16 @@ class Client:
         else: subprocess.Popen(['xdg-open',str(path)])
     def build_help(self):
         panel=self.tabs[5]
-        bar=self.ttk.Frame(panel); bar.pack(fill='x')
+        bar=self.flow_bar(panel)
         self.button(bar,'上传到 GitHub','Upload to GitHub',self.upload_help)
         self.button(bar,'读取云端版本','Load From GitHub',self.load_help)
         self.button(bar,'恢复默认','Restore Default',self.default_help)
         self.button(bar,'改动日志','Change Log',self.show_help_changelog)
-        self.help_text=self.tk.Text(panel,wrap='word',padx=16,pady=16); self.help_text.pack(fill='both',expand=True)
+        body=self.ttk.Frame(panel); body.pack(fill='both',expand=True)
+        self.help_text=self.tk.Text(body,wrap='word',padx=16,pady=16)
+        scroll=self.ttk.Scrollbar(body,orient='vertical',command=self.help_text.yview)
+        self.help_text.configure(yscrollcommand=scroll.set)
+        scroll.pack(side='right',fill='y'); self.help_text.pack(side='left',fill='both',expand=True)
         self.help_text.bind('<<Modified>>',self.help_modified)
         text=self.help_text
         self.help_dirty=False
@@ -1438,7 +1486,12 @@ class Client:
             self.run(lambda: download_update(rel,asset),done2)
         self.run(release_info,done)
     def default_help(self):
-        self.help_text.delete('1.0','end'); self.help_text.insert('1.0',self.default_help_text()); self.help_dirty=False
+        self.set_help_text(self.default_help_text())
+    def set_help_text(self,text):
+        self.help_text.configure(state='normal')
+        self.help_text.delete('1.0','end'); self.help_text.insert('1.0',text)
+        self.help_text.edit_modified(False); self.help_dirty=False
+        self.help_text.configure(state='normal' if self.session_login else 'disabled')
         self.status.set(self.tr('已恢复软件自带的使用说明。','Restored built-in help.'))
     def upload_help(self):
         api,config=self.api()
@@ -1471,7 +1524,7 @@ class Client:
             if text is None:
                 if not quiet: self.mb.showinfo('SRPRecorder2027',self.tr('云端还没有上传过使用说明。','No uploaded help yet.'),parent=self.root)
                 return
-            self.help_text.delete('1.0','end'); self.help_text.insert('1.0',text); self.help_dirty=False
+            self.set_help_text(text)
             self.status.set(self.tr('已读取云端使用说明。','Help loaded from GitHub.'))
         self.run(work,done)
     def show_help_changelog(self):

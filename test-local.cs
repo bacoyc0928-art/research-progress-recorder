@@ -18,6 +18,19 @@ public static class LocalTransferChecks
         foreach (string name in new[] { "..", "../escape", "a/b", "a\\b", "CON", "x:stream", "trailing.", "trailing " })
             Check(Fails(delegate { FileTransfers.Child(t,name); }), "download rejects " + name);
         Check(Path.GetFileName(FileTransfers.Child(t,"实验.pdf")) == "实验.pdf", "Unicode reference filename accepted");
+        string progressRoot=Path.Combine(t,"Mat_Local"); Directory.CreateDirectory(Path.Combine(progressRoot,"nested"));
+        string progressFile=Path.Combine(progressRoot,"nested","report.txt"); File.WriteAllText(progressFile,"progress");
+        string extraDir=Path.Combine(t,"external"); Directory.CreateDirectory(extraDir);
+        string extraFile=Path.Combine(extraDir,"extra.txt"); File.WriteAllText(extraFile,"extra");
+        var progressUploads=FileTransfers.ProgressUploads(progressRoot,new[] {progressFile,extraFile});
+        Check(progressUploads[0].Value=="nested/report.txt" && progressUploads[1].Value=="extra.txt", "progress upload preserves source hierarchy and added external filenames");
+        string collision=Path.Combine(progressRoot,"extra.txt"); File.WriteAllText(collision,"different");
+        Check(Fails(delegate {FileTransfers.ProgressUploads(progressRoot,new[] {collision,extraFile});}), "progress destination collisions fail before any upload");
+        Check(Fails(delegate {FileTransfers.ProgressRelativePath(Path.Combine(t,"missing","CON"),progressRoot);}), "progress path validation rejects cross-platform reserved names");
+        string referenceRoot=Path.Combine(t,"Reference"); Directory.CreateDirectory(Path.Combine(referenceRoot,"references"));
+        string directRef=Path.Combine(referenceRoot,"current.pdf"); File.WriteAllText(directRef,"current");
+        string legacyRef=Path.Combine(referenceRoot,"references","old.pdf"); File.WriteAllText(legacyRef,"old");
+        Check(FileTransfers.LocalReferenceCopy(referenceRoot,"current.pdf")==directRef && FileTransfers.LocalReferenceCopy(referenceRoot,"old.pdf")==legacyRef, "reference removal resolves current direct copies and legacy nested copies");
         string dest=Path.Combine(t,"library"); Directory.CreateDirectory(dest); File.WriteAllText(Path.Combine(dest,"original.txt"),"original");
         Check(Fails(delegate { FileTransfers.ReplaceFromDownload(dest,stage=> { File.WriteAllText(Path.Combine(stage,"partial.txt"),"partial"); throw new IOException("offline"); }); }) && File.ReadAllText(Path.Combine(dest,"original.txt"))=="original", "interrupted download preserves old library");
         Check(Fails(delegate { FileTransfers.ReplaceFromDownload(dest,stage=>{}); }) && File.Exists(Path.Combine(dest,"original.txt")), "empty/missing library cannot erase old data");

@@ -536,20 +536,21 @@ namespace SRLogbook
             {
                 // 默认来源是 PersonalWorkspaceSRRec\Mat_Local；也可以“添加文件”从别处选。
                 string matLocal = AppPaths.MatLocal(appDir);
+                string sourceRoot = matLocal;
                 List<string> files = FileTransfers.UploadFiles(matLocal);
-                if (files.Count == 0) files = FileTransfers.UploadFiles(folder);
-                if (files.Count == 0) { lblSStatus.Text = "Mat_Local 与进度文件夹都为空，未上传 / Nothing to upload."; return; }
+                if (files.Count == 0) { sourceRoot = folder; files = FileTransfers.UploadFiles(folder); }
                 List<string> picked = PickItems("上传本地进度 / Upload local progress",
                     "默认列出 Mat_Local 里的文件；可勾选或用“添加文件”选别处，未勾选的不上传。 / Lists Mat_Local by default; check files or add others; unchecked files are not sent.",
-                    Rows(files, f => f.Substring(folder.Length).TrimStart('\\', '/') + "  ·  " + Math.Max(1, new FileInfo(f).Length / 1024) + " KB"), true);
+                    Rows(files, f => FileTransfers.ProgressRelativePath(f, sourceRoot) + "  ·  " + Math.Max(1, new FileInfo(f).Length / 1024) + " KB"), true);
                 if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
+                List<KeyValuePair<string, string>> uploads = FileTransfers.ProgressUploads(sourceRoot, picked);
                 string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
                 await Task.Run(() => GitHubSync.EnsureProfile(owner, repo, branch, token, login));
                 int n = 0;
-                foreach (string file in picked)
+                foreach (KeyValuePair<string, string> upload in uploads)
                 {
-                    string rel = file.Substring(folder.Length).TrimStart('\\', '/').Replace('\\', '/');
-                    byte[] bytes = File.ReadAllBytes(file);
+                    string rel = upload.Value;
+                    byte[] bytes = File.ReadAllBytes(upload.Key);
                     await Task.Run(() => GitHubSync.UploadFileBytes(owner, repo, "team/" + login + "/progress/" + rel, branch, token, bytes));
                     n++;
                 }
@@ -835,7 +836,7 @@ namespace SRLogbook
                     await Task.Run(() => GitHubSync.DeleteFile(owner, repo, remotePath, branch, token, sha));
                     if (Directory.Exists(personal))
                     {
-                        string local = FileTransfers.Child(FileTransfers.Child(personal, "references"), name);
+                        string local = FileTransfers.LocalReferenceCopy(personal, name);
                         if (File.Exists(local))
                         {
                             try { File.Delete(local); } catch { }

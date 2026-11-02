@@ -88,6 +88,27 @@ def merge_references(old, selected):
     result.update({x['Path']: x for x in selected})
     return list(result.values())
 
+def progress_uploads(folder, files):
+    root = no_links(folder)
+    result, names = [], set()
+    for file in files:
+        file = no_links(file)
+        if not file.is_file() or file.stat().st_size > MAX_FILE:
+            raise ValueError('Missing or oversized upload file: ' + str(file))
+        try: relative = file.relative_to(root)
+        except ValueError: relative = Path(file.name)
+        for segment in relative.parts: safe_name(segment)
+        rel = relative.as_posix()
+        if rel.casefold() in names: raise ValueError('Selected progress files have duplicate destination names; rename them first: ' + rel)
+        names.add(rel.casefold()); result.append((file, rel))
+    return result
+
+def local_reference_copy(folder, name):
+    direct = child(folder, name)
+    if direct.is_file(): return direct
+    legacy = child(child(folder, 'references'), name)
+    return legacy if legacy.is_file() else direct
+
 class FileChannels:
     def __init__(self, api): self.api = api; self._login = None
     def identity(self):
@@ -153,7 +174,7 @@ class FileChannels:
             except urllib.error.HTTPError as error:
                 if error.code != 404: raise
                 sha = None
-            body = {'message': 'upload: SRPRecorder2027 0.2.7', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
+            body = {'message': 'upload: SRPRecorder2027 0.2.8', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
             if sha: body['sha'] = sha
             try: self.api.request('PUT', self.api.endpoint(path), body); return
             except urllib.error.HTTPError as error:
@@ -167,10 +188,10 @@ class FileChannels:
         for name in names:
             path = 'team/' + login + '/references/' + name
             data = self.api.request('GET', self.api.endpoint(path) + '?ref=' + urllib.parse.quote(self.api.branch, safe=''))
-            body = {'message': 'remove: SRPRecorder2027 0.2.7', 'branch': self.api.branch, 'sha': data['sha']}
+            body = {'message': 'remove: SRPRecorder2027 0.2.8', 'branch': self.api.branch, 'sha': data['sha']}
             self.api.request('DELETE', self.api.endpoint(path), body)
             if personal_folder:
-                local = Path(personal_folder) / 'references' / name
+                local = local_reference_copy(personal_folder, name)
                 try:
                     if local.is_file(): local.unlink()
                 except OSError:
@@ -190,10 +211,13 @@ class FileChannels:
         folder = no_links(folder); protected_root = no_links(protected_root)
         if folder == protected_root or folder in protected_root.parents: raise ValueError('Choose a dedicated progress folder, not the application data root or its parents')
         files = upload_files(folder)
-        if not files: return 0
+        return self.upload_selected_progress(folder, files)
+    def upload_selected_progress(self, folder, files):
+        selected = progress_uploads(folder, files)
+        if not selected: return 0
         login = self.ensure_profile()
-        for file in files: self.upload_bytes('team/' + login + '/progress/' + file.relative_to(folder).as_posix(), file.read_bytes())
-        return len(files)
+        for file, rel in selected: self.upload_bytes('team/' + login + '/progress/' + rel, file.read_bytes())
+        return len(selected)
     def upload_references(self, files, personal_folder):
         files = [no_links(x) for x in files]; names = set()
         for file in files:
@@ -202,7 +226,7 @@ class FileChannels:
             names.add(name.casefold())
             if file.stat().st_size > MAX_FILE: raise ValueError('File exceeds 50 MiB: ' + str(file))
         if not files: return []
-        login = self.ensure_profile(); copies = no_links(Path(personal_folder) / 'references'); copies.mkdir(parents=True, exist_ok=True)
+        login = self.ensure_profile(); copies = no_links(personal_folder); copies.mkdir(parents=True, exist_ok=True)
         selected = []
         for file in files:
             target = child(copies, file.name)
