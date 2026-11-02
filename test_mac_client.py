@@ -41,7 +41,9 @@ class SyncTests(unittest.TestCase):
             client.channels=lambda _:files; client.log_activity=lambda *a:None; client.finish=lambda *a:None
             client.run=lambda work,done:done(work())
             client.upload_progress()
-            self.assertEqual(picked,[True]); self.assertEqual(uploaded,[(client.mat_local,[note,extra])])
+            self.assertEqual(picked,[True])
+            self.assertEqual(uploaded[0][0].resolve(),client.mat_local.resolve())
+            self.assertEqual([p.resolve() for p in uploaded[0][1]],[note.resolve(),extra.resolve()])
 
     def test_021_upgrade_preserves_020_user_data(self):
         with tempfile.TemporaryDirectory() as tmp:
