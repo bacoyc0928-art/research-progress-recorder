@@ -1,2 +1,12 @@
-SRPRecorder2027 0.1.0 Public Test
-See README.md. Extract the whole SRCRec folder before running SRPRecorder2027.exe. Back up data before upgrading. Private team files require your own GitHub token.
+SRPRecorder2027 · 0.2.4 · 公开测试版
+Windows ZIP 与 macOS arm64 / x64 DMG 由 GitHub Releases 发布；公开下载无需登录或令牌。
+
+0.2.4 新增“记住登录 + 6 位 PIN”：首次仍用本人 GitHub 令牌登录，可勾选“记住登录”并设置 6 位数字 PIN；令牌存入系统凭据库（Windows 凭据管理器 / macOS 钥匙串），下次启动只输 PIN 解锁，连续 5 次错误会清除。PIN 只是本机便捷锁，不能跨设备，也不是服务器密码。
+
+使用说明页补齐整体数据架构：数据流、Windows / macOS 本机目录、私有仓库 research-data 结构、五个同步动作的落点、清理与升级规则。GitHub 首页只保留下载链接，完整中英双语说明见 使用说明.md（随 Windows ZIP 打包）。
+
+0.2.0 的一次性清理只面向更早版本；0.2.4 可覆盖 0.2.0 及更早版本，保留配置、日志与缓存。数据仓库 bacoyc0928-art/research-data 已内置绑定。
+
+程序包含六页：团队研究、Quick Post、参考资料、本地进度、团队同步、使用说明。同步必须手动发起；上传前选择文件，单文件上限 50 MiB。公开程序仓库不应包含研究文档、PDF、个人配置或令牌。
+
+构建与验证：Windows 使用 build.ps1 / test-local.ps1 / package-local.ps1；Mac 使用 py_compile、test_mac_client.py、test_file_channels.py 与 --smoke-test。正式发布附件须包含 Windows ZIP、arm64 DMG、x64 DMG 和 SHA256SUMS.txt。
