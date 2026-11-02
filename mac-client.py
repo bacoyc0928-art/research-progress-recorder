@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.2.7. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.8. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -27,14 +27,14 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.7'
+VERSION = '0.2.8'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
-HELP_TEXT = """SRPRecorder2027 · 0.2.7 · 中英双语界面 / Bilingual UI
+HELP_TEXT = """SRPRecorder2027 · 0.2.8 · 中英双语界面 / Bilingual UI
 数据架构与使用说明 / Data architecture and usage guide
 
 【0】总览 / Overview
@@ -51,7 +51,7 @@ First run: sign in at the bottom-left (optionally tick Remember and set a 6-digi
 
 【1】Windows 本机目录 / Windows local layout
 SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）
-├─ SRPRecorder2027.exe             程序 0.2.7
+├─ SRPRecorder2027.exe             程序 0.2.8
 ├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留
 ├─ research_log.json               旧版研究记录
 ├─ workspace.json                  工作区路径
@@ -81,9 +81,9 @@ SRCRec\\ is the program and data root next to the exe; the whole folder is porta
    ├─ References\\Default\\          团队默认资料库
    └─ PersonalWorkspaceSRRec\\
       ├─ Mat_Local\\                个人非参考资料
-      ├─ Reference\\                个人参考资料（上传副本暂存 Reference\\references\\）
+      ├─ Reference\\                个人参考资料（上传副本直接放在 Reference\\）
       └─ Public_Temp\\              他人内容（启动/退出清空）
-macOS keeps user data in Application Support; the app bundle holds only the program. The SRCRec subfolder mirrors the Windows layout with the same three workspace folders (the local copy of uploaded references is currently kept in Reference\\references\\).
+macOS keeps user data in Application Support; the app bundle holds only the program. The SRCRec subfolder mirrors the Windows layout with the same three workspace folders (uploaded reference copies are stored directly in Reference\\ on both platforms).
 
 【3】私有仓库 research-data / Private team repository
 team\\<账号>\\
@@ -113,7 +113,7 @@ Quick Post：发布 posts\\<id>.txt；已阅 posts\\read\\<我>.json；只能删
 【5】清理、保留与升级 / Cleanup, retention and upgrade
 - Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。
 - References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。
-- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.7 不会重复清理。
+- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.8 不会重复清理。
 - 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。
 - 远端上传只新增或覆盖，不自动删除旧文件。
 Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.
@@ -1161,7 +1161,8 @@ class Client:
         post=self._history_posts.get(selection[0])
         if post: self.view_post(post,login)
     def build_references(self):
-        p=self.tabs[2]; self.ttk.Label(p,text=self.tr('参考资料只读。默认库需登录私有团队仓库后下载；个人资料在团队同步上传。','Read-only references. Download the default library after joining the private data repository; upload personal files on Team Sync.'),wraplength=980).pack(anchor='w',pady=8)
+        p=self.tabs[2]
+        self.wrapped_label(p,self.tr('参考资料只读。默认库需登录私有团队仓库后下载；个人资料在团队同步上传。','Read-only references. Download the default library after joining the private data repository; upload personal files on Team Sync.'),pack_options={'pady':8})
         bar=self.ttk.Frame(p); bar.pack(fill='x'); self.button(bar,'刷新本地资料','Refresh Local Files',self.refresh_references)
         self.button(bar,'打开文件','Open File',self.open_reference); self.button(bar,'打开默认资料库','Open Default Library',lambda:self.open_path(self.default))
         self.ref_tree=self.table(p,[self.tr('文件','File'),self.tr('位置','Location')]); self.ref_tree.bind('<Double-1>',lambda _:self.guarded(self.open_reference))
@@ -1475,7 +1476,12 @@ class Client:
             self.run(lambda: download_update(rel,asset),done2)
         self.run(release_info,done)
     def default_help(self):
-        self.help_text.delete('1.0','end'); self.help_text.insert('1.0',self.default_help_text()); self.help_dirty=False
+        self.set_help_text(self.default_help_text())
+    def set_help_text(self,text):
+        self.help_text.configure(state='normal')
+        self.help_text.delete('1.0','end'); self.help_text.insert('1.0',text)
+        self.help_text.edit_modified(False); self.help_dirty=False
+        self.help_text.configure(state='normal' if self.session_login else 'disabled')
         self.status.set(self.tr('已恢复软件自带的使用说明。','Restored built-in help.'))
     def upload_help(self):
         api,config=self.api()
@@ -1508,7 +1514,7 @@ class Client:
             if text is None:
                 if not quiet: self.mb.showinfo('SRPRecorder2027',self.tr('云端还没有上传过使用说明。','No uploaded help yet.'),parent=self.root)
                 return
-            self.help_text.delete('1.0','end'); self.help_text.insert('1.0',text); self.help_dirty=False
+            self.set_help_text(text)
             self.status.set(self.tr('已读取云端使用说明。','Help loaded from GitHub.'))
         self.run(work,done)
     def show_help_changelog(self):

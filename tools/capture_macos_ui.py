@@ -45,6 +45,7 @@ def main():
                 size=[img.width,img.height]
             clipped=[]
             def inspect(widget):
+                if widget in client.tabs and str(widget)!=str(client.book.select()): return
                 if widget.winfo_ismapped() and widget.winfo_class() in ('TButton','TCheckbutton','TEntry','TLabel'):
                     left=widget.winfo_rootx(); top=widget.winfo_rooty(); right=left+widget.winfo_width(); bottom=top+widget.winfo_height()
                     parent=widget.master

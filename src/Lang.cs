@@ -285,8 +285,7 @@ namespace SRLogbook
 
 
 
-        private const string HelpBoth = 
-            "SRPRecorder2027 · 0.2.7 · 中英双语界面 / Bilingual UI\r\n" +
+        private const string HelpBoth = "SRPRecorder2027 · 0.2.8 · 中英双语界面 / Bilingual UI\r\n" +
             "数据架构与使用说明 / Data architecture and usage guide\r\n" +
             "\r\n" +
             "【0】总览 / Overview\r\n" +
@@ -303,7 +302,7 @@ namespace SRLogbook
             "\r\n" +
             "【1】Windows 本机目录 / Windows local layout\r\n" +
             "SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）\r\n" +
-            "├─ SRPRecorder2027.exe             程序 0.2.7\r\n" +
+            "├─ SRPRecorder2027.exe             程序 0.2.8\r\n" +
             "├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留\r\n" +
             "├─ research_log.json               旧版研究记录\r\n" +
             "├─ workspace.json                  工作区路径\r\n" +
@@ -333,9 +332,9 @@ namespace SRLogbook
             "   ├─ References\\Default\\          团队默认资料库\r\n" +
             "   └─ PersonalWorkspaceSRRec\\\r\n" +
             "      ├─ Mat_Local\\                个人非参考资料\r\n" +
-            "      ├─ Reference\\                个人参考资料（上传副本暂存 Reference\\references\\）\r\n" +
+            "      ├─ Reference\\                个人参考资料（上传副本直接放在 Reference\\）\r\n" +
             "      └─ Public_Temp\\              他人内容（启动/退出清空）\r\n" +
-            "macOS keeps user data in Application Support; the app bundle holds only the program. The SRCRec subfolder mirrors the Windows layout with the same three workspace folders (the local copy of uploaded references is currently kept in Reference\\references\\).\r\n" +
+            "macOS keeps user data in Application Support; the app bundle holds only the program. The SRCRec subfolder mirrors the Windows layout with the same three workspace folders (uploaded reference copies are stored directly in Reference\\ on both platforms).\r\n" +
             "\r\n" +
             "【3】私有仓库 research-data / Private team repository\r\n" +
             "team\\<账号>\\\r\n" +
@@ -365,7 +364,7 @@ namespace SRLogbook
             "【5】清理、保留与升级 / Cleanup, retention and upgrade\r\n" +
             "- Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。\r\n" +
             "- References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。\r\n" +
-            "- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.7 不会重复清理。\r\n" +
+            "- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.8 不会重复清理。\r\n" +
             "- 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。\r\n" +
             "- 远端上传只新增或覆盖，不自动删除旧文件。\r\n" +
             "Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.\r\n" +

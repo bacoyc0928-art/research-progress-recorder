@@ -433,7 +433,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.7";
+            this.Text = "SRPRecorder2027 · 0.2.8";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));

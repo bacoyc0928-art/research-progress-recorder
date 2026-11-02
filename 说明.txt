@@ -1,14 +1,3 @@
-SRPRecorder2027 · 0.2.7 · 公开测试版
-Windows ZIP 与 macOS arm64 / x64 DMG 由 GitHub Releases 发布；公开下载无需登录或令牌。
-
-0.2.7 让 macOS 也把“检查更新 / Check updates”放到窗口左下角：底部状态栏最左侧是按钮，右边是状态文字，最右显示 v0.2.7；使用说明页恢复为四个按钮。行为与 Windows 一致：读取最新 Release → 下载 DMG → 按 SHA256SUMS.txt 校验 → 退出后替换 .app（失败则打开 DMG），不删除 Application Support 中的用户数据。
-
-Windows 保持 0.2.6 的左下侧栏按钮与版本号；0.2.6 附件已修复按钮被页脚遮挡的问题。
-
-0.2.4 及更早版本没有更新按钮，需要手动安装一次；0.2.6 用户可直接点“检查更新”升级到 0.2.7。“记住登录 + 6 位 PIN”继续保留。
-
-0.2.0 的一次性清理只面向更早版本；0.2.7 可覆盖旧版本并保留配置、日志与缓存。数据仓库 bacoyc0928-art/research-data 已内置绑定。
-
-程序包含六页：团队研究、Quick Post、参考资料、本地进度、团队同步、使用说明。同步必须手动发起；单文件上限 50 MiB。公开程序仓库不应包含研究文档、PDF、个人配置或令牌。
-
-构建与验证：Windows 使用 build.ps1 / test-local.ps1 / package-local.ps1；Mac 使用 py_compile、test_mac_client.py、test_file_channels.py 与 --smoke-test。正式发布附件须包含 Windows ZIP、arm64 DMG、x64 DMG 和 SHA256SUMS.txt。
+SRPRecorder2027 0.2.8 · 公开测试版
+修复 Mac 最小窗口显示、红点和退出清理；两端统一参考资料副本与进度上传路径。
+使用说明见 使用说明.md。升级保留用户资料，data_version 仍为 0.2.0。
