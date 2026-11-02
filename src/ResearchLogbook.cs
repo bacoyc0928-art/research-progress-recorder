@@ -928,6 +928,11 @@ namespace SRLogbook
         {
             savedLoginExists = RememberedLogin.Exists();
             savedLoginName = savedLoginExists ? RememberedLogin.SavedLogin() : null;
+            if (savedLoginExists && string.IsNullOrEmpty(savedLoginName))
+            {
+                RememberedLogin.Delete(appDir);
+                savedLoginExists = false;
+            }
             if (!savedLoginExists) { savedLoginName = null; useTokenMode = false; }
         }
 
