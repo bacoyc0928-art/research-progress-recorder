@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import io
+import ssl
 from unittest.mock import patch
 from types import SimpleNamespace
 import urllib.error
@@ -14,6 +16,180 @@ m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 OLD='2026-10-20T10:00:00.0000000Z'; NEW='2026-10-20T10:00:00.0000001Z'
 def entry(ident,title='A',updated=OLD): return dict(Id=ident,Title=title,Updated=updated,Category='',Content='',Date='2026-10-20',Progress=0)
 class SyncTests(unittest.TestCase):
+    def test_updater_and_sync_use_verified_system_ca_context_on_macos(self):
+        with patch.object(m.sys,'platform','darwin'), patch.object(m.Path,'is_file',return_value=True), patch.object(m.ssl,'create_default_context') as create:
+            context=m.network_context()
+            self.assertIs(context,create.return_value)
+            context.load_verify_locations.assert_called_once_with(cafile='/etc/ssl/cert.pem')
+        context=ssl.create_default_context()
+        self.assertTrue(context.check_hostname); self.assertEqual(context.verify_mode,ssl.CERT_REQUIRED)
+
+    def test_release_check_passes_verified_tls_context(self):
+        context=object()
+        with patch.object(m,'network_context',return_value=context), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(b'{"tag_name":"v0.2.11"}')) as request:
+            self.assertEqual(m.release_info()['tag_name'],'v0.2.11')
+            self.assertIs(request.call_args.kwargs['context'],context)
+
+    def test_download_and_checksum_both_pass_verified_tls_context(self):
+        with tempfile.TemporaryDirectory() as folder:
+            content=b'isolated fake DMG'; name='test-macOS-arm64.dmg'
+            digest=m.hashlib.sha256(content).hexdigest()
+            asset=dict(name=name,browser_download_url='https://example.invalid/app.dmg')
+            release=dict(assets=[asset,dict(name='SHA256SUMS.txt',browser_download_url='https://example.invalid/sums')])
+            context=object()
+            with patch.object(m.tempfile,'mkdtemp',return_value=folder), patch.object(m,'network_context',return_value=context), patch.object(m.urllib.request,'urlopen',side_effect=[io.BytesIO(content),io.BytesIO((digest+'  '+name).encode())]) as request:
+                self.assertEqual(Path(m.download_update(release,asset)).read_bytes(),content)
+                self.assertTrue(all(call.kwargs['context'] is context for call in request.call_args_list))
+
+    def test_tls_error_is_distinguished_from_app_signing_error(self):
+        error=urllib.error.URLError(ssl.SSLCertVerificationError(1,'CERTIFICATE_VERIFY_FAILED'))
+        self.assertIn('网络证书',m.update_error_message(error))
+        self.assertIn('not an app-signing error',m.update_error_message(error,True))
+
+    def test_rate_limit_error_is_explicit(self):
+        error=urllib.error.HTTPError('',403,'rate limited',{},None)
+        self.assertIn('请求次数限制',m.update_error_message(error))
+
+    def test_adhoc_signing_is_not_developer_id(self):
+        result=SimpleNamespace(returncode=0,stdout='',stderr='Signature=adhoc\nTeamIdentifier=not set\n')
+        with patch.object(m.subprocess,'run',return_value=result): self.assertIsNone(m.application_team(Path('/Applications/App.app')))
+        result.stderr='Authority=Developer ID Application: Example\nTeamIdentifier=ABCDEFGHIJ\n'
+        with patch.object(m.subprocess,'run',return_value=result): self.assertEqual(m.application_team(Path('/Applications/App.app')),'ABCDEFGHIJ')
+
+    def test_adhoc_update_opens_dmg_without_closing_or_replacing_app(self):
+        with patch.object(m,'app_bundle_path',return_value=Path('/Applications/ResearchProgressRecorder.app')), patch.object(m.os,'access',return_value=True), patch.object(m,'application_team',return_value=None), patch.object(m.subprocess,'run') as open_dmg, patch.object(m.subprocess,'Popen') as spawn:
+            result=m.install_update('/tmp/verified.dmg')
+            self.assertFalse(result['automatic']); self.assertEqual(result['reason'],'unnotarized-build')
+            open_dmg.assert_called_once_with(['/usr/bin/open','/tmp/verified.dmg'],check=True,timeout=15)
+            spawn.assert_not_called()
+
+    def test_dmg_translocation_and_unwritable_installs_choose_manual_mode(self):
+        for app in ('/Volumes/Recorder/ResearchProgressRecorder.app','/private/var/folders/a/AppTranslocation/x/d/ResearchProgressRecorder.app'):
+            self.assertEqual(m.update_install_plan(Path(app))['reason'],'disk-image')
+        with patch.object(m.os,'access',return_value=False):
+            self.assertEqual(m.update_install_plan(Path('/Applications/ResearchProgressRecorder.app'))['reason'],'not-writable')
+
+    def test_developer_id_update_stages_helper_with_diagnostics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(m,'app_bundle_path',return_value=Path('/Applications/ResearchProgressRecorder.app')), patch.object(m.os,'access',return_value=True), patch.object(m,'application_team',return_value='ABCDEFGHIJ'), patch.object(m.subprocess,'Popen') as spawn:
+                plan=m.install_update('/tmp/verified.dmg',tmp)
+                self.assertTrue(plan['automatic']); self.assertEqual(len(spawn.call_args.args[0]),8)
+                self.assertTrue(Path(spawn.call_args.args[0][1]).is_file())
+                self.assertEqual(Path(plan['status']).parent,Path(tmp))
+                self.assertIn('spctl --assess',m.UPDATE_SCRIPT)
+                self.assertNotIn('xattr',m.UPDATE_SCRIPT)
+
+    def test_help_history_preserves_windows_entries_when_appending_with_retry(self):
+        writes=[]
+        def get(path):
+            return [dict(Time=OLD,User='WindowsUser',Action='更新使用说明',Detail='old revision')],str(len(writes))
+        def put(path,rows,sha):
+            writes.append((path,rows,sha))
+            if len(writes)==1: raise urllib.error.HTTPError('',409,'conflict',{},None)
+        m.append_activity_to(SimpleNamespace(get=get,put=put),'help/changelog.json','MacUser','更新使用说明','new revision',200)
+        self.assertEqual(len(writes),2)
+        self.assertEqual([row['user'] for row in writes[-1][1]],['WindowsUser','MacUser'])
+        self.assertEqual(writes[-1][2],'1')
+
+    def test_activity_accepts_windows_and_mac_fields(self):
+        api=SimpleNamespace(get=lambda path:([
+            dict(Time=NEW,User='WindowsUser',Action='登录',Detail='PIN'),
+            dict(time=OLD,user='MacUser',action='Sign in',detail='token'),None], 'sha'))
+        rows=m.read_activity(api,'logs/public/activity.json')
+        self.assertEqual([r['user'] for r in rows],['WindowsUser','MacUser'])
+        self.assertEqual(rows[0]['action'],'登录')
+
+    def test_team_roster_handles_invites_case_and_mixed_activity(self):
+        client=m.Client.__new__(m.Client); client.en=False; results=[]
+        client.api=lambda:(SimpleNamespace(),{})
+        client.channels=lambda api:SimpleNamespace(identity=lambda:'ME',members=lambda:['Mixed'],
+            collaborators=lambda:['me','mixed','NewMember'],pending_invitations=lambda:['Invited'])
+        client.run=lambda work,done:results.append(work())
+        with patch.object(m,'read_activity',return_value=[
+            dict(user='MIXED',time=OLD,action='登录'),
+            dict(user='mixed',time='2026-10-21T00:00:00',action='upload')]):
+            client.team()
+        names,states=results[0]
+        self.assertEqual(len(names),4)
+        self.assertIn('已连接',states['Mixed'])
+        self.assertIn('已连接 GitHub',states['ME'])
+        self.assertEqual(states['Invited'],'待接受邀请')
+        self.assertEqual(states['NewMember'],'已加入 · 未连接')
+
+    def test_download_picker_marks_invited_and_unuploaded_and_skips_them(self):
+        client=m.Client.__new__(m.Client); client.en=False; downloaded=[]; labels=[]
+        api=SimpleNamespace(); client.api=lambda:(api,{})
+        client.channels=lambda _:SimpleNamespace(identity=lambda:'me',members=lambda:['HasFiles'],
+            collaborators=lambda:['me','HasFiles','NewMember'],pending_invitations=lambda:['Invited'],
+            download_member=lambda member,dest:downloaded.append(member) or True)
+        client.team_destination=lambda *a:Path('unused'); client.log_activity=lambda *a:None; client.finish=lambda *a:None
+        def pick(title,hint,items,**options): labels.append(options['labels']); return items
+        client.pick=pick; client.run=lambda work,done:done(work())
+        client.pull_others()
+        self.assertEqual(downloaded,['HasFiles'])
+        self.assertIn('尚未上传',labels[0]['NewMember'])
+        self.assertIn('待接受邀请',labels[0]['Invited'])
+
+    def test_own_member_files_use_local_reference_copy(self):
+        client=m.Client.__new__(m.Client); results=[]; api=SimpleNamespace()
+        client.selected_member=lambda:'ME'; client.api=lambda:(api,{})
+        client.reference_dir=Path('local/Reference')
+        client.channels=lambda _:SimpleNamespace(identity=lambda:'me')
+        client.run=lambda work,done:results.append(work())
+        client.member_research()
+        self.assertEqual(results,[client.reference_dir])
+
+    def test_update_rejects_missing_checksum_before_download(self):
+        with patch.object(m.urllib.request,'urlopen') as request:
+            with self.assertRaisesRegex(ValueError,'SHA256SUMS'):
+                m.download_update({'assets':[]},{'name':'app.dmg','browser_download_url':'https://example.invalid'})
+            request.assert_not_called()
+
+    def test_help_draft_survives_close_with_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            client=m.Client.__new__(m.Client); client.home=Path(tmp); client.busy=False; client.help_dirty=True
+            target=client.home/'help_local.md'; target.write_text('old draft')
+            client.help_text=SimpleNamespace(get=lambda *a:'new draft')
+            cleaned=[]; closed=[]; client.clear_public_temp=lambda:cleaned.append(True)
+            client.root=SimpleNamespace(destroy=lambda:closed.append(True))
+            client.close()
+            self.assertEqual(target.read_text(),'new draft')
+            self.assertEqual(Path(str(target)+'.bak').read_text(),'old draft')
+            self.assertEqual((cleaned,closed),([True],[True]))
+
+    def test_help_reload_does_not_replace_new_edits(self):
+        client=m.Client.__new__(m.Client); client.en=False; client.help_dirty=False
+        client.help_text=SimpleNamespace(get=lambda *a:'old text')
+        client.api=lambda:(SimpleNamespace(request=lambda *a,**k:'cloud text',endpoint=lambda p:p,branch='main'),{})
+        pending=[]; client.run=lambda work,done:pending.append((work,done))
+        client.remember=lambda *a:None; client.set_help_text=lambda *a:self.fail('new edit replaced')
+        client.load_help(quiet=True)
+        client.help_text=SimpleNamespace(get=lambda *a:'new edit while downloading')
+        pending[0][1](pending[0][0]())
+
+    def test_language_switch_preserves_session_and_editors_without_restarting(self):
+        class Widget:
+            def __init__(self,kind='TLabel',text='',children=()): self.kind=kind; self.text=text; self.children=children
+            def winfo_class(self): return self.kind
+            def winfo_children(self): return self.children
+            def configure(self,**kw): self.text=kw.get('text',self.text)
+            def cget(self,key): return self.text
+        client=m.Client.__new__(m.Client); client.en=False; client.busy=False; client.config={}; client.configfile=Path('unused')
+        label=Widget(text=client.tr('成员资料','Members')); editor=Widget('Text','unsaved draft')
+        client.root=Widget('Tk',children=[label,editor]); client.tab_labels=[('成员资料','Members')]; client.tab_base=['成员资料']
+        tab=['成员资料']
+        client.book=SimpleNamespace(tab=lambda i,*a,**k:tab.__setitem__(0,k['text']) if k else tab[0])
+        client.lang_btn=Widget('TButton','EN'); status=['就绪']; client.tr('就绪','Ready')
+        client.status=SimpleNamespace(get=lambda:status[0],set=lambda v:status.__setitem__(0,v))
+        client.update_login_ui=lambda:None; client.personal_label=Widget(); client.personal_display=lambda:'me  /Reference'
+        client.members_tree=SimpleNamespace(get_children=lambda:[])
+        client.session_login='me'; client.session_token='private-in-memory'
+        with patch.object(m,'atomic'), patch.object(m.subprocess,'Popen') as spawn:
+            client.toggle_language(); self.assertEqual(label.text,'Members'); self.assertEqual(tab[0],'Members')
+            self.assertEqual(status[0],'Ready'); self.assertEqual(editor.text,'unsaved draft')
+            self.assertEqual(client.session_login,'me'); self.assertEqual(client.session_token,'private-in-memory')
+            client.toggle_language(); self.assertEqual(label.text,'成员资料'); spawn.assert_not_called()
+
     def test_badges_use_the_module_github_client(self):
         with tempfile.TemporaryDirectory() as tmp:
             client=m.Client.__new__(m.Client); client.session_token='offline'; client.session_login='me'

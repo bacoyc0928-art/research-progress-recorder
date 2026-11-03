@@ -81,7 +81,7 @@ namespace SRLogbook
             card.Controls.Add(h);
 
             Label hint = new Label();
-            hint.Text = "所有本地记录内容都存放在这个文件夹；未选择时无法进入“进度同步”。";
+            hint.Text = "新文档与列表使用 Mat_Local；所选文件夹是上传时的备用来源。 / Documents and list use Mat_Local; the selected folder is an upload fallback.";
             hint.Font = Theme.F(8.8f);
             hint.ForeColor = Theme.TextMuted;
             hint.BackColor = Color.White;
@@ -182,11 +182,34 @@ namespace SRLogbook
             progList.DoubleClick += delegate { OpenProgressListItem(); };
             card.Controls.Add(progList);
 
-            page.Resize += delegate
+            page.AutoScroll = true;
+            Action layout = delegate
             {
-                card.Width = Math.Min(Ui.S(880), page.ClientSize.Width - Ui.S(2));
-                if (progList != null) progList.Width = Math.Max(Ui.S(300), card.Width - Ui.S(48));
+                card.Width = Math.Min(Ui.S(880), Math.Max(Ui.S(320), page.ClientSize.Width - Ui.S(20)));
+                card.Height = Math.Max(Ui.S(460), page.ClientSize.Height - Ui.S(2));
+                int contentWidth = Math.Max(Ui.S(260), card.Width - Ui.S(48));
+                hint.Width = note.Width = contentWidth;
+                hint.AutoEllipsis = true; note.AutoEllipsis = true;
+                bChoose.Left = card.Width - Ui.S(24) - bChoose.Width;
+                txtProgPath.Width = Math.Max(Ui.S(60), bChoose.Left - txtProgPath.Left - Ui.S(12));
+                bDoc.Width = Math.Min(Ui.S(220), (contentWidth - Ui.S(14)) / 2);
+                bOpen.Left = bDoc.Right + Ui.S(14); bOpen.Width = contentWidth - bDoc.Width - Ui.S(14);
+                int index = 0, gap = Ui.S(10), tileWidth = (contentWidth - gap * 2) / 3;
+                foreach (Control child in card.Controls)
+                {
+                    if (!(child is Panel)) continue;
+                    child.SetBounds(Ui.S(24) + index * (tileWidth + gap), Ui.S(196), tileWidth, Ui.S(104)); index++;
+                    foreach (Control label in child.Controls) label.Width = Math.Max(1, tileWidth - Ui.S(28));
+                }
+                bRefresh.Left = card.Width - Ui.S(24) - bRefresh.Width;
+                progList.Width = contentWidth;
+                progList.Height = Math.Max(Ui.S(80), card.Height - progList.Top - Ui.S(20));
+                progList.Columns[0].Width = Math.Max(Ui.S(100), contentWidth / 2);
+                progList.Columns[1].Width = contentWidth / 6;
+                progList.Columns[2].Width = Math.Max(Ui.S(100), contentWidth - progList.Columns[0].Width - progList.Columns[1].Width - Ui.S(8));
             };
+            page.Resize += delegate { layout(); };
+            page.VisibleChanged += delegate { if (page.Visible) layout(); };
             return page;
         }
 

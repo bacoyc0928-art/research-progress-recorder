@@ -71,7 +71,7 @@ def main():
         (client.reference_dir/'Example reference.txt').write_text('Synthetic sample reference.',encoding='utf-8')
         (client.default/'Default library overview.txt').write_text('Synthetic team default library.',encoding='utf-8')
         (client.mat_local/'Research progress.txt').write_text('Synthetic progress example.',encoding='utf-8')
-        for member in ('demo-researcher','sample-colleague'): client.members_tree.insert('','end',values=(member,))
+        for member in ('demo-researcher','sample-colleague'): client.members_tree.insert('','end',values=(member,'已连接 · 示例 / Connected · sample'))
         client.refresh_references(); client.refresh_progress_files()
         client.post_status.configure(text='示例帖子 / Sample post (offline)')
         client.add_post_card({'id':'preview','author':'sample-colleague','time':'2026-11-02 12:00','body':'示例进度：完成数据整理，下一步核对计算结果。 / Example progress: data preparation is complete; review the calculations next.'},client.login)
@@ -82,6 +82,12 @@ def main():
                 client.book.select(index)
                 client.status.set('离线界面预览 / Offline UI preview · sample data')
                 capture(f'{index+1:02d}-{name}-{width}')
+        client.toggle_language(); pump()
+        for width,height in ((1120,760),(940,640)):
+            root.geometry(f'{width}x{height}+30+40')
+            for index,name in enumerate(names):
+                client.book.select(index); client.status.set('Offline UI preview · sample data')
+                capture(f'en-{index+1:02d}-{name}-{width}')
         root.destroy()
     (out/'capture-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps(manifest,ensure_ascii=False))

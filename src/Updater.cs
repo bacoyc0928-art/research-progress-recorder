@@ -81,8 +81,10 @@ namespace SRLogbook
             Asset win = rel.assets.Find(a => a != null && a.name != null && a.name.EndsWith("-Windows.zip", StringComparison.OrdinalIgnoreCase));
             Asset sums = rel.assets.Find(a => a != null && string.Equals(a.name, "SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase));
             if (win == null) throw new InvalidOperationException("Release has no Windows zip.");
-            string stage = Path.Combine(Path.GetTempPath(), "SRPRecorder2027", "update-" + Sanitize(rel.tag_name));
-            try { if (Directory.Exists(stage)) Directory.Delete(stage, true); } catch { }
+            if (sums == null) throw new InvalidDataException("Release has no SHA256SUMS.txt; update cancelled.");
+            if (Path.GetFileName(win.name) != win.name || win.name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                throw new InvalidDataException("Invalid update asset name.");
+            string stage = Path.Combine(Path.GetTempPath(), "SRPRecorder2027", "update-" + Sanitize(rel.tag_name) + "-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(stage);
             string zip = Path.Combine(stage, win.name);
             Download(win.browser_download_url, zip, win.size, progress);
@@ -105,21 +107,25 @@ namespace SRLogbook
         /// <summary>写出替换脚本并启动它；调用方随后应立即关闭程序。</summary>
         public static void ApplyAndRestart(string source, string appDir, string exePath, int? pidOverride = null)
         {
-            string script = Path.Combine(Path.GetTempPath(), "SRPRecorder2027", "apply-update.ps1");
+            string script = Path.Combine(Path.GetTempPath(), "SRPRecorder2027", "apply-update-" + Guid.NewGuid().ToString("N") + ".ps1");
             Directory.CreateDirectory(Path.GetDirectoryName(script));
             string body =
                 "param([int]$AppPid,[string]$Source,[string]$Target,[string]$Exe)\r\n" +
-                "$ErrorActionPreference = 'SilentlyContinue'\r\n" +
-                "try { Wait-Process -Id $AppPid -Timeout 120 } catch { }\r\n" +
+                "$ErrorActionPreference = 'Stop'\r\n" +
+                "try { Wait-Process -Id $AppPid -Timeout 120 -ErrorAction SilentlyContinue } catch { }\r\n" +
+                "if (Get-Process -Id $AppPid -ErrorAction SilentlyContinue) { throw 'Application is still running; update cancelled.' }\r\n" +
                 "Start-Sleep -Milliseconds 800\r\n" +
                 "$exeName = 'SRPRecorder2027.exe'\r\n" +
                 "$oldExe = Join-Path $Target $exeName\r\n" +
                 "if (Test-Path -LiteralPath $oldExe) { Copy-Item -LiteralPath $oldExe -Destination ($oldExe + '.previous') -Force }\r\n" +
+                "$programNames = @('app.ico','app.manifest','app.config','README.md','使用说明.md','使用说明-EN.md','build.ps1','package-local.ps1','说明.md','说明.txt','分发与使用说明.md','SRPRecorder2027.exe.config','卸载SRPRecorder2027.exe','卸载SRPRecorder2027.exe.config','.srprec-install','SHA256SUMS.txt','src','卸载工具')\r\n" +
                 "Get-ChildItem -LiteralPath $Source -Force | ForEach-Object {\r\n" +
-                "  if ($_.Name -eq $exeName) { return }\r\n" +
+                "  if ($programNames -notcontains $_.Name) { return }\r\n" +
                 "  Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $Target $_.Name) -Recurse -Force\r\n" +
                 "}\r\n" +
-                "Copy-Item -LiteralPath (Join-Path $Source $exeName) -Destination $oldExe -Force\r\n" +
+                "$newExe = $oldExe + '.new'\r\n" +
+                "Copy-Item -LiteralPath (Join-Path $Source $exeName) -Destination $newExe -Force\r\n" +
+                "if (Test-Path -LiteralPath $oldExe) { [IO.File]::Replace($newExe, $oldExe, ($oldExe + '.previous'), $true) } else { Move-Item -LiteralPath $newExe -Destination $oldExe }\r\n" +
                 "Start-Process -FilePath $Exe\r\n";
             File.WriteAllText(script, body, new UTF8Encoding(true));
             int pid = pidOverride ?? Process.GetCurrentProcess().Id;

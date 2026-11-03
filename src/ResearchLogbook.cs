@@ -442,7 +442,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.10";
+            this.Text = "SRPRecorder2027 · 0.2.11";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
@@ -473,7 +473,7 @@ namespace SRLogbook
             {
                 lstEntries.SelectedIndex = 0;
             }
-            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (syncBusy || teamLoading) { e.Cancel = true; return; } saveTimer.Stop(); SaveCurrent(); AppPaths.ClearPublicTemp(appDir); };
+            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (syncBusy || teamLoading) { e.Cancel = true; return; } saveTimer.Stop(); SaveCurrent(); if (helpDirty && helpEditor != null) SaveHelpDraft(); AppPaths.ClearPublicTemp(appDir); };
             Lang.Apply(this);
         }
 
@@ -963,6 +963,8 @@ namespace SRLogbook
             Lang.Save(appDir);
             if (langButton != null) langButton.Text = Lang.En ? "中文" : "EN";
             Lang.ApplyAll();
+            UpdateLoginUi();
+            RefreshSyncPage();
             if (navs != null && navTexts != null)
                 for (int i = 0; i < navs.Length && i < navTexts.Length; i++)
                 {
@@ -977,6 +979,7 @@ namespace SRLogbook
                 progList.Columns[1].Text = Lang.T("大小 / Size");
                 progList.Columns[2].Text = Lang.T("修改 / Modified");
             }
+            LayoutActivePage();
         }
 
         private Button SmallLoginButton(string text, int x, int y, int w)
@@ -1604,7 +1607,7 @@ namespace SRLogbook
             helpEditor.BackColor = Color.White;
             helpEditor.Font = Theme.F(10f);
             helpEditor.Multiline = true;
-            helpEditor.ReadOnly = false;
+            helpEditor.ReadOnly = string.IsNullOrEmpty(sessionToken);
             helpEditor.ScrollBars = ScrollBars.Vertical;
             helpEditor.WordWrap = true;
             helpEditor.ForeColor = Theme.TextMain;
@@ -1662,9 +1665,20 @@ namespace SRLogbook
             catch (Exception ex) { Msg.Show("上传失败：" + ex.Message, "使用说明"); }
         }
 
+        private void SaveHelpDraft()
+        {
+            string path = Path.Combine(appDir, "help_local.md");
+            string temporary = path + ".tmp";
+            File.WriteAllText(temporary, helpEditor.Text, new UTF8Encoding(false));
+            if (File.Exists(path)) File.Replace(temporary, path, path + ".bak", true);
+            else File.Move(temporary, path);
+        }
+
         private async void LoadHelpFromGitHub(bool manual)
         {
             if (helpEditor == null) return;
+            if (helpDirty && (!manual || Msg.Show("读取云端将替换当前草稿，继续？ / Replace the current draft with cloud help?", "使用说明", MessageBoxButtons.YesNo) != DialogResult.Yes)) return;
+            string before = helpEditor.Text;
             if (string.IsNullOrEmpty(sessionToken))
             {
                 if (manual) Msg.Show("请先在左下角登录 GitHub 账号。", "使用说明");
@@ -1681,8 +1695,10 @@ namespace SRLogbook
                     if (manual) Msg.Show("云端还没有上传过使用说明。", "使用说明");
                     return;
                 }
+                if (IsDisposed || helpEditor.Text != before) return;
                 helpEditor.Text = text;
                 helpDirty = false;
+                SaveHelpDraft();
                 if (manual) Msg.Show("已读取云端使用说明。", "使用说明");
             }
             catch (Exception ex) { if (manual) Msg.Show("读取失败：" + ex.Message, "使用说明"); }
@@ -1735,8 +1751,9 @@ namespace SRLogbook
         private void RestoreDefaultHelp()
         {
             if (Msg.Show("将编辑框恢复为软件自带的使用说明（上传前不影响云端）。继续？", "使用说明", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (!RequireLogin("使用说明")) return;
             helpEditor.Text = Lang.HelpText();
-            helpDirty = false;
+            helpDirty = true;
         }
 
         private async void ShowHelpChangelog()

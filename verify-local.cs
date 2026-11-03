@@ -12,6 +12,48 @@ public class Verify002
     static int count;
     static void Check(bool ok, string message) { if (!ok) throw new Exception(message); Console.WriteLine("PASS " + message); count++; }
     static Entry E(string id, string date, string title) { return new Entry { Id=id, Updated=date, Title=title, Date="2026-10-20", Category="", Status="进行中", Progress=0, Content="" }; }
+    static void PickerCheck(MainForm owner, string root, bool browse)
+    {
+        Exception failure = null; bool inspected = false;
+        var timer = new System.Windows.Forms.Timer { Interval = 150 };
+        timer.Tick += delegate
+        {
+            Form dialog = null;
+            foreach (Form candidate in Application.OpenForms) if (candidate != owner) dialog = candidate;
+            if (dialog == null) return;
+            timer.Stop();
+            try
+            {
+                var area = Screen.FromControl(dialog).WorkingArea;
+                Check(area.Contains(dialog.Bounds), "selection dialog fits current monitor including title bar");
+                CheckedListBox list = null; Label hint = null; Panel bar = null;
+                foreach (Control child in dialog.Controls)
+                {
+                    if (child is CheckedListBox) list = (CheckedListBox)child;
+                    if (child is Label) hint = (Label)child;
+                    if (child is Panel) bar = (Panel)child;
+                }
+                Check(list != null && hint != null && bar != null && list.Top >= hint.Bottom && list.Bottom <= bar.Top && list.Height > 40,
+                    "selection hint and toolbar cannot cover the first or last list item");
+                foreach (Control flow in bar.Controls) foreach (Control button in flow.Controls)
+                    Check(flow.ClientRectangle.Contains(button.Bounds), "selection action stays inside toolbar: " + button.Text);
+                using (var bitmap = new System.Drawing.Bitmap(dialog.Width,dialog.Height))
+                { dialog.DrawToBitmap(bitmap,new System.Drawing.Rectangle(System.Drawing.Point.Empty,dialog.Size)); bitmap.Save(Path.Combine(root,"picker-"+(Lang.En?"en":"zh")+(browse?"-upload":"-download")+".png")); }
+                inspected = true;
+            }
+            catch (Exception ex) { failure = ex; }
+            finally { dialog.DialogResult = DialogResult.Cancel; dialog.Close(); }
+        };
+        timer.Start();
+        var rows = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,string>>();
+        rows.Add(new System.Collections.Generic.KeyValuePair<string,string>("one","First member — sample file.txt"));
+        rows.Add(new System.Collections.Generic.KeyValuePair<string,string>("two","Second member — no upload yet"));
+        typeof(MainForm).GetMethod("PickItems",BindingFlags.NonPublic|BindingFlags.Instance).Invoke(owner,new object[] {
+            "下载他人内容 / Download team files",
+            "勾选需要下载的内容。未勾选的文件不会被修改，原有文件保留备份。 / Check files to download. Unchecked files stay untouched; existing files keep backups.",rows,browse});
+        timer.Dispose(); if (failure != null) throw failure;
+        Check(inspected,"selection modal was inspected and closed");
+    }
     [STAThread] public static void Main()
     {
         Ui.EnableHighDpi();
@@ -94,9 +136,39 @@ public class Verify002
                 syncContentFits = syncContentFits && syncCard.ClientRectangle.Contains(control.Bounds);
             }
             Check(syncContentFits, "Team Sync text and log fit inside the minimum-size card");
+            Check(((Label)typeof(MainForm).GetField("boundLabel",fields).GetValue(f)).Text.Contains("bacoyc0928-art/research-data"), "Chinese bound-repository label retains repository name and branch");
+            var account = (Control)typeof(MainForm).GetField("lblSyncAccount", fields).GetValue(f);
+            bool actionsFit = true;
+            foreach (Control child in syncCard.Controls) if (child is Button)
+                actionsFit = actionsFit && syncCard.ClientRectangle.Contains(child.Bounds) && !account.Bounds.IntersectsWith(child.Bounds);
+            Check(actionsFit && syncCard.ClientRectangle.Contains(account.Bounds), "sync account and all six actions fit without overlap at minimum size");
+            f.CaptureTo(Path.Combine(root,"sync-minimum.png"));
+            f.SetPagePublic(3); Application.DoEvents();
+            var progressList = (ListView)typeof(MainForm).GetField("progList",fields).GetValue(f);
+            Control localCard = progressList.Parent;
+            bool localFits = true;
+            foreach (Control child in localCard.Controls) localFits = localFits && localCard.ClientRectangle.Contains(child.Bounds);
+            Check(localFits, "all three local workspace cards and choose/refresh buttons fit at minimum width");
+            f.CaptureTo(Path.Combine(root,"local-minimum.png"));
+            var help = (TextBox)typeof(MainForm).GetField("helpEditor",fields).GetValue(f);
+            Check(help.ReadOnly, "help is read-only before login on a fresh launch");
+            help.Text = "LOCAL DRAFT - must survive language switch";
+            Lang.En = true; Lang.Apply(f); Lang.En = false; Lang.Apply(f);
+            Check(help.Text == "LOCAL DRAFT - must survive language switch", "language switching preserves help drafts");
+            Lang.En = true; Lang.Apply(f);
+            Check(progressList.Columns[0].Text == "Name", "list headings follow English even before toggling handler runs");
+            PickerCheck(f,root,false); PickerCheck(f,root,true);
+            Lang.En = false; Lang.Apply(f); PickerCheck(f,root,true);
+            typeof(MainForm).GetMethod("AddTeamCard",fields).Invoke(f,new object[]{"a-long-member-name", "Connected · last active 11-03 10:00",false,true});
+            var teamFlow = (FlowLayoutPanel)typeof(MainForm).GetField("teamFlow",fields).GetValue(f);
+            Control memberCard=teamFlow.Controls[teamFlow.Controls.Count-1];
+            Label memberNote=null; Button view=null;
+            foreach(Control child in memberCard.Controls) { if(child is Label && child.Top>Ui.S(25)) memberNote=(Label)child; if(child is Button) view=(Button)child; }
+            Check(memberNote != null && view != null && memberNote.Right<=view.Left, "other-member state cannot overlap its open button");
+            f.Close();
+            Check(File.ReadAllText(Path.Combine(root,"help_local.md"))=="LOCAL DRAFT - must survive language switch", "help draft survives normal application exit");
             var sf=typeof(MainForm).GetField("store",BindingFlags.NonPublic|BindingFlags.Instance); var data=(Store)sf.GetValue(f);
             Check(data.Entries.Count==0 && data.Categories.Count==0,"fresh install has no personal seed data");
-            f.Close();
         }
         Check(true,"all six Windows pages and language switch render");
         Console.WriteLine("TOTAL " + count + " checks passed");

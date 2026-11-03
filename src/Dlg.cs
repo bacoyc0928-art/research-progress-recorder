@@ -14,12 +14,30 @@ namespace SRLogbook
     {
         public static void Fit(Form form, int width, int height)
         {
-            Rectangle area = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
-            int w = Math.Min(Ui.S(width), Math.Max(Ui.S(420), area.Width - Ui.S(80)));
-            int h = Math.Min(Ui.S(height), Math.Max(Ui.S(320), area.Height - Ui.S(80)));
+            Rectangle area = Screen.FromPoint(Cursor.Position).WorkingArea;
+            int w = Math.Min(Ui.S(width), Math.Max(Ui.S(420), area.Width - Ui.S(48)));
+            int h = Math.Min(Ui.S(height), Math.Max(Ui.S(320), area.Height - Ui.S(64)));
             form.StartPosition = FormStartPosition.CenterParent;
-            form.MinimumSize = new Size(Ui.S(360), Ui.S(260));
+            form.MinimumSize = new Size(Math.Min(Ui.S(360), w), Math.Min(Ui.S(220), h));
             form.ClientSize = new Size(w, h);
+            // 高 DPI / 多显示器下 CenterParent 可能把对话框推到屏幕外，显示前后各收一次。
+            form.Load += delegate { Clamp(form); };
+            form.Shown += delegate { Clamp(form); };
+        }
+
+        /// <summary>把窗口收进它所在显示器的可用区域，避免标题栏或内容被裁掉。</summary>
+        public static void Clamp(Form form)
+        {
+            Rectangle screen = Screen.FromControl(form).WorkingArea;
+            int availableWidth = Math.Max(1, screen.Width - Ui.S(8));
+            int availableHeight = Math.Max(1, screen.Height - Ui.S(8));
+            form.MinimumSize = new Size(Math.Min(form.MinimumSize.Width, availableWidth), Math.Min(form.MinimumSize.Height, availableHeight));
+            if (form.Width > availableWidth) form.Width = availableWidth;
+            if (form.Height > availableHeight) form.Height = availableHeight;
+            if (form.Top < screen.Top) form.Top = screen.Top;
+            if (form.Bottom > screen.Bottom) form.Top = Math.Max(screen.Top, screen.Bottom - form.Height);
+            if (form.Left < screen.Left) form.Left = screen.Left;
+            if (form.Right > screen.Right) form.Left = Math.Max(screen.Left, screen.Right - form.Width);
         }
 
         /// <summary>在对话框底部放一条右对齐的按钮栏，返回承载面板。</summary>
@@ -30,9 +48,9 @@ namespace SRLogbook
             bar.Height = Ui.S(56);
             bar.BackColor = Color.White;
             FlowLayoutPanel flow = new FlowLayoutPanel();
-            flow.Dock = DockStyle.Right;
+            flow.Dock = DockStyle.Fill;
             flow.FlowDirection = FlowDirection.RightToLeft;
-            flow.WrapContents = false;
+            flow.WrapContents = true;
             flow.AutoSize = true;
             flow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             flow.BackColor = Color.White;
@@ -47,6 +65,13 @@ namespace SRLogbook
                 flow.Controls.Add(b);
             }
             bar.Controls.Add(flow);
+            Action fitButtons = delegate
+            {
+                int desired = Math.Max(Ui.S(56), flow.GetPreferredSize(new Size(Math.Max(1, bar.ClientSize.Width), 0)).Height + Ui.S(8));
+                if (bar.Height != desired) bar.Height = desired;
+            };
+            bar.SizeChanged += delegate { fitButtons(); };
+            form.Shown += delegate { fitButtons(); };
             form.Controls.Add(bar);
             return bar;
         }

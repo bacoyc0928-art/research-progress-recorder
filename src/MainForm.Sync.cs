@@ -151,7 +151,27 @@ namespace SRLogbook
             syncHint.Width = contentWidth;
             lblSStatus.Width = contentWidth;
             txtSLog.Width = contentWidth;
-            txtSLog.Height = Math.Max(Ui.S(80), card.ClientSize.Height - txtSLog.Top - Ui.S(12));
+            if (lblSyncAccount != null)
+            {
+                lblSyncAccount.TextAlign = ContentAlignment.MiddleLeft;
+                lblSyncAccount.AutoEllipsis = true;
+                lblSyncAccount.SetBounds(Ui.S(24), Ui.S(80), contentWidth, Ui.S(22));
+            }
+            syncHint.Top = Ui.S(104);
+            Button[] actions = new Button[] { btnOthers, btnDefault, btnUpRefs, btnUpProgress, btnRemoveRefs, btnActivity };
+            int x = Ui.S(24), y = Ui.S(136), gap = Ui.S(10);
+            foreach (Button action in actions)
+            {
+                int width = Math.Min(contentWidth, Math.Max(Ui.S(160), TextRenderer.MeasureText(action.Text, action.Font).Width + Ui.S(28)));
+                if (x > Ui.S(24) && x + width > Ui.S(24) + contentWidth) { x = Ui.S(24); y += Ui.S(42); }
+                action.SetBounds(x, y, width, Ui.S(32)); x += width + gap;
+            }
+            lblSStatus.Top = y + Ui.S(42);
+            txtSLog.Top = lblSStatus.Bottom + Ui.S(36);
+            // The log caption is the only bold label immediately above the log.
+            foreach (Control child in card.Controls)
+                if (child is Label && child.Font.Bold && child != lblSyncAccount && child.Top > Ui.S(180)) child.Top = txtSLog.Top - Ui.S(28);
+            txtSLog.Height = Math.Max(Ui.S(50), card.ClientSize.Height - txtSLog.Top - Ui.S(12));
         }
 
         private void AddSLabel(Control parent, string text, int x, int y)
@@ -228,7 +248,7 @@ namespace SRLogbook
             if (txtSLog == null) return;
             SyncConfig c = GitHubSync.LoadConfig(appDir);
             if (boundLabel != null)
-                boundLabel.Text = "已绑定仓库 / Repository: "
+                boundLabel.Text = (Lang.En ? "Repository: " : "已绑定仓库：")
                     + (string.IsNullOrEmpty(c.owner) ? "bacoyc0928-art" : c.owner) + "/"
                     + (string.IsNullOrEmpty(c.repo) ? "research-data" : c.repo) + " · "
                     + (string.IsNullOrEmpty(c.branch) ? "main" : c.branch);
@@ -591,15 +611,24 @@ namespace SRLogbook
             List<string> picked = new List<string>();
             using (Form dialog = new Form())
             {
-                dialog.Text = Lang.T(title);
-                Dlg.Fit(dialog, 780, 580);
+                dialog.Text = title;
+                Dlg.Fit(dialog, 760, 540);
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.ShowInTaskbar = false;
                 dialog.BackColor = Color.White;
+                int barHeight = Ui.S(56);
+                int tipHeight = Ui.S(56);
                 Label tip = new Label();
-                tip.Text = Lang.T(hint);
-                tip.Dock = DockStyle.Top; tip.Height = 56; tip.Padding = new Padding(14, 10, 14, 0);
+                tip.Text = hint;
+                tip.SetBounds(0, 0, dialog.ClientSize.Width, tipHeight);
+                tip.Padding = new Padding(Ui.S(14), Ui.S(10), Ui.S(14), 0);
                 tip.Font = Theme.F(8.8f); tip.ForeColor = Theme.TextMuted; tip.BackColor = Color.White;
                 CheckedListBox list = new CheckedListBox();
-                list.Dock = DockStyle.Fill; list.CheckOnClick = true; list.IntegralHeight = false;
+                list.SetBounds(0, tipHeight, dialog.ClientSize.Width, dialog.ClientSize.Height - tipHeight - barHeight);
+                list.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+                list.CheckOnClick = true; list.IntegralHeight = false;
                 list.Font = Theme.F(9f);
                 foreach (KeyValuePair<string, string> it in items) list.Items.Add(it.Value, true);
                 Button all = Dlg.Button("全选 / Select All");
@@ -634,9 +663,21 @@ namespace SRLogbook
                     };
                     buttons.Add(browse);
                 }
-                Dlg.BottomBar(dialog, buttons.ToArray());
+                Panel bar = Dlg.BottomBar(dialog, buttons.ToArray());
                 dialog.Controls.Add(tip);
                 dialog.Controls.Add(list);
+                Action layout = delegate
+                {
+                    int width = dialog.ClientSize.Width;
+                    int measured = TextRenderer.MeasureText(tip.Text, tip.Font, new Size(Math.Max(1, width - Ui.S(28)), int.MaxValue), TextFormatFlags.WordBreak).Height;
+                    int height = Math.Max(Ui.S(48), measured + Ui.S(20));
+                    tip.SetBounds(0, 0, width, height);
+                    list.SetBounds(0, height, width, Math.Max(1, dialog.ClientSize.Height - height - bar.Height));
+                };
+                dialog.Resize += delegate { layout(); };
+                bar.SizeChanged += delegate { layout(); };
+                dialog.Shown += delegate { layout(); };
+                Lang.Apply(dialog); layout();
                 dialog.AcceptButton = ok; dialog.CancelButton = cancel;
                 if (dialog.ShowDialog(this) != DialogResult.OK) return picked;
                 for (int i = 0; i < list.Items.Count && i < items.Count; i++)
@@ -705,6 +746,7 @@ namespace SRLogbook
                 int n = 0;
                 foreach (string member in picked)
                 {
+                    if (!uploaded.Exists(x => string.Equals(x, member, StringComparison.OrdinalIgnoreCase))) continue;
                     string dest = Path.Combine(AppPaths.PublicTemp(appDir), AppPaths.Sanitize(member));
                     if (await Task.Run(() => GitHubSync.DownloadMemberFiles(owner, repo, member, branch, token, dest))) n++;
                 }

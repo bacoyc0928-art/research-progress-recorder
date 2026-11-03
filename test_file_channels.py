@@ -39,6 +39,26 @@ class Fake:
         raise urllib.error.HTTPError('',404,'missing',{},None)
 
 class FileChannelTests(unittest.TestCase):
+    def test_roster_paginates_and_deduplicates_logins(self):
+        self.files._login='me'
+        first=[{'login':'Person'+str(i)} for i in range(100)]
+        pages=[first,[{'login':'PERSON0'},{'login':'Person100'}]]
+        seen=[]
+        def request(method,path,*args,**kwargs):
+            seen.append(path); return pages[len(seen)-1]
+        self.api.request=request
+        result=self.files.collaborators()
+        self.assertEqual(len(result),101); self.assertIn('page=2',seen[1])
+
+    def test_pending_invitations_and_regular_member_permissions(self):
+        self.files._login='me'
+        self.api.request=lambda *a,**k:[{'invitee':{'login':'NewPerson'}}]
+        self.assertEqual(self.files.pending_invitations(),['NewPerson'])
+        def forbidden(*a,**k): raise urllib.error.HTTPError('',403,'forbidden',{},None)
+        self.api.request=forbidden
+        self.assertEqual(self.files.pending_invitations(),[])
+        self.assertEqual(self.files.collaborators(),[])
+
     def setUp(self): self.tmp=tempfile.TemporaryDirectory(); self.root=f.no_links(Path(self.tmp.name)); self.api=Fake(); self.files=f.FileChannels(self.api)
     def tearDown(self): self.tmp.cleanup()
     def test_names(self):

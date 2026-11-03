@@ -135,45 +135,34 @@ namespace SRLogbook
             return names;
         }
 
-        public static List<string> ListCollaborators(string owner, string repo, string branch, string token)
+        private static List<string> RosterLogins(string owner, string repo, string token, bool invitations)
         {
             List<string> logins = new List<string>();
-            string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
-                + "/collaborators?per_page=100";
-            JavaScriptSerializer ser = SyncData.Serializer();
-            object[] arr = ser.Deserialize<object[]>(Request("GET", url, token, null));
-            if (arr != null)
-            {
-                foreach (object o in arr)
-                {
-                    Dictionary<string, object> d = o as Dictionary<string, object>;
-                    if (d != null && d.ContainsKey("login")) logins.Add(Convert.ToString(d["login"]));
-                }
-            }
-            return logins;
-        }
-
-        /// <summary>列出尚未接受的仓库邀请（需要所有者/管理员令牌）。</summary>
-        public static List<string> ListPendingInvitations(string owner, string repo, string branch, string token)
-        {
-            List<string> logins = new List<string>();
-            try
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int page = 1; ; page++)
             {
                 string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
-                    + "/invitations?per_page=100";
-                object[] arr = SyncData.Serializer().Deserialize<object[]>(Request("GET", url, token, null));
-                if (arr == null) return logins;
-                foreach (object o in arr)
+                    + (invitations ? "/invitations" : "/collaborators") + "?per_page=100&page=" + page;
+                object[] rows;
+                try { rows = SyncData.Serializer().Deserialize<object[]>(Request("GET", url, token, null)); }
+                catch (GitHubApiException ex) { if (invitations && (ex.StatusCode == 403 || ex.StatusCode == 404)) return logins; throw; }
+                if (rows == null) return logins;
+                foreach (object row in rows)
                 {
-                    Dictionary<string, object> d = o as Dictionary<string, object>;
-                    if (d == null) continue;
-                    Dictionary<string, object> invitee = d.ContainsKey("invitee") ? d["invitee"] as Dictionary<string, object> : null;
-                    if (invitee != null && invitee.ContainsKey("login")) logins.Add(Convert.ToString(invitee["login"]));
+                    Dictionary<string, object> person = row as Dictionary<string, object>;
+                    if (invitations && person != null) person = person.ContainsKey("invitee") ? person["invitee"] as Dictionary<string, object> : null;
+                    string login = person != null && person.ContainsKey("login") ? Convert.ToString(person["login"]) : null;
+                    if (!string.IsNullOrEmpty(login) && seen.Add(login)) logins.Add(login);
                 }
+                if (rows.Length < 100) return logins;
             }
-            catch { }
-            return logins;
         }
+
+        public static List<string> ListCollaborators(string owner, string repo, string branch, string token)
+        { return RosterLogins(owner, repo, token, false); }
+
+        public static List<string> ListPendingInvitations(string owner, string repo, string branch, string token)
+        { return RosterLogins(owner, repo, token, true); }
 
         public static bool EnsureProfile(string owner, string repo, string branch, string token, string login)
         {

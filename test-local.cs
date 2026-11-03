@@ -93,6 +93,24 @@ public static class LocalTransferChecks
         string invalid=Path.Combine(t,"not-an-install"); Directory.CreateDirectory(invalid); File.WriteAllText(Path.Combine(invalid,"SRPRecorder2027.exe"),"keep");
         Check(Fails(delegate {UninstallCore.Remove(invalid,true);}) && File.Exists(Path.Combine(invalid,"SRPRecorder2027.exe")),"uninstaller refuses unmarked directories");
         Check(Fails(delegate {UninstallCore.Child(t,"../escape");}),"uninstaller rejects paths outside installation");
+        int rosterPage=0;
+        GitHubSync.RequestForTests=(method,url,token,body,accept)=> {
+            rosterPage++;
+            if (rosterPage==2) return "[{\"login\":\"PERSON0\"},{\"login\":\"Person100\"}]";
+            var rows=new List<object>(); for(int i=0;i<100;i++) rows.Add(new {login="Person"+i});
+            return SyncData.Serializer().Serialize(rows);
+        };
+        Check(GitHubSync.ListCollaborators("owner","repo","main","fake").Count==101 && rosterPage==2,"roster paginates and deduplicates accounts case-insensitively");
+        GitHubSync.RequestForTests=(method,url,token,body,accept)=> { throw new GitHubApiException(403,"owner only"); };
+        Check(GitHubSync.ListPendingInvitations("owner","repo","main","fake").Count==0,"regular members do not require permission to list pending invitations");
+        GitHubSync.RequestForTests=(method,url,token,body,accept)=>Info(System.Text.Encoding.UTF8.GetBytes("[{\"time\":\"2026-11-03T10:00:00Z\",\"user\":\"MacUser\",\"action\":\"登录 / Sign in\",\"detail\":\"test\"}]"));
+        var macRows=ActivityLog.Read("owner","repo","main","fake",ActivityLog.PublicPath);
+        Check(macRows.Count==1 && macRows[0].User=="MacUser" && macRows[0].Action.Contains("Sign in"),"Windows reads lowercase activity fields from macOS");
+        bool missingSums=false;
+        try { Updater.DownloadAndStage(new Updater.Release {tag_name="v0.2.10",assets=new List<Updater.Asset>{new Updater.Asset{name="app-Windows.zip",browser_download_url="https://example.invalid"}}},null); }
+        catch(InvalidDataException) { missingSums=true; }
+        Check(missingSums,"updater requires checksums before any download");
+        GitHubSync.RequestForTests=(method,url,token,body,accept)=> {throw new Exception("Unexpected network call in offline test: "+method);};
         Console.WriteLine("LOCAL TRANSFER/UNINSTALL CHECKS: "+count);
     }
 }

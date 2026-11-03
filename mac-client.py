@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.2.10. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.11. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -27,14 +27,14 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.10'
+VERSION = '0.2.11'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
-HELP_TEXT = """SRPRecorder2027 · 0.2.10 · 中英双语界面 / Bilingual UI
+HELP_TEXT = """SRPRecorder2027 · 0.2.11 · 中英双语界面 / Bilingual UI
 数据架构与使用说明 / Data architecture and usage guide
 
 【0】总览 / Overview
@@ -51,7 +51,7 @@ First run: sign in at the bottom-left (optionally tick Remember and set a 6-digi
 
 【1】Windows 本机目录 / Windows local layout
 SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）
-├─ SRPRecorder2027.exe             程序 0.2.10
+├─ SRPRecorder2027.exe             程序 0.2.11
 ├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留
 ├─ research_log.json               旧版研究记录
 ├─ workspace.json                  工作区路径
@@ -113,7 +113,7 @@ Quick Post：发布 posts\\<id>.txt；已阅 posts\\read\\<我>.json；只能删
 【5】清理、保留与升级 / Cleanup, retention and upgrade
 - Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。
 - References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。
-- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.10 不会重复清理。
+- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.11 不会重复清理。
 - 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。
 - 远端上传只新增或覆盖，不自动删除旧文件。
 Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.
@@ -295,11 +295,33 @@ def version_tuple(value):
     parts=[int(x) for x in re.findall(r'\d+', value or '')]
     return tuple((parts+[0,0,0])[:3])
 
+def network_context():
+    """Use verified HTTPS for both data sync and public updater requests."""
+    context=ssl.create_default_context()
+    if sys.platform=='darwin' and Path('/etc/ssl/cert.pem').is_file():
+        context.load_verify_locations(cafile='/etc/ssl/cert.pem')
+    return context
+
+class UpdateError(ValueError):
+    pass
+
+def update_error_message(error,en=False):
+    reason=getattr(error,'reason',error)
+    if isinstance(reason,ssl.SSLCertVerificationError) or 'CERTIFICATE_VERIFY_FAILED' in str(reason):
+        return ('HTTPS certificate verification failed while contacting GitHub. This is a network certificate issue, not an app-signing error. Check the date/time and HTTPS proxy, or download the update from the official release page in your browser. No update was installed.\n\n'
+                if en else '连接 GitHub 时 HTTPS 证书校验失败。这是网络证书问题，不是应用未签名提示。请核对系统时间和 HTTPS 代理，或用浏览器从官方发布页下载更新。尚未安装更新。\n\n')+str(error)
+    if isinstance(error,urllib.error.HTTPError):
+        if error.code in (403,429):
+            return ('GitHub refused the update check or rate-limited this connection. Retry later or use the official release page.\n\n' if en else 'GitHub 拒绝更新请求，或此网络触发了请求次数限制。请稍后重试，或从官方发布页下载。\n\n')+str(error)
+    if isinstance(error,PermissionError):
+        return ('The update location is not writable. Quit the app and install the official DMG manually.\n\n' if en else '更新位置没有写入权限。请退出程序后，用官方 DMG 手动安装。\n\n')+str(error)
+    return ('Update failed; no successful installation has been confirmed.\n\n' if en else '更新失败，尚未确认安装成功。\n\n')+str(error)
+
 def release_info():
     """公开 Release，无需令牌。"""
     req=urllib.request.Request('https://api.github.com/repos/'+DEFAULT_REPO.replace('/research-data','/research-progress-recorder')+'/releases/latest',
         headers={'User-Agent':APP_ID,'Accept':'application/vnd.github+json'})
-    with urllib.request.urlopen(req,timeout=30) as resp: return json.loads(resp.read().decode('utf-8'))
+    with urllib.request.urlopen(req,timeout=30,context=network_context()) as resp: return json.loads(resp.read().decode('utf-8'))
 
 def update_asset(rel):
     arch='arm64' if platform.machine()=='arm64' else 'x64'
@@ -309,15 +331,20 @@ def update_asset(rel):
 
 def download_update(rel, asset):
     """下载 DMG，并用同一 Release 的 SHA256SUMS.txt 校验；返回本地路径。"""
+    if not any(x.get('name')=='SHA256SUMS.txt' for x in rel.get('assets') or []):
+        raise ValueError('Release has no SHA256SUMS.txt; update cancelled.')
+    name=str(asset.get('name') or '')
+    if not name or Path(name).name!=name or '/' in name or '\\' in name:
+        raise ValueError('Invalid update asset name')
     folder=Path(tempfile.mkdtemp(prefix='SRPRecorder2027-update-'))
-    target=folder/asset['name']
-    with urllib.request.urlopen(urllib.request.Request(asset['browser_download_url'],headers={'User-Agent':APP_ID}),timeout=120) as resp, open(target,'wb') as out:
+    target=folder/name
+    with urllib.request.urlopen(urllib.request.Request(asset['browser_download_url'],headers={'User-Agent':APP_ID}),timeout=120,context=network_context()) as resp, open(target,'wb') as out:
         shutil.copyfileobj(resp,out)
     sums=None
     for extra in rel.get('assets') or []:
         if str(extra.get('name',''))=='SHA256SUMS.txt': sums=extra
     if sums:
-        with urllib.request.urlopen(urllib.request.Request(sums['browser_download_url'],headers={'User-Agent':APP_ID}),timeout=60) as resp:
+        with urllib.request.urlopen(urllib.request.Request(sums['browser_download_url'],headers={'User-Agent':APP_ID}),timeout=60,context=network_context()) as resp:
             lines=resp.read().decode('utf-8').splitlines()
         expected=None
         for line in lines:
@@ -335,26 +362,81 @@ def app_bundle_path():
         return exe.parents[2]
     return None
 
-def install_update(dmg):
-    """退出后由脚本替换 .app；用户数据在 Application Support，不会被触碰。"""
-    app=app_bundle_path()
-    if not app:
-        subprocess.Popen(['open',dmg]); return False
-    script=Path(tempfile.mkdtemp(prefix='SRPRecorder2027-apply-'))/'apply-update.sh'
-    script.write_text('#!/bin/sh\nPID="$1"; DMG="$2"; APP="$3"\n'
-        'while kill -0 "$PID" 2>/dev/null; do sleep 0.5; done\n'
-        'MNT=$(hdiutil attach -nobrowse -readonly "$DMG" | grep -o "/Volumes/.*" | tail -1)\n'
-        'if [ -d "$MNT/ResearchProgressRecorder.app" ] && [ -d "$APP" ]; then\n'
-        '  OLD="$APP.old.$$"\n'
-        '  mv "$APP" "$OLD" 2>/dev/null\n'
-        '  if ditto "$MNT/ResearchProgressRecorder.app" "$APP"; then rm -rf "$OLD"; else mv "$OLD" "$APP"; fi\n'
-        '  xattr -dr com.apple.quarantine "$APP" 2>/dev/null\n'
-        'fi\n'
-        'hdiutil detach "$MNT" >/dev/null 2>&1\n'
-        'open "$APP" 2>/dev/null || open "$DMG"\n',encoding='utf-8')
-    script.chmod(0o755)
-    subprocess.Popen(['/bin/sh',str(script),str(os.getpid()),dmg,str(app)],start_new_session=True)
-    return True
+def application_team(app):
+    """Ad-hoc integrity signatures are not Developer ID distribution identities."""
+    try:
+        result=subprocess.run(['/usr/bin/codesign','-dv','--verbose=4',str(app)],capture_output=True,text=True,timeout=15)
+    except (OSError,subprocess.SubprocessError): return None
+    details=(result.stdout or '')+'\n'+(result.stderr or '')
+    team=re.search(r'^TeamIdentifier=([A-Z0-9]{10})$',details,re.MULTILINE)
+    if result.returncode or 'Authority=Developer ID Application:' not in details or not team: return None
+    return team[1]
+
+def update_install_plan(app):
+    if app is None: return dict(automatic=False,reason='not-installed')
+    app=Path(app)
+    if 'AppTranslocation' in app.parts or app.as_posix().startswith('/Volumes/'):
+        return dict(automatic=False,reason='disk-image')
+    if not os.access(app.parent,os.W_OK): return dict(automatic=False,reason='not-writable')
+    team=application_team(app)
+    if not team: return dict(automatic=False,reason='unnotarized-build')
+    return dict(automatic=True,reason='developer-id',team=team)
+
+UPDATE_SCRIPT = r'''#!/bin/sh
+set -eu
+PID="$1"; DMG="$2"; APP="$3"; TEAM="$4"; STATUS="$5"; LOG="$6"
+exec >>"$LOG" 2>&1
+PHASE=waiting; MNT=""; MOVED=0; OLD="$APP.previous.$$"; NEW="$APP.new.$$"
+report() { printf '%s\n' "$1" >"$STATUS.tmp"; mv "$STATUS.tmp" "$STATUS"; }
+finish() {
+  CODE=$?; trap - EXIT
+  if [ "$CODE" -ne 0 ]; then
+    if [ "$MOVED" -eq 1 ] && [ -d "$OLD" ]; then
+      if [ -d "$APP" ]; then mv "$APP" "$APP.failed.$$" || true; fi
+      mv "$OLD" "$APP" || true
+    fi
+    report "failed:$PHASE"
+    open "$DMG" || true
+  fi
+  if [ -n "$MNT" ]; then hdiutil detach "$MNT" >/dev/null 2>&1 || true; rmdir "$MNT" 2>/dev/null || true; fi
+  exit "$CODE"
+}
+trap finish EXIT
+report pending
+while kill -0 "$PID" 2>/dev/null; do sleep 0.5; done
+PHASE=mount; MNT=$(mktemp -d)
+hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "$DMG" >/dev/null
+SRC="$MNT/ResearchProgressRecorder.app"
+[ -d "$SRC" ] && [ -d "$APP" ]
+PHASE=signature
+codesign --verify --deep --strict "$SRC"
+codesign -dv --verbose=4 "$SRC" 2>&1 | grep -Fx "TeamIdentifier=$TEAM"
+PHASE=gatekeeper
+spctl --assess --type execute --verbose=2 "$SRC"
+PHASE=copy
+ditto "$SRC" "$NEW"
+codesign --verify --deep --strict "$NEW"
+PHASE=replace
+mv "$APP" "$OLD"; MOVED=1
+mv "$NEW" "$APP"
+PHASE=launch
+open "$APP"
+report launched
+'''
+
+def install_update(dmg,log_directory=None):
+    """Current ad-hoc builds use a visible manual install, preserving the running app."""
+    app=app_bundle_path(); plan=update_install_plan(app)
+    if not plan['automatic']:
+        subprocess.run(['/usr/bin/open',str(dmg)],check=True,timeout=15)
+        return plan
+    directory=Path(log_directory or tempfile.mkdtemp(prefix='SRPRecorder2027-apply-'))
+    directory.mkdir(parents=True,exist_ok=True)
+    script=directory/('apply-update-'+uuid.uuid4().hex+'.sh')
+    script.write_text(UPDATE_SCRIPT,encoding='utf-8'); script.chmod(0o755)
+    status=directory/'last-update.txt'; log=directory/('update-'+uuid.uuid4().hex+'.log')
+    subprocess.Popen(['/bin/sh',str(script),str(os.getpid()),str(dmg),str(app),plan['team'],str(status),str(log)],start_new_session=True)
+    return dict(plan,log=str(log),status=str(status))
 
 class GitHub:
     def __init__(self, config, token):
@@ -367,9 +449,7 @@ class GitHub:
             headers={'Authorization': 'Bearer '+self.token, 'User-Agent': APP_ID,
                      'Accept': 'application/vnd.github.raw+json' if raw else 'application/vnd.github+json',
                      'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json'})
-        context=ssl.create_default_context()
-        if sys.platform=='darwin' and Path('/etc/ssl/cert.pem').exists():
-            context.load_verify_locations(cafile='/etc/ssl/cert.pem')
+        context=network_context()
         with urllib.request.urlopen(req, timeout=120, context=context) as r:
             content = r.read(72_000_001)
             if len(content)>72_000_000: raise ValueError('GitHub response too large')
@@ -461,23 +541,27 @@ def repo_problem_text(error, en):
                 if en else 'GitHub 返回 404：这个令牌看不到该仓库。\n\n1. 协作者邀请是否已接受？用本人账号在浏览器能打开该仓库才算生效。\n2. fine-grained 令牌无法访问他人账号的私有仓库，外部协作者必须用 classic PAT 并勾选 repo。\n3. 仓库名是否完全等于 owner/repo？\n4. 令牌是否已过期？')
     return str(error)
 
+def append_activity_to(api,path,login,action,detail,limit):
+    for attempt in range(3):
+        old,sha=api.get(path); rows=normalize_activity(old)
+        rows.append(dict(time=now(),user=login,action=action,detail=detail))
+        try: api.put(path,rows[-limit:],sha); return
+        except urllib.error.HTTPError as error:
+            if attempt==2 or error.code not in (409,422): raise
+
 def append_activity(api, login, action, detail, to_public=True):
     targets=[(f'logs/private/{login}/activity.json',500)]
     if to_public: targets.append(('logs/public/activity.json',2000))
-    for path,limit in targets:
-        for attempt in range(3):
-            old, sha = api.get(path)
-            rows = old if isinstance(old, list) else []
-            rows.append(dict(time=now(), user=login, action=action, detail=detail))
-            if len(rows) > limit: rows = rows[-limit:]
-            try:
-                api.put(path, rows, sha); break
-            except urllib.error.HTTPError as error:
-                if attempt == 2 or error.code not in (409,422): raise
+    for path,limit in targets: append_activity_to(api,path,login,action,detail,limit)
+
+def normalize_activity(data):
+    if not isinstance(data,list): return []
+    return [{str(key).lower():value for key,value in row.items()}
+            for row in data if isinstance(row,dict)]
 
 def read_activity(api, path):
     data, sha = api.get(path)
-    return data if isinstance(data, list) else []
+    return normalize_activity(data)
 
 def post_parse(name):
     if not name.endswith('.txt'): return None
@@ -603,16 +687,46 @@ class Client:
         self.config.setdefault('workspace',str(self.files_root)); atomic(self.configfile,self.config)
         root.title('SRPRecorder2027 · '+VERSION); root.geometry('1120x760'); root.minsize(940,640)
         self.build(); root.protocol('WM_DELETE_WINDOW',self.close); root.after(100,self.poll)
-    def tr(self,zh,en): return en if getattr(self,'en',False) else zh
+        if not smoke: root.after(300,self.show_update_result)
+    def tr(self,zh,en):
+        if not hasattr(self,'_translations'): self._translations={}
+        self._translations[zh]=(zh,en); self._translations[en]=(zh,en)
+        return en if getattr(self,'en',False) else zh
+    def display_language(self,text):
+        pairs=getattr(self,'_translations',{})
+        pair=pairs.get(text)
+        if pair: return pair[1 if self.en else 0]
+        # Dynamic statuses append an account or count to a translated prefix.
+        for source in sorted(pairs,key=len,reverse=True):
+            if source and source[-1:] in (' ', '：', ':') and text.startswith(source):
+                return pairs[source][1 if self.en else 0]+text[len(source):]
+        return text
     def toggle_language(self):
+        if self.busy: return
         self.en=not self.en
         self.config['language']='en' if self.en else 'zh'
         atomic(self.configfile,self.config)
-        try:
-            subprocess.Popen([sys.executable]+sys.argv[1:],cwd=str(self.home),start_new_session=True)
-        except Exception:
-            pass
-        self.root.destroy()
+        def translate(widget):
+            kind=widget.winfo_class()
+            if kind in ('TLabel','TButton','TCheckbutton','Label','Button'):
+                widget.configure(text=self.display_language(str(widget.cget('text'))))
+            elif kind=='Treeview':
+                for column in widget['columns']:
+                    widget.heading(column,text=self.display_language(widget.heading(column,'text')))
+            for child in widget.winfo_children(): translate(child)
+        translate(self.root)
+        for i,(zh,en) in enumerate(self.tab_labels):
+            self.tab_base[i]=self.tr(zh,en)
+            old=str(self.book.tab(i,'text'))
+            self.book.tab(i,text=('🔴 ' if old.startswith('🔴') else '')+self.tab_base[i])
+        self.lang_btn.configure(text='中文' if self.en else 'EN')
+        self.status.set(self.display_language(self.status.get()))
+        self.update_login_ui()
+        self.personal_label.configure(text=self.personal_display())
+        for item in self.members_tree.get_children():
+            values=list(self.members_tree.item(item,'values'))
+            if len(values)>1:
+                values[1]=self.display_language(values[1]); self.members_tree.item(item,values=values)
     def button(self,parent,zh,en,command):
         b=self.ttk.Button(parent,text=self.tr(zh,en),command=lambda:self.guarded(command))
         if hasattr(parent,'_flow_buttons'):
@@ -646,6 +760,8 @@ class Client:
         except Exception as error: self.mb.showerror(self.tr('操作失败','Operation failed'),str(error),parent=self.root)
     def close(self):
         if self.busy: self.mb.showinfo('SRPRecorder2027',self.tr('请等待当前传输完成。','Wait for the current transfer to finish.')); return
+        if getattr(self,'help_dirty',False):
+            self.save_help_draft()
         self.clear_public_temp()
         self.root.destroy()
     def poll(self):
@@ -655,7 +771,7 @@ class Client:
                 try: w.configure(state=state)
                 except Exception: pass
             if error:
-                self.status.set(self.tr('操作失败；上传可能部分完成，旧下载副本保留。','Failed; uploads may be partially complete. Previous downloads were preserved.'))
+                self.status.set(self.tr('更新未完成，详见错误说明。','Update incomplete; see the error details.') if isinstance(error,UpdateError) else self.tr('操作失败；上传可能部分完成，旧下载副本保留。','Failed; uploads may be partially complete. Previous downloads were preserved.'))
                 self.mb.showerror('SRPRecorder2027',str(error),parent=self.root)
             else:
                 try: done(result)
@@ -680,13 +796,14 @@ class Client:
         self.root.columnconfigure(0,weight=1); self.root.rowconfigure(1,weight=1)
         header=ttk.Frame(self.root,padding=12); header.grid(row=0,column=0,sticky='ew')
         ttk.Label(header,text='SRPRecorder2027  '+VERSION,font=('',17,'bold')).pack(side='left')
-        lang_btn=ttk.Button(header,text=('中文' if self.en else 'EN'),command=self.toggle_language,width=6)
-        lang_btn.pack(side='right',padx=6)
+        self.lang_btn=ttk.Button(header,text=('中文' if self.en else 'EN'),command=self.toggle_language,width=6)
+        self.lang_btn.pack(side='right',padx=6)
         self.button(header,'更换工作文件夹','Change Workspace',self.choose_workspace)
         self.book=ttk.Notebook(self.root); self.book.grid(row=1,column=0,sticky='nsew',padx=12,pady=6)
         self.book.bind('<<NotebookTabChanged>>', lambda e:self.on_tab_changed(e))
         self.tabs=[]; self.tab_base=[]
-        for zh,en in [('成员资料','Members'),('Quick Post','Quick Post'),('参考资料','Refs'),('本地记录','Local Records'),('进度同步','Progress Sync'),('使用说明','Help')]:
+        self.tab_labels=[('成员资料','Members'),('Quick Post','Quick Post'),('参考资料','Refs'),('本地记录','Local Records'),('进度同步','Progress Sync'),('使用说明','Help')]
+        for zh,en in self.tab_labels:
             label=('Quick Post' if zh=='Quick Post' else self.tr(zh,en))
             panel=ttk.Frame(self.book,padding=16); self.book.add(panel,text=label); self.tabs.append(panel); self.tab_base.append(label)
         self.news_seen=dict(self.config.get('news') or {})
@@ -941,7 +1058,7 @@ class Client:
         def done(result):
             login,pub,mine=result
             self.remember(api,config)
-            win=self.tk.Toplevel(self.root); win.title(self.tr('活动日志','Activity Log')); win.geometry('900x520'); win.transient(self.root); win.grab_set()
+            win=self.tk.Toplevel(self.root); win.title(self.tr('活动日志','Activity Log')); self.fit_dialog(win,900,520); win.transient(self.root); win.grab_set()
             self.ttk.Label(win,text=self.tr('公开日志 ','Public log ')+str(len(pub))+self.tr(' 条 · 我的日志 ',' entries · my log ')+str(len(mine))+self.tr(' 条',' entries'),padding=8).pack(anchor='w')
             tree=self.table(win,[self.tr('时间','Time'),self.tr('用户','User'),self.tr('动作','Action'),self.tr('详情','Detail')])
             rows=list(reversed(pub))+list(reversed(mine))
@@ -1023,25 +1140,34 @@ class Client:
         api,config=self.api()
         def work():
             files=self.channels(api); login=files.identity(); api.login_cached=login
-            uploaded=set(files.members())
-            names=sorted(set([login])|uploaded|set(files.collaborators()))
+            upload_names=files.members(); uploaded={m.lower() for m in upload_names}
+            accepted=files.collaborators()
+            invites=files.pending_invitations()
+            names=sorted({m.lower():m for m in [*accepted,*invites,*upload_names,login]}.values(),key=str.lower)
+            invited={m.lower() for m in invites}-{m.lower() for m in accepted}-uploaded
             last={}; logged=set()
             try:
                 for row in read_activity(api,'logs/public/activity.json'):
-                    user=str(row.get('user') or ''); stamp=str(row.get('time') or '')
+                    user=str(row.get('user') or '').lower(); stamp=str(row.get('time') or '')
                     if not user or not stamp: continue
-                    try: when=dt.datetime.fromisoformat(stamp.replace('Z','+00:00'))
+                    try:
+                        when=dt.datetime.fromisoformat(stamp.replace('Z','+00:00'))
+                        if when.tzinfo is None: when=when.replace(tzinfo=dt.timezone.utc)
                     except ValueError: continue
                     if user not in last or when>last[user]: last[user]=when
-                    if '登录' in str(row.get('action') or ''): logged.add(user)
+                    if '登录' in str(row.get('action') or '') or 'sign in' in str(row.get('action') or '').lower(): logged.add(user)
             except Exception: pass
             states={}
             for name in names:
-                if name in logged:
-                    when=last.get(name)
+                if name.lower()==login.lower():
+                    states[name]=self.tr('已连接 GitHub 账号','Connected to GitHub account'); continue
+                if name.lower() in invited:
+                    states[name]=self.tr('待接受邀请','Invitation pending'); continue
+                if name.lower() in logged:
+                    when=last.get(name.lower())
                     stamp=when.astimezone().strftime('%m-%d %H:%M') if when else '-'
                     states[name]=self.tr('已连接 · 最近活动 ','Connected · last active ')+stamp
-                elif name in uploaded:
+                elif name.lower() in uploaded:
                     states[name]=self.tr('已上传 · 无登录记录','Uploaded · no login record')
                 else:
                     states[name]=self.tr('已加入 · 未连接','Joined · not connected')
@@ -1060,7 +1186,9 @@ class Client:
         if not member: return
         api,config=self.api()
         def work():
-            files=self.channels(api); me=files.identity(); api.login_cached=me; destination=self.team_destination(me,member)
+            files=self.channels(api); me=files.identity(); api.login_cached=me
+            if member.lower()==me.lower(): return self.reference_dir
+            destination=self.team_destination(me,member)
             if not files.download_member(member,destination): return None
             return destination
         def done(destination):
@@ -1069,7 +1197,7 @@ class Client:
             else: self.status.set(self.tr('该成员尚未上传文件；旧副本保留。','No files uploaded by this member; old copies preserved.'))
         self.run(work,done)
     def show_member_files(self,member,folder):
-        dialog=self.tk.Toplevel(self.root); dialog.title(member+' · SRPRecorder2027'); dialog.geometry('850x520')
+        dialog=self.tk.Toplevel(self.root); dialog.title(member+' · SRPRecorder2027'); self.fit_dialog(dialog,850,520)
         tree=self.table(dialog,[self.tr('文件','File'),self.tr('目录','Folder')]); paths={}
         for file in upload_files(folder):
             ident=tree.insert('', 'end',values=(file.name,str(file.parent.relative_to(folder)))); paths[ident]=file
@@ -1154,7 +1282,7 @@ class Client:
         self.run(work,done)
     def view_post(self,post,login):
         win=self.tk.Toplevel(self.root); win.title(post['author']+' · '+post['time'])
-        win.geometry('720x520'); win.transient(self.root); win.grab_set()
+        self.fit_dialog(win,720,520); win.transient(self.root); win.grab_set()
         box=self.tk.Text(win,wrap='word',padx=12,pady=12); box.pack(fill='both',expand=True)
         box.insert('1.0',post.get('body','')); box.configure(state='disabled')
         bar=self.ttk.Frame(win); bar.pack(fill='x',pady=6)
@@ -1192,7 +1320,7 @@ class Client:
             if not seen:
                 self.mb.showinfo('SRPRecorder2027',self.tr('还没有已阅的帖子。','No read posts yet.'),parent=self.root); return
             win=self.tk.Toplevel(self.root); win.title(self.tr('历史记录（已阅）','History (read posts)'))
-            win.geometry('820x480'); win.transient(self.root); win.grab_set()
+            self.fit_dialog(win,820,480); win.transient(self.root); win.grab_set()
             tree=self.table(win,[self.tr('作者','Author'),self.tr('时间','Time'),self.tr('内容','Content')])
             self._history_posts={}
             for post in seen:
@@ -1245,7 +1373,7 @@ class Client:
         self.progress_tree=self.table(p,[self.tr('名称','Name'),self.tr('大小','Size'),self.tr('修改','Modified')])
         self.progress_tree.column('0',width=420); self.progress_tree.column('1',width=140); self.progress_tree.column('2',width=200)
         self.progress_tree.bind('<Double-1>',lambda _:self.open_progress_item())
-        self.wrapped_label(p,self.tr('新建文档保存在 Mat_Local（工作资料文件夹）；本机保存不等于上传。','New documents are saved to Mat_Local; local saves do not upload automatically.'),pack_options={'pady':12})
+        self.wrapped_label(p,self.tr('新文档与列表使用 Mat_Local；所选文件夹是上传备用来源。本机保存不等于上传。','Documents and list use Mat_Local; the selected folder is an upload fallback. Local saves do not upload automatically.'),pack_options={'pady':12})
         self.refresh_progress_files()
     def refresh_progress_files(self):
         tree=getattr(self,'progress_tree',None)
@@ -1281,7 +1409,7 @@ class Client:
             title=str(dt.date.today())+' '+project
             self.mat_local.mkdir(parents=True,exist_ok=True)
             target=docx(str(self.mat_local),project,'',title,direct=True)
-            self.open_path(target)
+            self.refresh_progress_files(); self.open_path(target)
     def build_sync(self):
         p=self.tabs[4]
         self.sync_actions=[]
@@ -1323,49 +1451,62 @@ class Client:
                 +self.tr(' 已登录，但访问仓库失败：\n\n',' but the repository is not reachable:\n\n')
                 +repo_problem_text(problem,self.en),parent=self.root)
         self.run(work,done)
-    def pick(self, title, hint, items, extra_files=False):
+    def fit_dialog(self,win,width,height):
+        self.root.update_idletasks()
+        x,y,sw,sh=self.root.winfo_vrootx(),self.root.winfo_vrooty(),self.root.winfo_vrootwidth(),self.root.winfo_vrootheight()
+        if sw<=1 or sh<=1: x,y,sw,sh=0,0,self.root.winfo_screenwidth(),self.root.winfo_screenheight()
+        # Reserve room for the menu/title bars and Dock.
+        width=max(1,min(width,sw-32)); height=max(1,min(height,sh-100))
+        left=max(x,min(self.root.winfo_rootx()+(self.root.winfo_width()-width)//2,x+sw-width))
+        top=max(y+28,min(self.root.winfo_rooty()+(self.root.winfo_height()-height)//2,y+sh-height-48))
+        win.geometry(f'{width}x{height}{left:+d}{top:+d}')
+        win.minsize(min(360,width),min(220,height)); win.transient(self.root)
+    def pick(self, title, hint, items, extra_files=False, labels=None):
         """先预览、再勾选：返回选中的条目（空列表表示取消）。"""
         result = {'picked': []}
-        win = self.tk.Toplevel(self.root); win.title(title); win.geometry('780x540')
+        win = self.tk.Toplevel(self.root); win.title(title); self.fit_dialog(win,780,540)
         win.transient(self.root); win.grab_set()
-        self.ttk.Label(win, text=hint, wraplength=740).pack(anchor='w', padx=12, pady=8)
-        body = self.ttk.Frame(win); body.pack(fill='both', expand=True, padx=12)
+        self.wrapped_label(win,hint,pack_options={'padx':12,'pady':8})
+        body = self.ttk.Frame(win)
         box = self.tk.Listbox(body, selectmode='extended', height=18)
         sb = self.ttk.Scrollbar(body, orient='vertical', command=box.yview)
         box.configure(yscrollcommand=sb.set); box.pack(side='left', fill='both', expand=True); sb.pack(side='right', fill='y')
         rows = list(items)
-        for row in rows: box.insert('end', row)
+        for row in rows: box.insert('end', (labels or {}).get(row,row))
         box.selection_set(0, 'end')
-        bar = self.ttk.Frame(win); bar.pack(fill='x', padx=12, pady=8)
+        bar = self.flow_bar(win,padx=12,pady=8)
         def add_files():
             for path in self.fd.askopenfilenames(parent=win):
                 if path in rows: continue
                 rows.append(path); box.insert('end', path); box.selection_set('end')
         def ok():
             result['picked'] = [rows[i] for i in box.curselection()]; win.destroy()
-        if extra_files: self.ttk.Button(bar, text=self.tr('添加文件', 'Add files'), command=add_files).pack(side='left')
-        self.ttk.Button(bar, text=self.tr('全选', 'Select all'), command=lambda: box.selection_set(0, 'end')).pack(side='right', padx=4)
-        self.ttk.Button(bar, text=self.tr('全不选', 'Select none'), command=lambda: box.selection_clear(0, 'end')).pack(side='right', padx=4)
-        self.ttk.Button(bar, text=self.tr('确定', 'OK'), command=ok).pack(side='right', padx=4)
-        self.ttk.Button(bar, text=self.tr('取消', 'Cancel'), command=win.destroy).pack(side='right', padx=4)
+        if extra_files: self.button(bar,'添加文件','Add files',add_files)
+        self.button(bar,'全选','Select all',lambda:box.selection_set(0,'end'))
+        self.button(bar,'全不选','Select none',lambda:box.selection_clear(0,'end'))
+        self.button(bar,'确定','OK',ok); self.button(bar,'取消','Cancel',win.destroy)
+        body.pack(fill='both',expand=True,padx=12)
         self.root.wait_window(win)
         return result['picked']
     def pull_others(self):
         api,config=self.api()
         def work():
             files=self.channels(api); me=files.identity(); api.login_cached=me
-            uploaded=set(files.members()); names=uploaded|set(files.collaborators())
-            return me,sorted([m for m in names if m.lower()!=me.lower()]),uploaded
+            upload_names=files.members(); uploaded={m.lower() for m in upload_names}
+            invites=files.pending_invitations()
+            names={m.lower():m for m in [*files.collaborators(),*invites,*upload_names]}
+            return me,sorted([m for m in names.values() if m.lower()!=me.lower()],key=str.lower),uploaded,{m.lower() for m in invites}
         def done(result):
-            me,members,uploaded=result
+            me,members,uploaded,invites=result
             if not members:
                 self.status.set(self.tr('没有其他成员。','No other members.')); return
             picked=self.pick(self.tr('下载他人内容','Download team files'),
-                self.tr('列出全部成员；未上传的标注“尚未上传”，只下载有内容的成员。','All members are listed; those without uploads are marked. Only members with files are downloaded.'),members)
+                self.tr('列出全部成员；未上传的标注“尚未上传”，只下载有内容的成员。','All members are listed; those without uploads are marked. Only members with files are downloaded.'),members,labels={m:m+(self.tr(' · 待接受邀请',' · Invitation pending') if m.lower() in invites and m.lower() not in uploaded else self.tr(' · 尚未上传',' · No upload yet') if m.lower() not in uploaded else '') for m in members})
             if not picked: return
             def work2():
                 files=self.channels(api); count=0
                 for member in picked:
+                    if member.lower() not in uploaded: continue
                     if files.download_member(member,self.team_destination(me,member)): count+=1
                 if count: self.log_activity(api,me,'下载他人内容 / Download team files',str(count)+' 位成员 / members')
                 return count
@@ -1456,7 +1597,7 @@ class Client:
         self.run(work,done)
     def choose_references_to_remove(self,api,config,login,names):
         win=self.tk.Toplevel(self.root); win.title(self.tr('撤除我上传的参考资料','Remove My Uploaded References'))
-        win.geometry('560x420'); win.transient(self.root); win.grab_set()
+        self.fit_dialog(win,560,420); win.transient(self.root); win.grab_set()
         self.ttk.Label(win,text=self.tr('选择要从团队区永久删除的参考资料（其他人将无法再下载）：','Select uploaded references to remove permanently from the team area:'),wraplength=520).pack(anchor='w',padx=12,pady=8)
         box=self.tk.Listbox(win,selectmode='extended',height=12); box.pack(fill='both',expand=True,padx=12)
         for name in names: box.insert('end',name)
@@ -1498,7 +1639,9 @@ class Client:
         zh=HELP_TEXT
         en=HELP_TEXT
         self._help_zh=zh; self._help_en=en
-        text.insert('1.0',en if self.en else zh); text.edit_modified(False)
+        draft=self.home/'help_local.md'
+        content=draft.read_text(encoding='utf-8-sig') if draft.exists() else (en if self.en else zh)
+        text.insert('1.0',content); text.edit_modified(False)
 
     def help_modified(self,event=None):
         try:
@@ -1507,6 +1650,16 @@ class Client:
         except Exception: pass
     def default_help_text(self):
         return self._help_en if self.en else self._help_zh
+    def show_update_result(self):
+        path=self.home/'updates/last-update.txt'
+        if not path.is_file(): return
+        state=path.read_text(encoding='utf-8').strip()
+        if state.startswith('failed:'):
+            self.mb.showwarning('SRPRecorder2027',self.tr('上一次自动更新未完成，已尝试保留/恢复旧程序。请手动安装官方 DMG；诊断日志位于：','The previous automatic update failed; it attempted to preserve/restore the old app. Install the official DMG manually. Diagnostic logs: ')+str(path.parent),parent=self.root)
+            path.rename(path.with_name('last-update-reported-'+uuid.uuid4().hex+'.txt'))
+    def update_job(self,work):
+        try: return work()
+        except Exception as error: raise UpdateError(update_error_message(error,self.en)) from error
     def check_updates(self):
         def done(rel):
             tag=str(rel.get('tag_name') or '')
@@ -1518,21 +1671,37 @@ class Client:
             notes=(rel.get('body') or '').strip()
             if len(notes)>1200: notes=notes[:1200]+'…'
             message=(self.tr('发现新版本 ','New version ')+tag+self.tr('（当前 ',' (current ')+VERSION+self.tr('）。\n\n',').\n\n')
-                     +notes+self.tr('\n\n下载并在重启后安装？本地资料不会被删除。','\n\nDownload and install after restart? Local data is preserved.'))
+                     +notes+self.tr('\n\n下载并校验更新？当前未公证测试版可能需要手动安装。本地资料不会被删除。','\n\nDownload and verify the update? Current unnotarized test builds may need manual installation. Local data is preserved.'))
             if not self.mb.askyesno('SRPRecorder2027',message,parent=self.root): return
             self.status.set(self.tr('正在下载更新…','Downloading update…'))
             def done2(path):
                 self.status.set(self.tr('更新已下载并通过校验。','Update downloaded and verified.'))
-                if not self.mb.askyesno('SRPRecorder2027',self.tr('现在关闭程序并安装？安装后会自动重新打开。','Close and install now? The app reopens automatically.'),parent=self.root): return
-                auto=install_update(path)
-                if auto:
-                    self.root.destroy()
-                else:
-                    self.mb.showinfo('SRPRecorder2027',self.tr('已打开 DMG：把 ResearchProgressRecorder.app 拖到 Applications 覆盖旧版，数据不会丢失。','The DMG is open: drag ResearchProgressRecorder.app to Applications to replace the old version. Your data is not affected.'),parent=self.root)
-            self.run(lambda: download_update(rel,asset),done2)
-        self.run(release_info,done)
+                def installed(plan):
+                    if plan['automatic']:
+                        self.close(); return
+                    reasons={
+                        'unnotarized-build':self.tr('当前程序没有 Developer ID 分发签名，无法保证静默安装后获准启动。','The current app lacks a Developer ID distribution signature; an unattended launch cannot be guaranteed.'),
+                        'disk-image':self.tr('当前程序正在 DMG 或系统转移位置运行。','The app is running from a disk image or App Translocation.'),
+                        'not-writable':self.tr('当前安装目录不可写。','The installation directory is not writable.'),
+                        'not-installed':self.tr('当前运行位置不是已安装的应用包。','This is not an installed application bundle.')}
+                    self.status.set(self.tr('安装包已验证；等待手动安装，当前版本未改变。','Package verified; manual installation pending. The installed version is unchanged.'))
+                    message=reasons.get(plan['reason'],'')+self.tr(
+                        '\n\n已打开 DMG。请先保存内容并退出本程序，再将 ResearchProgressRecorder.app 拖入 Applications 替换。重新打开若提示“无法验证开发者”，确认来自官方发布页后，由本人在系统设置 → 隐私与安全性 → 仍要打开中处理。若提示文件损坏或会损害电脑，请停止安装并反馈原文。用户资料保留在 Application Support。',
+                        '\n\nThe DMG is open. Save your work and quit this app, then drag ResearchProgressRecorder.app into Applications to replace it. If macOS cannot verify the developer, confirm the official download source and personally use System Settings → Privacy & Security → Open Anyway. Stop and report any damaged-app or malware warning. Data in Application Support is preserved.')
+                    self.mb.showinfo('SRPRecorder2027',message,parent=self.root)
+                self.run(lambda:self.update_job(lambda:install_update(path,self.home/'updates')),installed)
+            self.run(lambda:self.update_job(lambda:download_update(rel,asset)),done2)
+        self.run(lambda:self.update_job(release_info),done)
+    def save_help_draft(self):
+        target=self.home/'help_local.md'; content=self.help_text.get('1.0','end-1c')
+        temporary=target.with_suffix('.md.tmp'); temporary.write_text(content,encoding='utf-8')
+        if target.exists(): shutil.copy2(target,str(target)+'.bak')
+        os.replace(temporary,target)
     def default_help(self):
+        if not self.require_login(): return
+        if not self.mb.askyesno('SRPRecorder2027',self.tr('恢复默认会替换当前草稿，继续？','Replace the current draft with built-in help?'),parent=self.root): return
         self.set_help_text(self.default_help_text())
+        self.help_dirty=True
     def set_help_text(self,text):
         self.help_text.configure(state='normal')
         self.help_text.delete('1.0','end'); self.help_text.insert('1.0',text)
@@ -1553,12 +1722,20 @@ class Client:
             body={'message':'help: SRPRecorder2027 '+VERSION,'branch':api.branch,'content':base64.b64encode(text.encode()).decode()}
             if sha: body['sha']=sha
             api.request('PUT',endpoint,body)
+            append_activity_to(api,'help/changelog.json',login,'更新使用说明 / Update help',str(len(text))+' 字符 / chars',200)
             try: append_activity(api,login,'更新使用说明 / Update help',str(len(text))+' 字符 / chars')
             except Exception: pass
             return len(text)
-        self.run(work,lambda _:self.finish(api,config,self.tr('使用说明已上传，所有成员登录后都能读到。','Help uploaded for every member.')))
+        def done(_):
+            self.save_help_draft(); self.help_dirty=False
+            self.finish(api,config,self.tr('使用说明已上传，所有成员登录后都能读到。','Help uploaded for every member.'))
+        self.run(work,done)
     def load_help(self,quiet=False):
         api,config=self.api()
+        before=self.help_text.get('1.0','end-1c')
+        if self.help_dirty and not quiet:
+            if not self.mb.askyesno('SRPRecorder2027',self.tr('读取云端将替换当前草稿，继续？','Replace the current draft with cloud help?'),parent=self.root): return
+        elif self.help_dirty: return
         def work():
             endpoint=api.endpoint('help/help.md')+'?ref='+urllib.parse.quote(api.branch,safe='')
             try: return api.request('GET',endpoint,raw=True)
@@ -1570,24 +1747,46 @@ class Client:
             if text is None:
                 if not quiet: self.mb.showinfo('SRPRecorder2027',self.tr('云端还没有上传过使用说明。','No uploaded help yet.'),parent=self.root)
                 return
+            if self.help_text.get('1.0','end-1c')!=before: return
             self.set_help_text(text)
+            self.save_help_draft()
             self.status.set(self.tr('已读取云端使用说明。','Help loaded from GitHub.'))
         self.run(work,done)
     def show_help_changelog(self):
         api,config=self.api()
         def work():
             rows,sha=api.get('help/changelog.json')
-            return rows if isinstance(rows,list) else []
+            return normalize_activity(rows)
         def done(rows):
             self.remember(api,config)
-            win=self.tk.Toplevel(self.root); win.title(self.tr('改动日志','Change Log')); win.geometry('760x420'); win.transient(self.root); win.grab_set()
+            win=self.tk.Toplevel(self.root); win.title(self.tr('改动日志','Change Log')); self.fit_dialog(win,760,420); win.transient(self.root); win.grab_set()
             tree=self.table(win,[self.tr('时间','Time'),self.tr('用户','User'),self.tr('说明','Detail')])
             for row in reversed(rows):
                 tree.insert('','end',values=(row.get('time',''),row.get('user',''),row.get('detail','')))
             self.ttk.Button(win,text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
         self.run(work,done)
 
+def verify_update_runtime():
+    """Release gate: test the bundled TLS runtime without opening a user workspace."""
+    context=network_context()
+    if not context.check_hostname or context.verify_mode!=ssl.CERT_REQUIRED:
+        raise RuntimeError('Update runtime must verify TLS certificates and hostnames')
+    release=release_info()
+    sums=next((a for a in release.get('assets',[]) if a.get('name')=='SHA256SUMS.txt'),None)
+    if not sums: raise RuntimeError('Public release has no checksum asset')
+    req=urllib.request.Request(sums['browser_download_url'],headers={'User-Agent':APP_ID})
+    with urllib.request.urlopen(req,timeout=60,context=context) as response:
+        content=response.read().decode('utf-8')
+    if not re.search(r'^[0-9a-fA-F]{64}\s+\S+',content,re.MULTILINE):
+        raise RuntimeError('Public checksum asset is not readable')
+    plan=update_install_plan(app_bundle_path())
+    print(json.dumps(dict(version=VERSION,platform=sys.platform,architecture=platform.machine(),
+                         tls_verified=True,release=release.get('tag_name'),checksum_download=True,
+                         install_mode=plan['reason'])))
+
 def main():
+    if '--verify-update-runtime' in sys.argv:
+        verify_update_runtime(); return
     import tkinter as tk
     root=tk.Tk(); root.withdraw()
     try:

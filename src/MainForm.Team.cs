@@ -131,6 +131,10 @@ namespace SRLogbook
             teamFlow.AutoScroll = true;
             teamFlow.BackColor = Color.White;
             teamFlow.Padding = new Padding(0, 8, 0, 0);
+            teamFlow.SizeChanged += delegate
+            {
+                foreach (Control card in teamFlow.Controls) card.Width = Math.Max(Ui.S(300), teamFlow.ClientSize.Width - Ui.S(30));
+            };
 
             page.Controls.Add(teamFlow);
             page.Controls.Add(pp);
@@ -139,13 +143,15 @@ namespace SRLogbook
             {
                 int tw = Math.Max(Ui.S(360), top.ClientSize.Width);
                 topRight.Left = Math.Max(Ui.S(2), tw - topRight.Width - Ui.S(8));
+                h.Width = Math.Max(Ui.S(100), topRight.Left - Ui.S(14));
                 sub.Width = Math.Max(Ui.S(240), tw - Ui.S(14));
+                lblGithubState.Width = Math.Max(Ui.S(240), tw - Ui.S(14));
                 teamStatus.Width = Math.Max(Ui.S(240), tw - Ui.S(14));
                 int pw = Math.Max(Ui.S(360), pp.ClientSize.Width);
                 ppRight.Left = Math.Max(Ui.S(2), pw - ppRight.Width - Ui.S(8));
                 int labelW = Math.Max(Ui.S(180), pw - ppRight.Width - Ui.S(20));
-                lblPersonal.Width = labelW;
-                lblPersonalPath.Width = labelW;
+                lblPersonal.Width = Math.Max(Ui.S(80), ppRight.Left - lblPersonal.Left - Ui.S(12));
+                lblPersonalPath.Width = Math.Max(Ui.S(180), pw - Ui.S(20));
             };
             top.Resize += delegate { layoutTeam(); };
             pp.Resize += delegate { layoutTeam(); };
@@ -188,14 +194,14 @@ namespace SRLogbook
             if (lblGithubState == null) return;
             bool signed = !string.IsNullOrEmpty(sessionLogin);
             lblGithubState.Text = signed
-                ? "已连接 GitHub / Connected: " + sessionLogin
-                : "未连接 GitHub / Not connected";
+                ? (Lang.En ? "Connected to GitHub: " : "已连接 GitHub：") + sessionLogin
+                : (Lang.En ? "Not connected" : "未连接 GitHub");
             lblGithubState.ForeColor = signed ? Color.FromArgb(24, 138, 86) : Theme.TextMuted;
             if (lblSyncAccount != null)
             {
                 lblSyncAccount.Text = signed
-                    ? "已连接 GitHub / Connected: " + sessionLogin
-                    : "未连接 GitHub / Not connected";
+                    ? (Lang.En ? "Connected to GitHub: " : "已连接 GitHub：") + sessionLogin
+                    : (Lang.En ? "Not connected" : "未连接 GitHub");
                 lblSyncAccount.ForeColor = signed ? Color.FromArgb(24, 138, 86) : Theme.TextMuted;
             }
         }
@@ -274,7 +280,7 @@ namespace SRLogbook
                 AddTeamCard(login + "（我）", Lang.En ? "Connected to GitHub" : "已连接 GitHub 账号", true, true);
                 foreach (string m in members)
                 {
-                    if (m == login) continue;
+                    if (string.Equals(m, login, StringComparison.OrdinalIgnoreCase)) continue;
                     AddTeamCard(m, MemberState(m, true, last, logged), false, logged.Contains(m));
                     roster.RemoveAll(x => string.Equals(x, m, StringComparison.OrdinalIgnoreCase));
                 }
@@ -293,7 +299,9 @@ namespace SRLogbook
                     invited++;
                 }
                 teamFlow.ResumeLayout();
-                teamStatus.Text = (Lang.En ? "Members: " : "共 ") + (members.Count + roster.Count) + (Lang.En ? " · pending invitations: " : " 位成员；待接受邀请：") + invited + (created ? (Lang.En ? "; created team/" + login + "/" : "；已为 " + login + " 创建 team/" + login + "/") : "");
+                HashSet<string> uniqueMembers = new HashSet<string>(members, StringComparer.OrdinalIgnoreCase);
+                uniqueMembers.UnionWith(roster); uniqueMembers.Add(login);
+                teamStatus.Text = (Lang.En ? "Members: " : "共 ") + uniqueMembers.Count + (Lang.En ? " · pending invitations: " : " 位成员；待接受邀请：") + invited + (created ? (Lang.En ? "; created team/" + login + "/" : "；已为 " + login + " 创建 team/" + login + "/") : "");
             }
             catch (Exception ex)
             {
@@ -462,6 +470,21 @@ namespace SRLogbook
                 remove.Click += delegate { RemoveMyUploadedRefs(); };
                 card.Controls.Add(remove);
             }
+            Action layoutCard = delegate
+            {
+                int buttonWidth = Ui.S(me ? 150 : 180), gap = Ui.S(8);
+                view.SetBounds(card.Width - buttonWidth - Ui.S(12), Ui.S(16), buttonWidth, Ui.S(32));
+                int boundary = view.Left;
+                foreach (Control child in card.Controls)
+                    if (child is Button && child != view)
+                    {
+                        child.SetBounds(view.Left - buttonWidth - gap, Ui.S(16), buttonWidth, Ui.S(32)); boundary = child.Left;
+                    }
+                n.Width = d.Width = Math.Max(Ui.S(60), boundary - n.Left - Ui.S(12));
+                n.AutoEllipsis = d.AutoEllipsis = true;
+            };
+            card.Resize += delegate { layoutCard(); };
+            card.Width = Math.Max(Ui.S(300), teamFlow.ClientSize.Width - Ui.S(30)); layoutCard();
             teamFlow.Controls.Add(card);
         }
     }

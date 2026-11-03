@@ -1,4 +1,4 @@
-# SRPRecorder2027 0.2.10 · Complete User Guide (English)
+# SRPRecorder2027 0.2.11 · Complete User Guide (English)
 
 > Maintained together with the in-app Help page and `help/help.md` in the private repository; the data-storage section is authoritative.
 > 中文说明: [使用说明.md](使用说明.md)
@@ -9,21 +9,21 @@
 
 | Platform | File | Requirement |
 |---|---|---|
-| Windows 64-bit | [research-progress-recorder-0.2.10-Windows.zip](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.10/research-progress-recorder-0.2.10-Windows.zip) | Windows 10/11 + .NET Framework 4.8 |
-| Apple Silicon | [research-progress-recorder-0.2.10-macOS-arm64.dmg](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.10/research-progress-recorder-0.2.10-macOS-arm64.dmg) | macOS 14 or later |
-| Intel Mac | [research-progress-recorder-0.2.10-macOS-x64.dmg](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.10/research-progress-recorder-0.2.10-macOS-x64.dmg) | macOS 15 or later |
-| Checksums | [SHA256SUMS.txt](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.10/SHA256SUMS.txt) | SHA-256 of the three packages |
+| Windows 64-bit | [research-progress-recorder-0.2.11-Windows.zip](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.11/research-progress-recorder-0.2.11-Windows.zip) | Windows 10/11 + .NET Framework 4.8 |
+| Apple Silicon | [research-progress-recorder-0.2.11-macOS-arm64.dmg](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.11/research-progress-recorder-0.2.11-macOS-arm64.dmg) | macOS 14 or later |
+| Intel Mac | [research-progress-recorder-0.2.11-macOS-x64.dmg](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.11/research-progress-recorder-0.2.11-macOS-x64.dmg) | macOS 15 or later |
+| Checksums | [SHA256SUMS.txt](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.11/SHA256SUMS.txt) | SHA-256 of the three packages |
 
 Releases: https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest
 
-No GitHub sign-in is needed to download. The Windows build reports `0.2.10.0`; macOS reports `0.2.10`. Both DMGs are functionally identical and differ only in the bundled runtime architecture — arm64 for Apple Silicon, x64 for Intel.
+No GitHub sign-in is needed to download. The Windows build reports `0.2.11.0`; macOS reports `0.2.11`. Both DMGs are functionally identical and differ only in the bundled runtime architecture — arm64 for Apple Silicon, x64 for Intel.
 
 ```powershell
-Get-FileHash .\research-progress-recorder-0.2.10-Windows.zip -Algorithm SHA256
+Get-FileHash .\research-progress-recorder-0.2.11-Windows.zip -Algorithm SHA256
 ```
 
 ```bash
-shasum -a 256 research-progress-recorder-0.2.10-macOS-arm64.dmg
+shasum -a 256 research-progress-recorder-0.2.11-macOS-arm64.dmg
 ```
 
 ---
@@ -41,8 +41,7 @@ shasum -a 256 research-progress-recorder-0.2.10-macOS-arm64.dmg
 ### macOS
 
 1. Open the DMG and drag `ResearchProgressRecorder.app` into `Applications` (quit the old version first).
-2. If Gatekeeper blocks the first launch: right-click → Open, or run
-   `xattr -dr com.apple.quarantine /Applications/ResearchProgressRecorder.app`.
+2. For an unidentified-developer warning, confirm the official download source, try opening once, then personally use System Settings → Privacy & Security → Open Anyway. Stop and report damaged-app or malware warnings instead of treating all alerts as signing warnings.
 3. User data lives in `~/Library/Application Support/ResearchProgressRecorder/`, outside the app bundle; replacing the app keeps it.
 4. `uninstall-macos.command` in the DMG moves the app to the Trash and keeps research data by default.
 
@@ -68,7 +67,7 @@ shasum -a 256 research-progress-recorder-0.2.10-macOS-arm64.dmg
 
 ## 3. The six pages
 
-The interface can be switched between Chinese and English (next to `SR` on Windows, at the right of the header on macOS). The choice is remembered; on macOS the app restarts after switching.
+The interface can be switched between Chinese and English (next to `SR` on Windows, at the right of the header on macOS). The choice is remembered; version 0.2.11 switches in place on both platforms, preserving sign-in and unfinished edits.
 
 The sections are **Members, Quick Post, References & Materials, Local Records, Progress Sync and Help**. Each has its own unread dot, cleared when you enter it; dots are computed only while signed in.
 
@@ -147,7 +146,7 @@ There is no self-hosted server: all team data lives in the private repository `b
 
 ```
 SRCRec\
-├─ SRPRecorder2027.exe             app 0.2.10
+├─ SRPRecorder2027.exe             app 0.2.11
 ├─ SRPRecorder2027.exe.config      high-DPI / long-path config, keep next to the exe
 ├─ research_log.json               legacy research entries
 ├─ workspace.json                  workspace path
@@ -239,15 +238,15 @@ research-data/
 - Team data lives in a private repository; downloaded names/paths are validated, rejecting escapes, invalid names and symlinks.
 - Uploads are capped at 50 MiB per file; junctions and Windows-invalid names are refused.
 - CI build jobs are `contents: read`; the publish job uses a short-lived token valid only for the public program repository and never touches the data repository.
-- No code signing/notarization: this affects only first-launch warnings, not data; every write is “temp file → atomic replace → backup”.
+- macOS builds currently carry only ad-hoc integrity signatures, without Developer ID distribution signing or Apple notarization. Gatekeeper can block an updated app, not just its first install. SHA-256 integrity, code-signature integrity and permission to launch are separate checks. Replacing the app should preserve Application Support data.
 
 ---
 
 ## 8. Upgrade, backup and uninstall
 
 - **Upgrade**: quit the app → on Windows replace the whole `SRCRec\` folder (keep `.exe.config`); on macOS overwrite the old app in `Applications`. Config, logs, download cache and personal files are preserved.
-- **In-app update**: “Check updates” at the bottom-left of the Windows sidebar and at the bottom-left of the macOS window reads the latest Release, downloads the package and verifies it against `SHA256SUMS.txt`; after exit only program files are replaced and the app restarts. `PersonalWorkspaceSRRec`, `References`, `*.json` and macOS `Application Support` are never deleted; the previous exe is kept as `SRPRecorder2027.exe.previous`.
-- **Migration marker**: `data_version.txt` stays `0.2.0`; cleanup runs only when upgrading from an older release and never repeats on 0.2.10.
+- **In-app update**: Windows continues to download, verify and replace program files after exit. Mac 0.2.11 now uses the same verified system-CA context for updater and sync requests. Current ad-hoc builds open the verified DMG for manual replacement rather than promising unattended installation/relaunch. Developer ID builds can use the automatic helper, which checks the new app’s developer identity and Gatekeeper assessment. Read-only, disk-image and App Translocation locations fall back to manual installation. Users whose older update check fails can download a DMG in their browser, quit the app and replace the app in Applications.
+- **Migration marker**: `data_version.txt` stays `0.2.0`; cleanup runs only when upgrading from an older release and never repeats on 0.2.11.
 - **Backup**: copy the whole `SRCRec\` folder (Windows) or `~/Library/Application Support/ResearchProgressRecorder/` (macOS).
 - **Uninstall**: run `卸载SRPRecorder2027.exe` on Windows (research files kept by default); run `uninstall-macos.command` from the DMG on macOS (app to Trash, data kept). Uninstalling does not revoke the token.
 
@@ -262,7 +261,7 @@ research-data/
 5. **Upload says “partly succeeded”?** Multi-file uploads are not transactional; retrying overwrites same-named files and never deletes older remote files.
 6. **“File exceeds 50 MiB”?** Split or compress it; GitHub also enforces a hard 100 MB per-file limit.
 7. **Word file will not open or creation fails?** Close the Word instance holding the file; make sure `Mat_Local` is writable.
-8. **macOS says the developer cannot be verified?** Right-click → Open, or run the `xattr` command in section 1.
+8. **Mac update fails?** An immediate CERTIFICATE_VERIFY_FAILED error concerns HTTPS certificates, not app signing. Use the official release page in your browser. For an unidentified-developer warning after download, follow section 1 personally. Stop and report damaged-app or malware warnings.
 9. **Two people edit the same file?** The later upload wins; divide work by member folder and back up important files.
 
 ---
@@ -278,4 +277,4 @@ research-data/
 
 ---
 
-*Document version: 0.2.10 · 2026-11-03 · maintained with `help/help.md` and the in-app Help page.*
+*Document version: 0.2.11 · 2026-11-03 · maintained with `help/help.md` and the in-app Help page.*
