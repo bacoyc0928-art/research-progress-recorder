@@ -74,7 +74,15 @@ jobs:
           "$app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
           codesign --verify --deep --strict --verbose=2 "$app"
           file "$app/Contents/MacOS/ResearchProgressRecorder"
-          "$app/Contents/MacOS/ResearchProgressRecorder" --verify-update-runtime | tee update-runtime.json
+          "$app/Contents/MacOS/ResearchProgressRecorder" --verify-update-runtime "$PWD/update-runtime.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result=json.loads(Path('update-runtime.json').read_text())
+          assert result['version']=='0.2.11' and result['tls_verified'] and result['checksum_download'], result
+          assert result['install_mode']=='unnotarized-build', result
+          print(result)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -128,6 +136,12 @@ jobs:
           sha256sum research-progress-recorder-0.2.11-Windows.zip research-progress-recorder-0.2.11-macOS-arm64.dmg research-progress-recorder-0.2.11-macOS-x64.dmg > SHA256SUMS.txt
           cd ..
           gh release view v0.2.11 >/dev/null 2>&1 || gh release create v0.2.11 --target "$GITHUB_SHA" --latest --title 'SRPRecorder2027 0.2.11 · 公开测试版 / Public Test' --notes-file RELEASE_NOTES.md
+          old=$(gh api repos/${{ github.repository }}/git/ref/tags/v0.2.11 --jq '.object.sha')
+          if [ "$old" != "$GITHUB_SHA" ]; then
+            test "$old" = '2c0c0535c827ac6608032e0810227bdecb15e0cd'
+            gh api --method PATCH repos/${{ github.repository }}/git/refs/tags/v0.2.11 -f sha="$GITHUB_SHA" -F force=true
+          fi
+          gh release edit v0.2.11 --latest --notes-file RELEASE_NOTES.md
           gh release upload v0.2.11 \
             release-assets/research-progress-recorder-0.2.11-Windows.zip \
             release-assets/research-progress-recorder-0.2.11-macOS-arm64.dmg \

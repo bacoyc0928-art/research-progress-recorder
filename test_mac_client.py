@@ -16,6 +16,17 @@ m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 OLD='2026-10-20T10:00:00.0000000Z'; NEW='2026-10-20T10:00:00.0000001Z'
 def entry(ident,title='A',updated=OLD): return dict(Id=ident,Title=title,Updated=updated,Category='',Content='',Date='2026-10-20',Progress=0)
 class SyncTests(unittest.TestCase):
+    def test_frozen_update_probe_writes_result_without_console(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target=Path(tmp)/'result.json'
+            context=SimpleNamespace(check_hostname=True,verify_mode=ssl.CERT_REQUIRED)
+            release=dict(tag_name='v0.2.11',assets=[dict(name='SHA256SUMS.txt',browser_download_url='https://example.invalid/sums')])
+            checksum=('a'*64+'  app.dmg').encode()
+            with patch.object(m,'network_context',return_value=context), patch.object(m,'release_info',return_value=release), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(checksum)), patch.object(m,'app_bundle_path',return_value=None):
+                m.verify_update_runtime(target)
+            result=m.json.loads(target.read_text())
+            self.assertTrue(result['tls_verified']); self.assertTrue(result['checksum_download']); self.assertEqual(result['version'],m.VERSION)
+
     def test_updater_and_sync_use_verified_system_ca_context_on_macos(self):
         with patch.object(m.sys,'platform','darwin'), patch.object(m.Path,'is_file',return_value=True), patch.object(m.ssl,'create_default_context') as create:
             context=m.network_context()

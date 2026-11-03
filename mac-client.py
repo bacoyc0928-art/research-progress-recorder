@@ -1766,7 +1766,7 @@ class Client:
             self.ttk.Button(win,text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
         self.run(work,done)
 
-def verify_update_runtime():
+def verify_update_runtime(output=None):
     """Release gate: test the bundled TLS runtime without opening a user workspace."""
     context=network_context()
     if not context.check_hostname or context.verify_mode!=ssl.CERT_REQUIRED:
@@ -1780,13 +1780,16 @@ def verify_update_runtime():
     if not re.search(r'^[0-9a-fA-F]{64}\s+\S+',content,re.MULTILINE):
         raise RuntimeError('Public checksum asset is not readable')
     plan=update_install_plan(app_bundle_path())
-    print(json.dumps(dict(version=VERSION,platform=sys.platform,architecture=platform.machine(),
-                         tls_verified=True,release=release.get('tag_name'),checksum_download=True,
-                         install_mode=plan['reason'])))
+    result=dict(version=VERSION,platform=sys.platform,architecture=platform.machine(),
+                tls_verified=True,release=release.get('tag_name'),checksum_download=True,
+                install_mode=plan['reason'])
+    if output: Path(output).write_text(json.dumps(result,indent=2),encoding='utf-8')
+    else: print(json.dumps(result))
 
 def main():
     if '--verify-update-runtime' in sys.argv:
-        verify_update_runtime(); return
+        index=sys.argv.index('--verify-update-runtime')
+        verify_update_runtime(sys.argv[index+1] if len(sys.argv)>index+1 else None); return
     import tkinter as tk
     root=tk.Tk(); root.withdraw()
     try:
