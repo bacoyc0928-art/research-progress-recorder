@@ -179,7 +179,7 @@ class FileChannels:
             except urllib.error.HTTPError as error:
                 if error.code != 404: raise
                 sha = None
-            body = {'message': 'upload: SRPRecorder2027 0.2.9', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
+            body = {'message': 'upload: SRPRecorder2027 0.2.10', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
             if sha: body['sha'] = sha
             try: self.api.request('PUT', self.api.endpoint(path), body); return
             except urllib.error.HTTPError as error:
@@ -193,7 +193,7 @@ class FileChannels:
         for name in names:
             path = 'team/' + login + '/references/' + name
             data = self.api.request('GET', self.api.endpoint(path) + '?ref=' + urllib.parse.quote(self.api.branch, safe=''))
-            body = {'message': 'remove: SRPRecorder2027 0.2.9', 'branch': self.api.branch, 'sha': data['sha']}
+            body = {'message': 'remove: SRPRecorder2027 0.2.10', 'branch': self.api.branch, 'sha': data['sha']}
             self.api.request('DELETE', self.api.endpoint(path), body)
             if personal_folder:
                 local = local_reference_copy(personal_folder, name)
