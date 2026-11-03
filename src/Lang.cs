@@ -19,7 +19,7 @@ namespace SRLogbook
             { "验证并保存配置", "Validate and Save" },
             { "从 GitHub 下载他人内容", "Download team files" },
             { "从 GitHub 下载默认资料库", "Download default library" },
-            { "上传本地进度", "Upload progress" },
+            { "上传本地记录", "Upload progress" },
             { "撤除我上传的参考资料", "Remove my refs" },
             { "撤除所选", "Remove Selected" },
             { "撤除参考资料", "Remove References" },
@@ -37,17 +37,17 @@ namespace SRLogbook
             { "显示", "Show" },
             { "隐藏", "Hide" },
             { "已登录 GitHub", "Signed in with GitHub" },
-            { "本地进度文件夹", "Local Progress Folder" },
+            { "本地记录文件夹", "Local Records Folder" },
             { "打开本地资料文件夹", "Open Progress Folder" },
-            { "所有本地进度内容都存放在这个文件夹；未选择时无法进入“团队同步”。", "Create documents here, then upload this folder from Team Sync." },
-            { "每位成员使用自己的 GitHub 账号和访问密钥。可下载成员文件或默认资料库，并上传本人选择的参考文件、本地进度文件夹；每个文件最大 50 MiB。", "Use your own GitHub account/token. Download team/default files; upload selected references or your progress folder (50 MiB per file)." },
+            { "所有本地记录内容都存放在这个文件夹；未选择时无法进入“进度同步”。", "Create documents here, then upload this folder from Progress Sync." },
+            { "每位成员使用自己的 GitHub 账号和访问密钥。可下载成员文件或默认资料库，并上传本人选择的参考文件、本地记录文件夹；每个文件最大 50 MiB。", "Use your own GitHub account/token. Download team/default files; upload selected references or your progress folder (50 MiB per file)." },
             { "他人内容下载到 PersonalWorkspaceSRRec\\Public_Temp（退出即清空）。", "Others' files go to PersonalWorkspaceSRRec\\Public_Temp (cleared on exit)." },
             { "已连接 GitHub 账号", "Connected to GitHub account" },
             { "团队成员", "Team member" },
             { "请先在左下角登录 GitHub 账号。", "Sign in at the bottom-left first." },
             { "写下要告诉全组的信息；发布后所有人登录即可看到，已阅的帖子会收进右上角“历史记录”。", "Write a note for the whole team; once posted everyone signed in can read it. Read posts move to History." },
             { "查看活动日志", "Activity log" },
-            { "登录后在团队同步页操作即可；仓库已绑定，无需填写任何配置。", "Operate from Team Sync after signing in; the repository is already bound." },
+            { "登录后在进度同步页操作即可；仓库已绑定，无需填写任何配置。", "Operate from Progress Sync after signing in; the repository is already bound." },
             { "项目成员", "Project member" },
             { "协作者（尚未上传）", "Collaborator (no upload yet)" },
             { "研究进展记录器", "Research Progress Recorder" },
@@ -63,7 +63,7 @@ namespace SRLogbook
             { "查看研究", "View Research" },
             { "仓库请填写为 owner/repo，例如 yourname/research-data。", "Repository must be owner/repo, e.g. yourname/research-data." },
             { "请填写 GitHub 访问密钥（fine-grained PAT）。", "Enter a GitHub access token (fine-grained PAT)." },
-            { "请先在“团队同步”页填写仓库并保存配置。", "Configure the repository on the Team Sync page first." },
+            { "请先在“进度同步”页填写仓库并保存配置。", "Configure the repository on the Progress Sync page first." },
             { "暂无改动记录。", "No change log yet." },
             { "文档已创建，是否现在打开？", "Document created. Open it now?" },
             { "请填写类别名称。", "Please enter a category name." },
@@ -79,16 +79,19 @@ namespace SRLogbook
             { "错误", "Error" },
             { "研究进展记录器 · Synchrotron Radiation Project 2027", "Research Progress Recorder · Synchrotron Radiation Project 2027" },
             { "项目概览", "Project Overview" },
-            { "团队研究", "Team Research" },
+            { "成员资料", "Members" },
+            { "我的参考资料", "My References" },
+            { "打开 Reference", "Open Reference" },
+            { "（未登录）", "(Not signed in)" },
             { "个人研究", "Personal" },
             { "选择个人文件夹", "Choose folder" },
             { "打开个人文件夹", "Open folder" },
-            { "团队同步（GitHub 仓库）", "Team Sync (GitHub)" },
+            { "进度同步（GitHub 仓库）", "Progress Sync (GitHub)" },
             { "上传参考资料", "Upload refs" },
             { "上传个人研究", "Upload My Research" },
             { "参考文献与资料", "References & Materials" },
-            { "本地进度", "Local Progress" },
-            { "团队同步", "Team Sync" },
+            { "本地记录", "Local Records" },
+            { "进度同步", "Progress Sync" },
             { "使用说明", "Help" },
             { "研究日志", "Research Log" },
             { "研究类别", "Categories" },
@@ -125,7 +128,7 @@ namespace SRLogbook
             { "正在同步…", "Syncing…" },
             { "正在读取团队成员…", "Reading team members…" },
             { "正在连接 GitHub…", "Connecting to GitHub…" },
-            { "请先在“团队同步”页配置仓库和访问密钥。", "Configure repository and token on the Team Sync page first." },
+            { "请先在“进度同步”页配置仓库和访问密钥。", "Configure repository and token on the Progress Sync page first." },
             { "还没有记录。切换到“研究日志”开始第一条。", "No entries yet. Open Research Log to add the first one." },
             { "远程文件不存在。", "Remote file does not exist." },
             { "连接失败，详见日志。", "Connection failed. See log." },
@@ -262,19 +265,17 @@ namespace SRLogbook
         public static string T(string s)
         {
             if (string.IsNullOrEmpty(s)) return s;
-            if (s == "Quick Post") return s;   // 该栏目名按用户要求只保留英文
-            if (s.IndexOf(" / ", StringComparison.Ordinal) >= 0) return s;
+            if (s == "Quick Post") return s;
             string other;
-            if (exact.TryGetValue(s, out other)) return s + " / " + other;
-            if (rev.TryGetValue(s, out other)) return other + " / " + s;
-            string original = s;
-            for (int i = 0; i < subs.GetLength(0); i++)
-                if (s.IndexOf(subs[i, 0], StringComparison.Ordinal) >= 0)
-                    s = s.Replace(subs[i, 0], subs[i, 0] + " / " + subs[i, 1]);
-            if (!string.Equals(s, original, StringComparison.Ordinal)) return s;
-            for (int i = 0; i < revSubs.GetLength(0); i++)
-                if (s.IndexOf(revSubs[i, 0], StringComparison.Ordinal) >= 0)
-                    s = s.Replace(revSubs[i, 0], revSubs[i, 1] + " / " + revSubs[i, 0]);
+            if (!En)
+            {
+                if (exact.ContainsKey(s)) return s;
+                int zh = s.IndexOf(" / ", StringComparison.Ordinal);
+                return zh > 0 ? s.Substring(0, zh) : s;
+            }
+            if (exact.TryGetValue(s, out other)) return other;
+            int en = s.IndexOf(" / ", StringComparison.Ordinal);
+            if (en > 0) return s.Substring(en + 3);
             return s;
         }
 
@@ -285,7 +286,7 @@ namespace SRLogbook
 
 
 
-        private const string HelpBoth = "SRPRecorder2027 · 0.2.8 · 中英双语界面 / Bilingual UI\r\n" +
+        private const string HelpBoth = "SRPRecorder2027 · 0.2.9 · 中英双语界面 / Bilingual UI\r\n" +
             "数据架构与使用说明 / Data architecture and usage guide\r\n" +
             "\r\n" +
             "【0】总览 / Overview\r\n" +
@@ -297,12 +298,12 @@ namespace SRLogbook
             "\r\n" +
             "同步是手动的：上传＝把勾选的文件复制到远端；下载＝把远端文件复制到本机（临时区或默认库）。没有后台实时同步，也没有自动冲突合并。\r\n" +
             "Sync is manual: upload copies checked files to the remote; download copies remote files to this machine (temp area or default library). There is no background sync and no automatic conflict merging.\r\n" +
-            "第一次使用：左下角登录（可勾选“记住登录”，设置 6 位 PIN）→ 团队研究刷新成员 → 本地进度选择专用文件夹 → 团队同步按需上传/下载。\r\n" +
-            "First run: sign in at the bottom-left (optionally tick Remember and set a 6-digit PIN) → refresh members on Team Research → pick a dedicated folder on Local Progress → upload/download from Team Sync.\r\n" +
+            "第一次使用：左下角登录（可勾选“记住登录”，设置 6 位 PIN）→ 成员资料刷新成员 → 本地记录选择专用文件夹 → 进度同步按需上传/下载。\r\n" +
+            "First run: sign in at the bottom-left (optionally tick Remember and set a 6-digit PIN) → refresh members on Members → pick a dedicated folder on Local Records → upload/download from Progress Sync.\r\n" +
             "\r\n" +
             "【1】Windows 本机目录 / Windows local layout\r\n" +
             "SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）\r\n" +
-            "├─ SRPRecorder2027.exe             程序 0.2.8\r\n" +
+            "├─ SRPRecorder2027.exe             程序 0.2.9\r\n" +
             "├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留\r\n" +
             "├─ research_log.json               旧版研究记录\r\n" +
             "├─ workspace.json                  工作区路径\r\n" +
@@ -314,8 +315,8 @@ namespace SRLogbook
             "├─ help_local.md                   使用说明本机草稿\r\n" +
             "├─ References\\\r\n" +
             "│  └─ Default\\                    团队默认资料库镜像（只读）\r\n" +
-            "└─ PersonalWorkspaceSRRec\\        默认本地进度文件夹\r\n" +
-            "   ├─ Mat_Local\\                  个人非参考资料（上传本地进度的默认来源）\r\n" +
+            "└─ PersonalWorkspaceSRRec\\        默认本地记录文件夹\r\n" +
+            "   ├─ Mat_Local\\                  个人非参考资料（上传本地记录的默认来源）\r\n" +
             "   ├─ Reference\\                  个人参考资料（上传参考资料的默认来源）\r\n" +
             "   ├─ Public_Temp\\                他人内容临时区（启动清空、退出清空）\r\n" +
             "   └─ references.json             上传后缓存的资料清单\r\n" +
@@ -340,7 +341,7 @@ namespace SRLogbook
             "team\\<账号>\\\r\n" +
             "├─ references\\<文件>               上传的参考资料本体\r\n" +
             "├─ references.json                 该账号的资料清单\r\n" +
-            "├─ progress\\<相对路径>             本地进度文件夹的镜像\r\n" +
+            "├─ progress\\<相对路径>             本地记录文件夹的镜像\r\n" +
             "└─ profile.json                    首次上传时自动创建\r\n" +
             "default\\<文件>                     团队默认资料库（成员只读）\r\n" +
             "logs\\public\\activity.json          公开活动日志（≤2000 条，全员可见）\r\n" +
@@ -354,7 +355,7 @@ namespace SRLogbook
             "\r\n" +
             "【4】同步动作与数据流向 / Sync actions and data flow\r\n" +
             "上传参考资料 Upload refs：Reference\\ → 勾选 → team\\<我>\\references\\ + references.json（同时在本机 Reference 留一份副本 / also keeps a local copy）\r\n" +
-            "上传本地进度 Upload progress：Mat_Local\\ → 勾选 → team\\<我>\\progress\\<相对路径>（按进度文件夹的相对路径镜像 / mirrors the relative path）\r\n" +
+            "上传本地记录 Upload progress：Mat_Local\\ → 勾选 → team\\<我>\\progress\\<相对路径>（按进度文件夹的相对路径镜像 / mirrors the relative path）\r\n" +
             "下载他人内容 Download team：team\\<成员>\\ → Public_Temp\\<成员>\\（退出即清空 / cleared on exit）\r\n" +
             "下载默认库 Download default：default\\ → References\\Default\\（覆盖前保留 .bak-时间戳 / keeps a .bak copy）\r\n" +
             "撤除参考资料 Remove refs：只删本人上传的文件与清单条目，团队区立即不可下载；本机 Reference 中的副本需自行清理 / removes your own remote files and manifest entries only; delete local copies manually\r\n" +
@@ -364,8 +365,8 @@ namespace SRLogbook
             "【5】清理、保留与升级 / Cleanup, retention and upgrade\r\n" +
             "- Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。\r\n" +
             "- References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。\r\n" +
-            "- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.8 不会重复清理。\r\n" +
-            "- 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。\r\n" +
+            "- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.9 不会重复清理。\r\n" +
+            "- 升级不会删除本地记录文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。\r\n" +
             "- 远端上传只新增或覆盖，不自动删除旧文件。\r\n" +
             "Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.\r\n" +
             "\r\n" +
@@ -378,7 +379,7 @@ namespace SRLogbook
             "\r\n" +
             "【7】本页 / This help page\r\n" +
             "本页可编辑：点“上传到 GitHub”写入 help\\help.md，全员登录后读到同一份，并在 help\\changelog.json 留下改动日志；“恢复默认”回到本文件，“读取云端版本”重新拉取。\r\n" +
-            "Windows 左下侧栏（登录面板下方）与 macOS 窗口底部左侧的“检查更新 / Check updates”会从 GitHub 读取最新版本、按 SHA-256 校验后下载，重启时只替换程序文件；本地进度、参考资料与配置不会被删除。两处都显示当前版本号。\r\n" +
+            "Windows 左下侧栏（登录面板下方）与 macOS 窗口底部左侧的“检查更新 / Check updates”会从 GitHub 读取最新版本、按 SHA-256 校验后下载，重启时只替换程序文件；本地记录、参考资料与配置不会被删除。两处都显示当前版本号。\r\n" +
             "This page is editable: Upload to GitHub writes help\\help.md for everyone and appends help\\changelog.json; Restore Default returns to this built-in text; Load From GitHub re-fetches the cloud copy.\r\n" +
             "“Check updates” in the bottom-left of the sidebar on Windows and at the bottom-left of the window on macOS downloads the latest release from GitHub, verifies its SHA-256 and replaces only program files after restart; local progress, references and settings are not touched. Both show the current version.";
 
@@ -418,8 +419,20 @@ namespace SRLogbook
         }
 
         /// <summary>界面固定中英并显，不再读取/保存语言偏好；保留方法仅为兼容旧调用。</summary>
-        public static void Load(string appDir) { En = false; }
+        public static void Load(string appDir)
+        {
+            try
+            {
+                string path = Path.Combine(appDir, "lang.txt");
+                if (File.Exists(path)) En = File.ReadAllText(path).Trim().Equals("en", StringComparison.OrdinalIgnoreCase);
+            }
+            catch { }
+        }
 
-        public static void Save(string appDir) { En = false; }
+        public static void Save(string appDir)
+        {
+            try { File.WriteAllText(Path.Combine(appDir, "lang.txt"), En ? "en" : "zh", new UTF8Encoding(false)); }
+            catch { }
+        }
     }
 }
