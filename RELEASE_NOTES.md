@@ -1,4 +1,4 @@
-# SRPRecorder2027 0.2.9 · 公开测试版 / Public Test
+# SRPRecorder2027 0.2.10 · 公开测试版 / Public Test
 
 发布日期 / Released: 2026-11-03
 
@@ -6,48 +6,33 @@
 
 | 系统 | 文件 | 要求 |
 | --- | --- | --- |
-| Windows 10/11 | research-progress-recorder-0.2.9-Windows.zip | .NET Framework 4.8 |
-| Apple Silicon / M 系列 | research-progress-recorder-0.2.9-macOS-arm64.dmg | macOS 14+ |
-| Intel Mac | research-progress-recorder-0.2.9-macOS-x64.dmg | macOS 15+ |
+| Windows 10/11 | research-progress-recorder-0.2.10-Windows.zip | .NET Framework 4.8 |
+| Apple Silicon / M 系列 | research-progress-recorder-0.2.10-macOS-arm64.dmg | macOS 14+ |
+| Intel Mac | research-progress-recorder-0.2.10-macOS-x64.dmg | macOS 15+ |
 
 三个文件都在本 Release 的 Assets 里，另有 `SHA256SUMS.txt` 可核对摘要。下载不需要登录，也不需要令牌。
 
 ## 安装 / Install
 
 - **Windows**：关闭旧程序 → 解压 ZIP 到自己的可写文件夹 → 覆盖旧目录 → 运行 `SRCRec\SRPRecorder2027.exe`。必须保留随 exe 的 `.exe.config`。
-- **macOS**：打开对应芯片的 DMG → 把 `ResearchProgressRecorder.app` 拖进 Applications 覆盖旧版 → 弹出镜像。首次打开若被系统拦截，右键 →“打开”。
+- **macOS**：打开对应芯片的 DMG → 把 `ResearchProgressRecorder.app` 拖进 Applications 覆盖旧版 → 弹出镜像。
 
-可直接覆盖任何旧版本；配置、日志、下载缓存与个人资料保留。0.2.5 起的版本可在程序内「检查更新」升级。
+可直接覆盖任何旧版本；配置、日志、下载缓存与个人资料保留。0.2.5 起可在程序内「检查更新」升级。
 
-## 0.2.9 主要变化
+## 0.2.10 主要变化
 
-### 成员列表与连接状态（Windows + macOS）
+### 「下载他人内容」列出全部成员
 
-- **macOS 修复只显示自己**：成员列表现在 = 本人 ∪ 已上传成员 ∪ 仓库协作者，全部成员都会出现。
-- **“已连接”按登录判定**：只要该账号在公开活动日志里出现过“登录”，就显示 **已连接 · 最近活动 时间**（绿色）。
-- 其余状态：**已上传 · 无登录记录**、**已加入 · 未连接**、**待接受邀请**（仅所有者可见）。
-- 自己的卡片显示“已连接 GitHub 账号”；进度同步页右上角也显示自己的连接状态。
-
-### 界面改名
-
-| 旧 | 新 |
-|---|---|
-| 团队研究 | **成员资料 / Members** |
-| 团队同步 | **进度同步 / Progress Sync** |
-| 本地进度 | **本地记录 / Local Records** |
-
-### 本地记录页
-
-- 三个固定文件夹改为功能卡片：工作资料 `Mat_Local`、个人参考资料 `Reference`、他人内容（临时）`Public_Temp`，标题是功能名、副标题保留原名与用途。
-- 新建文档保存到 **`Mat_Local`**，按钮下方有说明；下方列表只列 `Mat_Local` 内容。
-
-### 中英文切换
-
-- Windows：左上角 `SR` 旁 **EN / 中文** 按钮；macOS：页头右侧；切换后单语显示并记住偏好（macOS 会重启应用）。
+- 之前只列 `team/` 下已上传的成员；如果其他成员都没上传，列表就是空的。
+- 现在列表 = 已上传成员 ∪ 仓库协作者 ∪ 待接受邀请者：
+  - 有内容：`账号 · references: N · progress ✓/—`
+  - 无内容：`账号 · 尚未上传 / no upload yet`
+- 勾选无内容的成员不会下载任何文件；真正有内容的成员才会计入下载数量。
+- Windows 与 macOS 同步修复。
 
 ### 保留
 
-- 左下角「检查更新」；记住登录 + 6 位 PIN；不删除用户数据。
+- 成员资料页的连接状态（登录过即“已连接”）、界面改名、本地记录卡片、中英文切换、左下角检查更新、记住登录 + 6 位 PIN。
 
 ## 限制 / Limitations
 
