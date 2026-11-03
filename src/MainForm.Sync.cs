@@ -662,13 +662,33 @@ namespace SRLogbook
             try
             {
                 string login = await Task.Run(() => GitHubSync.GetUserLogin(token));
-                List<string> members = await Task.Run(() => GitHubSync.ListDir(owner, repo, "team", branch, token));
+                List<string> uploaded = await Task.Run(() => GitHubSync.ListDir(owner, repo, "team", branch, token));
+                List<string> members = new List<string>(uploaded);
+                try
+                {
+                    List<string> roster = await Task.Run(() => GitHubSync.ListCollaborators(owner, repo, branch, token));
+                    foreach (string r in roster)
+                        if (!members.Exists(x => string.Equals(x, r, StringComparison.OrdinalIgnoreCase))) members.Add(r);
+                }
+                catch { }
+                try
+                {
+                    List<string> invites = await Task.Run(() => GitHubSync.ListPendingInvitations(owner, repo, branch, token));
+                    foreach (string r in invites)
+                        if (!members.Exists(x => string.Equals(x, r, StringComparison.OrdinalIgnoreCase))) members.Add(r);
+                }
+                catch { }
                 members.RemoveAll(m => m.Equals(login, StringComparison.OrdinalIgnoreCase));
                 members.Sort(StringComparer.OrdinalIgnoreCase);
-                if (members.Count == 0) { lblSStatus.Text = "没有其他成员内容 / No other member content."; return; }
+                if (members.Count == 0) { lblSStatus.Text = "没有其他成员或待接受邀请 / No other members."; return; }
                 Dictionary<string, string> display = new Dictionary<string, string>();
                 foreach (string member in members)
                 {
+                    if (!uploaded.Exists(x => string.Equals(x, member, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        display[member] = member + "  ·  尚未上传 / no upload yet";
+                        continue;
+                    }
                     int refCount = 0; bool hasProgress = false;
                     try
                     {
@@ -679,7 +699,7 @@ namespace SRLogbook
                     display[member] = member + "  ·  references: " + refCount + (hasProgress ? "  ·  progress ✓" : "  ·  progress —");
                 }
                 List<string> picked = PickItems("下载他人内容 / Download team files",
-                    "勾选要下载的成员；只下载勾选的成员，未勾选的不动。 / Check the members to download; everything else stays untouched.",
+                    "列出全部成员；未上传的标注“尚未上传”，勾选后只下载有内容的成员。 / All members are listed; those without uploads are marked. Only checked members with files are downloaded.",
                     Rows(members, m => display[m]), false);
                 if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
                 int n = 0;
