@@ -13,4 +13,7 @@
 
 发布页 / Releases: https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest
 
-完整使用说明 / Complete guide: [使用说明.md](使用说明.md)
+完整使用说明 / Complete guide:
+
+- 中文：[使用说明.md](使用说明.md)
+- English: [使用说明-EN.md](使用说明-EN.md)
