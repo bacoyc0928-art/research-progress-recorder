@@ -153,6 +153,28 @@ namespace SRLogbook
             return logins;
         }
 
+        /// <summary>列出尚未接受的仓库邀请（需要所有者/管理员令牌）。</summary>
+        public static List<string> ListPendingInvitations(string owner, string repo, string branch, string token)
+        {
+            List<string> logins = new List<string>();
+            try
+            {
+                string url = API + "/repos/" + Uri.EscapeDataString(owner) + "/" + Uri.EscapeDataString(repo)
+                    + "/invitations?per_page=100";
+                object[] arr = SyncData.Serializer().Deserialize<object[]>(Request("GET", url, token, null));
+                if (arr == null) return logins;
+                foreach (object o in arr)
+                {
+                    Dictionary<string, object> d = o as Dictionary<string, object>;
+                    if (d == null) continue;
+                    Dictionary<string, object> invitee = d.ContainsKey("invitee") ? d["invitee"] as Dictionary<string, object> : null;
+                    if (invitee != null && invitee.ContainsKey("login")) logins.Add(Convert.ToString(invitee["login"]));
+                }
+            }
+            catch { }
+            return logins;
+        }
+
         public static bool EnsureProfile(string owner, string repo, string branch, string token, string login)
         {
             string sha = null;
