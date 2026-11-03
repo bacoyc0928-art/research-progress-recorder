@@ -192,6 +192,12 @@ namespace SRLogbook
             lbl.Font = sel ? Theme.FB(10.5f) : Theme.F(10.5f);
         }
 
+        public override string Text
+        {
+            get { return lbl == null ? base.Text : lbl.Text; }
+            set { base.Text = value; if (lbl != null) lbl.Text = value; }
+        }
+
         /// <summary>栏目未读红点：有新内容时在右侧画一个红点，进入该栏目后清掉。</summary>
         private bool badge;
         public bool HasBadge { get { return badge; } }
@@ -374,6 +380,9 @@ namespace SRLogbook
         private Button usePinButton;
         private Button updateButton;
         private Label versionLabel;
+        private Button langButton;
+        private string[] navTexts;
+        private string[] pageTitles;
         private bool savedLoginExists;
         private string savedLoginName;
         private bool useTokenMode;
@@ -433,7 +442,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.8";
+            this.Text = "SRPRecorder2027 · 0.2.9";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
@@ -714,6 +723,19 @@ namespace SRLogbook
             brand.SetBounds(22, 22, 60, 36);
             sidebar.Controls.Add(brand);
 
+            langButton = new Button();
+            langButton.Text = Lang.En ? "中文" : "EN";
+            langButton.Font = Theme.F(8f);
+            langButton.FlatStyle = FlatStyle.Flat;
+            langButton.FlatAppearance.BorderColor = Color.FromArgb(90, 106, 134);
+            langButton.FlatAppearance.BorderSize = 1;
+            langButton.BackColor = Color.FromArgb(48, 62, 92);
+            langButton.ForeColor = Color.White;
+            langButton.Cursor = Cursors.Hand;
+            langButton.SetBounds(150, 26, 78, 26);
+            langButton.Click += delegate { ToggleLanguage(); };
+            sidebar.Controls.Add(langButton);
+
             Label title = new Label();
             title.Text = "SRPRecorder2027";
             title.Font = Theme.FB(11f);
@@ -728,11 +750,11 @@ namespace SRLogbook
             sidebar.Controls.Add(divider);
 
             navs = new SideButton[6];
-            string[] texts = new string[] { "团队研究 / Team", "Quick Post", "参考资料 / Refs", "本地进度 / Progress", "团队同步 / Sync", "使用说明 / Help" };
-            for (int i = 0; i < texts.Length; i++)
+            navTexts = new string[] { "成员资料 / Members", "Quick Post", "参考资料 / Refs", "本地记录 / Local Records", "进度同步 / Progress Sync", "使用说明 / Help" };
+            for (int i = 0; i < navTexts.Length; i++)
             {
                 int idx = i;
-                navs[i] = new SideButton(texts[i], 136 + i * 46, 252);
+                navs[i] = new SideButton(Lang.T(navTexts[i]), 136 + i * 46, 252);
                 navs[i].Clicked += delegate { SetPage(idx); };
                 sidebar.Controls.Add(navs[i]);
             }
@@ -934,6 +956,29 @@ namespace SRLogbook
             return false;
         }
 
+        /// <summary>切换界面语言：静态控件按保存的原文重译，导航与页头单独刷新。</summary>
+        private void ToggleLanguage()
+        {
+            Lang.En = !Lang.En;
+            Lang.Save(appDir);
+            if (langButton != null) langButton.Text = Lang.En ? "中文" : "EN";
+            Lang.ApplyAll();
+            if (navs != null && navTexts != null)
+                for (int i = 0; i < navs.Length && i < navTexts.Length; i++)
+                {
+                    navs[i].Text = Lang.T(navTexts[i]);
+                    navs[i].Invalidate();
+                }
+            if (pageTitles != null && pageIndex >= 0 && pageIndex < pageTitles.Length)
+                lblHeaderTitle.Text = Lang.T(pageTitles[pageIndex]);
+            if (progList != null && progList.Columns.Count >= 3)
+            {
+                progList.Columns[0].Text = Lang.T("名称 / Name");
+                progList.Columns[1].Text = Lang.T("大小 / Size");
+                progList.Columns[2].Text = Lang.T("修改 / Modified");
+            }
+        }
+
         private Button SmallLoginButton(string text, int x, int y, int w)
         {
             Button b = new Button();
@@ -982,6 +1027,7 @@ namespace SRLogbook
             if (logoutButton != null) logoutButton.Visible = signed;
             if (helpEditor != null) helpEditor.ReadOnly = !signed;
             if (avatarPanel != null) avatarPanel.Invalidate();
+            UpdateGithubState();
             UpdateSyncActionState();
         }
 
@@ -1483,7 +1529,7 @@ namespace SRLogbook
 
             bFile.Visible = false;
             bFolder.Visible = false;
-            t.Text = "参考资料为只读；个人资料请在“团队同步”页上传。";
+            t.Text = "参考资料为只读；个人资料请在“进度同步”页上传。";
 
             flow = new FlowLayoutPanel();
             Application.AddMessageFilter(new WheelRouter(flow));
@@ -1664,7 +1710,7 @@ namespace SRLogbook
                 string notes = (rel.body ?? "").Trim();
                 if (notes.Length > 1200) notes = notes.Substring(0, 1200) + "…";
                 string ask = "发现新版本 " + rel.tag_name + "（当前 " + Updater.CurrentText() + "）。\n\n" + notes +
-                    "\n\n下载并在重启后安装？本地进度、参考资料与配置不会被删除。 / Download and install after restart? Local progress, references and settings are preserved.";
+                    "\n\n下载并在重启后安装？本地记录、参考资料与配置不会被删除。 / Download and install after restart? Local progress, references and settings are preserved.";
                 if (Msg.Show(ask, "检查更新", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
                 using (UpdateProgressForm form = new UpdateProgressForm(rel))
                 {
@@ -1729,7 +1775,7 @@ namespace SRLogbook
                 LoadHelpFromGitHub(false);
             if (idx == 4 && !Directory.Exists(LoadProgressFolder()))
             {
-                if (interactive) Msg.Show("请先在“本地进度”选择文件夹，否则无法进入团队同步。", "本地进度");
+                if (interactive) Msg.Show("请先在“本地记录”选择文件夹，否则无法进入进度同步。", "本地记录");
                 idx = 3;
             }
             pageIndex = idx;
@@ -1741,8 +1787,9 @@ namespace SRLogbook
                 pages[i].Visible = (i == idx);
                 navs[i].SetSelected(i == idx);
             }
-            string[] titles = new string[] { "团队研究", "Quick Post", "参考文献与资料", "本地进度", "团队同步", "使用说明" };
-            lblHeaderTitle.Text = titles[idx];
+            string[] titles = new string[] { "成员资料", "Quick Post", "参考文献与资料", "本地记录", "进度同步", "使用说明" };
+            pageTitles = titles;
+            lblHeaderTitle.Text = Lang.T(titles[idx]);
             if (idx == 0) RefreshTeamPage();
             if (idx == 1) RefreshPostsPage();
             if (idx == 2) RebuildRefs();
@@ -1813,7 +1860,7 @@ namespace SRLogbook
             }
         }
 
-        /// <summary>拉一次远端状态，算出各栏目是否有新内容（团队研究=成员变化，Quick Post=未读帖子，团队同步=活动日志变化）。</summary>
+        /// <summary>拉一次远端状态，算出各栏目是否有新内容（成员资料=成员变化，Quick Post=未读帖子，进度同步=活动日志变化）。</summary>
         private async void RefreshNews()
         {
             if (string.IsNullOrEmpty(sessionToken) || string.IsNullOrEmpty(sessionLogin)) return;
@@ -1838,10 +1885,10 @@ namespace SRLogbook
                 catch { }
                 sig[0] = "team:" + string.Join(",", members.ToArray());
                 sig[4] = "act:" + pub.Count + ":" + (pub.Count == 0 ? "-" : pub[pub.Count - 1].Time);
-                // 红点跟着“日志说的是哪个栏目”走，而不是一律红在团队同步。
+                // 红点跟着“日志说的是哪个栏目”走，而不是一律红在进度同步。
                 sig[1] = "posts:" + unread + "|" + Fingerprint(pub, "发布帖子", "删除帖子");
                 sig[2] = "refs:" + Fingerprint(pub, "上传参考资料", "撤除参考资料", "下载默认资料库");
-                sig[3] = "progress:" + Fingerprint(pub, "上传本地进度") + "|" + LocalFolderSignature();
+                sig[3] = "progress:" + Fingerprint(pub, "上传本地记录") + "|" + LocalFolderSignature();
                 sig[5] = "help:" + helpSha + "|" + Fingerprint(pub, "更新使用说明");
             }
             catch { return; }
@@ -1871,7 +1918,7 @@ namespace SRLogbook
             return count + ":" + last;
         }
 
-        /// <summary>本地进度文件夹（Mat_Local / Reference）的文件数与最新修改时间，用于本地进度栏目的红点。</summary>
+        /// <summary>本地记录文件夹（Mat_Local / Reference）的文件数与最新修改时间，用于本地记录栏目的红点。</summary>
         private string LocalFolderSignature()
         {
             try
@@ -2205,7 +2252,7 @@ namespace SRLogbook
         {
             if (r.Kind == "default" || r.Personal)
             {
-                Msg.Show("参考资料为只读；个人资料请在“团队同步”页重新上传。", "参考资料");
+                Msg.Show("参考资料为只读；个人资料请在“进度同步”页重新上传。", "参考资料");
                 return;
             }
             string p = Resolve(r);
