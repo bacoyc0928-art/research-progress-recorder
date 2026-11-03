@@ -144,6 +144,11 @@ class FileChannels:
                 path.write_bytes(self.get_bytes(remote + '/' + row['name']))
             else: raise ValueError('Remote links are not supported')
     def members(self): return [x['name'] for x in self.listing('team', True) if x.get('type') == 'dir']
+    def collaborators(self):
+        self.identity()
+        try: rows=self.api.request('GET', '/repos/' + self.api.repo + '/collaborators?per_page=100')
+        except urllib.error.HTTPError: return []
+        return [x.get('login') for x in rows if x.get('login')]
     def download_member(self, member, destination, references_only=False):
         member_folder(Path('.'), member)
         remote = 'team/' + member
@@ -174,7 +179,7 @@ class FileChannels:
             except urllib.error.HTTPError as error:
                 if error.code != 404: raise
                 sha = None
-            body = {'message': 'upload: SRPRecorder2027 0.2.8', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
+            body = {'message': 'upload: SRPRecorder2027 0.2.9', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
             if sha: body['sha'] = sha
             try: self.api.request('PUT', self.api.endpoint(path), body); return
             except urllib.error.HTTPError as error:
@@ -188,7 +193,7 @@ class FileChannels:
         for name in names:
             path = 'team/' + login + '/references/' + name
             data = self.api.request('GET', self.api.endpoint(path) + '?ref=' + urllib.parse.quote(self.api.branch, safe=''))
-            body = {'message': 'remove: SRPRecorder2027 0.2.8', 'branch': self.api.branch, 'sha': data['sha']}
+            body = {'message': 'remove: SRPRecorder2027 0.2.9', 'branch': self.api.branch, 'sha': data['sha']}
             self.api.request('DELETE', self.api.endpoint(path), body)
             if personal_folder:
                 local = local_reference_copy(personal_folder, name)
