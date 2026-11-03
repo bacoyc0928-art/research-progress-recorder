@@ -125,7 +125,7 @@ The sections are **Members, Quick Post, References & Materials, Local Records, P
 
 | Action | What it does | Destination |
 |---|---|---|
-| Download Team Files | Lists other members (with reference count and whether progress exists), downloads the checked ones | `PersonalWorkspaceSRRec\Public_Temp\<member>\` |
+| Download Team Files | Lists all members (those without uploads are marked), downloads the checked ones | `PersonalWorkspaceSRRec\Public_Temp\<member>\` |
 | Download Default Library | Lists `default/` files marked new/existing, downloads the checked ones | `References\Default\`, keeping `.bak-<timestamp>` before overwrite |
 | Upload References | Lists files in `Reference`; “Add files” for others; duplicate names rejected | `team\<login>\references\<file>` plus a merged `references.json` |
 | Upload Local Progress | Lists `Mat_Local` (falls back to the progress folder), uploads the checked files | `team\<login>\progress\<relative path>` |
