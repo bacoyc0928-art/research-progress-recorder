@@ -30,6 +30,7 @@ namespace SRLogbook
         private Button btnUpProgress;
         private Button btnRemoveRefs;
         private Label boundLabel;
+        private Label lblSyncAccount;
         private Label syncHint;
         private Button btnActivity;
 
@@ -49,7 +50,7 @@ namespace SRLogbook
             page.Controls.Add(card);
 
             Label h = new Label();
-            h.Text = "团队同步（GitHub 仓库）";
+            h.Text = "进度同步（GitHub 仓库）";
             h.Font = Theme.FB(13f);
             h.ForeColor = Theme.Navy;
             h.BackColor = Color.White;
@@ -73,6 +74,16 @@ namespace SRLogbook
             syncHint.SetBounds(24, 88, 860, 18);
             card.Controls.Add(syncHint);
 
+            lblSyncAccount = new Label();
+            lblSyncAccount.Font = Theme.FB(8.6f);
+            lblSyncAccount.ForeColor = Theme.TextMuted;
+            lblSyncAccount.BackColor = Color.White;
+            lblSyncAccount.TextAlign = ContentAlignment.MiddleRight;
+            lblSyncAccount.Text = "未连接 GitHub / Not connected";
+            lblSyncAccount.SetBounds(520, 20, 340, 22);
+            card.Controls.Add(lblSyncAccount);
+            lblSyncAccount.BringToFront();
+
             Label sc = new Label();
             sc.Text = "同步内容：";
             sc.Font = Theme.F(8.6f);
@@ -91,7 +102,7 @@ namespace SRLogbook
             btnDefault.Click += delegate { PullDefaultLibrary(); };
             btnUpRefs = SButton("上传参考资料", 24, 160, 240);
             btnUpRefs.Click += delegate { UploadRefsAction(); };
-            btnUpProgress = SButton("上传本地进度", 274, 160, 240);
+            btnUpProgress = SButton("上传本地记录", 274, 160, 240);
             btnUpProgress.Click += delegate { UploadProgressFolder(); };
             btnRemoveRefs = SButton("撤除我上传的参考资料", 24, 200, 330);
             btnRemoveRefs.Click += delegate { RemoveMyUploadedRefs(); };
@@ -230,7 +241,7 @@ namespace SRLogbook
             owner = repo = path = branch = token = "";
             if (string.IsNullOrEmpty(sessionToken))
             {
-                Msg.Show("请先在左下角登录 GitHub 账号。", "团队同步");
+                Msg.Show("请先在左下角登录 GitHub 账号。", "进度同步");
                 return false;
             }
             SyncConfig c = GitHubSync.LoadConfig(appDir);
@@ -325,7 +336,7 @@ namespace SRLogbook
             syncBusy = true;
             syncCard.Enabled = false;
             syncScope = ScopeString();
-            if (syncScope == "none") { syncBusy = false; syncCard.Enabled = true; Msg.Show("Select records or categories to sync.", "Team Sync"); return; }
+            if (syncScope == "none") { syncBusy = false; syncCard.Enabled = true; Msg.Show("Select records or categories to sync.", "Progress Sync"); return; }
             lblSStatus.Text = "正在同步…";
             try
             {
@@ -445,7 +456,7 @@ namespace SRLogbook
                 }
                 Persist();
                 RebuildRefs();
-                Msg.Show("已添加 " + added + " 条个人参考资料。", "团队同步");
+                Msg.Show("已添加 " + added + " 条个人参考资料。", "进度同步");
             }
         }
 
@@ -457,7 +468,7 @@ namespace SRLogbook
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             string folder = LoadPersonalFolder();
-            if (!Directory.Exists(folder)) { Msg.Show("请先在“团队研究”页选择个人文件夹；未选择时上传会失败。", "团队研究"); return; }
+            if (!Directory.Exists(folder)) { Msg.Show("请先在“成员资料”页选择个人文件夹；未选择时上传会失败。", "成员资料"); return; }
             syncBusy = true; syncCard.Enabled = false;
             try
             {
@@ -471,7 +482,7 @@ namespace SRLogbook
                     List<RefItem> mine = store.Refs.FindAll(x => x.Personal);
                     if (mine.Count == 0)
                     {
-                        Msg.Show("没有个人参考资料可上传。请先在“参考文献与资料”页添加个人资料。", "团队同步");
+                        Msg.Show("没有个人参考资料可上传。请先在“参考文献与资料”页添加个人资料。", "进度同步");
                         lblSStatus.Text = "没有个人参考资料。";
                         return;
                     }
@@ -500,7 +511,7 @@ namespace SRLogbook
             if (syncBusy || teamLoading) return;
             SyncConfig cfg = GitHubSync.LoadConfig(appDir);
             string token = sessionToken;
-            if (string.IsNullOrEmpty(token)) { Msg.Show("请先在左下角登录 GitHub 账号。", "团队同步"); return; }
+            if (string.IsNullOrEmpty(token)) { Msg.Show("请先在左下角登录 GitHub 账号。", "进度同步"); return; }
             syncBusy = true; Cursor = Cursors.WaitCursor;
             try
             {
@@ -516,9 +527,9 @@ namespace SRLogbook
                     foreach (string file in FileTransfers.UploadFiles(dest))
                         if (!store.Refs.Exists(x => x.Path == file)) { store.Refs.Add(new RefItem { Title = Path.GetFileName(file), Path = file, Kind = "file", Personal = true }); added++; }
                 }
-                Persist(); RebuildRefs(); Msg.Show("团队参考资料已下载，新增 " + added + " 条。", "团队研究");
+                Persist(); RebuildRefs(); Msg.Show("团队参考资料已下载，新增 " + added + " 条。", "成员资料");
             }
-            catch (Exception ex) { Msg.Show("合并失败；旧副本保留：" + ex.Message, "团队研究"); }
+            catch (Exception ex) { Msg.Show("合并失败；旧副本保留：" + ex.Message, "成员资料"); }
             finally { syncBusy = false; Cursor = Cursors.Default; }
         }
 
@@ -528,8 +539,8 @@ namespace SRLogbook
             string owner, repo, path, branch, token;
             if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
             string folder = Path.GetFullPath(LoadProgressFolder()).TrimEnd(Path.DirectorySeparatorChar);
-            if (!Directory.Exists(folder)) { Msg.Show("请先在“本地进度”选择文件夹 / Pick a progress folder first.", "本地进度"); return; }
-            if (SyncData.IsWithin(appDir, folder)) { Msg.Show("请选择专用进度文件夹，不能上传程序目录或其上级目录 / Choose a dedicated folder, not the program folder.", "本地进度"); return; }
+            if (!Directory.Exists(folder)) { Msg.Show("请先在“本地记录”选择文件夹 / Pick a progress folder first.", "本地记录"); return; }
+            if (SyncData.IsWithin(appDir, folder)) { Msg.Show("请选择专用进度文件夹，不能上传程序目录或其上级目录 / Choose a dedicated folder, not the program folder.", "本地记录"); return; }
             syncBusy = true; syncCard.Enabled = false;
             lblSStatus.Text = "正在列出可上传文件… / Listing files…";
             try
@@ -539,7 +550,7 @@ namespace SRLogbook
                 string sourceRoot = matLocal;
                 List<string> files = FileTransfers.UploadFiles(matLocal);
                 if (files.Count == 0) { sourceRoot = folder; files = FileTransfers.UploadFiles(folder); }
-                List<string> picked = PickItems("上传本地进度 / Upload local progress",
+                List<string> picked = PickItems("上传本地记录 / Upload local progress",
                     "默认列出 Mat_Local 里的文件；可勾选或用“添加文件”选别处，未勾选的不上传。 / Lists Mat_Local by default; check files or add others; unchecked files are not sent.",
                     Rows(files, f => FileTransfers.ProgressRelativePath(f, sourceRoot) + "  ·  " + Math.Max(1, new FileInfo(f).Length / 1024) + " KB"), true);
                 if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
@@ -555,11 +566,11 @@ namespace SRLogbook
                     n++;
                 }
                 SaveSyncConfig();
-                Log("已上传本地进度 " + n + " 个文件；其他远端文件保留，不自动删除 / Uploaded; remote older files kept.");
-                lblSStatus.Text = "本地进度上传完成 / Progress uploaded: " + n + " 个文件 / files";
-                await LogActivityAsync("上传本地进度 / Upload local progress", n + " 个文件 / files");
+                Log("已上传本地记录 " + n + " 个文件；其他远端文件保留，不自动删除 / Uploaded; remote older files kept.");
+                lblSStatus.Text = "本地记录上传完成 / Progress uploaded: " + n + " 个文件 / files";
+                await LogActivityAsync("上传本地记录 / Upload local progress", n + " 个文件 / files");
             }
-            catch (Exception ex) { Log("本地进度上传失败（可能已上传部分文件）/ Upload failed: " + ex.Message); lblSStatus.Text = "上传失败，详见日志 / Upload failed; see log."; }
+            catch (Exception ex) { Log("本地记录上传失败（可能已上传部分文件）/ Upload failed: " + ex.Message); lblSStatus.Text = "上传失败，详见日志 / Upload failed; see log."; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
         }
 
