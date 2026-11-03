@@ -9,7 +9,7 @@ namespace SRLogbook
 {
     public partial class MainForm
     {
-        /* ---------- 本地进度页的文件夹内容列表 ---------- */
+        /* ---------- 本地记录页的文件夹内容列表 ---------- */
         private ListView progList;
 
         /* ---------- 参考文献与资料（仅参考资料） ---------- */
@@ -24,7 +24,7 @@ namespace SRLogbook
             return page;
         }
 
-        /* ---------- 本地进度（仅：选文件夹 / 新建 docx / 打开文件夹） ---------- */
+        /* ---------- 本地记录（仅：选文件夹 / 新建 docx / 打开文件夹） ---------- */
 
         private TextBox txtProgPath;
 
@@ -64,7 +64,7 @@ namespace SRLogbook
             Panel page = new Panel();
             page.BackColor = Color.White;
             Panel card = new Panel();
-            card.SetBounds(0, 0, 880, 570);
+            card.SetBounds(0, 0, 880, 604);
             card.BackColor = Color.White;
             card.Paint += delegate(object s, PaintEventArgs e)
             {
@@ -73,41 +73,41 @@ namespace SRLogbook
             page.Controls.Add(card);
 
             Label h = new Label();
-            h.Text = "本地进度文件夹";
+            h.Text = "本地记录文件夹";
             h.Font = Theme.FB(13f);
             h.ForeColor = Theme.Navy;
             h.BackColor = Color.White;
-            h.SetBounds(Ui.S(24), Ui.S(18), Ui.S(400), Ui.S(28));
+            h.SetBounds(Ui.S(24), Ui.S(16), Ui.S(400), Ui.S(28));
             card.Controls.Add(h);
 
             Label hint = new Label();
-            hint.Text = "所有本地进度内容都存放在这个文件夹；未选择时无法进入“团队同步”。";
+            hint.Text = "所有本地记录内容都存放在这个文件夹；未选择时无法进入“进度同步”。";
             hint.Font = Theme.F(8.8f);
             hint.ForeColor = Theme.TextMuted;
             hint.BackColor = Color.White;
-            hint.SetBounds(Ui.S(24), Ui.S(52), Ui.S(800), Ui.S(24));
+            hint.SetBounds(Ui.S(24), Ui.S(48), Ui.S(800), Ui.S(22));
             card.Controls.Add(hint);
 
             txtProgPath = new TextBox();
             txtProgPath.ReadOnly = true;
             txtProgPath.Font = Theme.F(9.5f);
-            txtProgPath.SetBounds(Ui.S(24), Ui.S(96), Ui.S(620), Ui.S(30));
+            txtProgPath.SetBounds(Ui.S(24), Ui.S(84), Ui.S(620), Ui.S(30));
             card.Controls.Add(txtProgPath);
 
             Button bChoose = new Button();
-            bChoose.Text = "选择文件夹";
+            bChoose.Text = "选择文件夹 / Choose";
             bChoose.Font = Theme.F(9f);
             bChoose.FlatStyle = FlatStyle.Flat;
             bChoose.FlatAppearance.BorderSize = 0;
             bChoose.BackColor = Theme.Accent;
             bChoose.ForeColor = Color.White;
             bChoose.Cursor = Cursors.Hand;
-            bChoose.SetBounds(Ui.S(660), Ui.S(96), Ui.S(160), Ui.S(30));
+            bChoose.SetBounds(Ui.S(660), Ui.S(84), Ui.S(160), Ui.S(30));
             bChoose.Click += delegate { ChooseProgressFolder(); };
             card.Controls.Add(bChoose);
 
             Button bDoc = new Button();
-            bDoc.Text = "新建文档";
+            bDoc.Text = "新建文档 / New Document";
             bDoc.Font = Theme.F(9f);
             bDoc.FlatStyle = FlatStyle.Flat;
             bDoc.FlatAppearance.BorderSize = 1;
@@ -115,12 +115,12 @@ namespace SRLogbook
             bDoc.BackColor = Color.White;
             bDoc.ForeColor = Theme.TextMain;
             bDoc.Cursor = Cursors.Hand;
-            bDoc.SetBounds(Ui.S(24), Ui.S(150), Ui.S(220), Ui.S(40));
+            bDoc.SetBounds(Ui.S(24), Ui.S(128), Ui.S(220), Ui.S(40));
             bDoc.Click += delegate { CreateProgressDoc(); };
             card.Controls.Add(bDoc);
 
             Button bOpen = new Button();
-            bOpen.Text = "打开本地资料文件夹";
+            bOpen.Text = "打开工作资料 / Open Working Files";
             bOpen.Font = Theme.F(9f);
             bOpen.FlatStyle = FlatStyle.Flat;
             bOpen.FlatAppearance.BorderSize = 1;
@@ -128,20 +128,35 @@ namespace SRLogbook
             bOpen.BackColor = Color.White;
             bOpen.ForeColor = Theme.TextMain;
             bOpen.Cursor = Cursors.Hand;
-            bOpen.SetBounds(Ui.S(258), Ui.S(150), Ui.S(260), Ui.S(40));
+            bOpen.SetBounds(Ui.S(258), Ui.S(128), Ui.S(280), Ui.S(40));
             bOpen.Click += delegate { OpenProgressFolder(); };
             card.Controls.Add(bOpen);
 
+            Label note = new Label();
+            note.Text = "新建文档保存在 Mat_Local（工作资料文件夹） / New documents are saved to Mat_Local.";
+            note.Font = Theme.F(8.2f);
+            note.ForeColor = Theme.Accent;
+            note.BackColor = Color.White;
+            note.SetBounds(Ui.S(24), Ui.S(172), Ui.S(800), Ui.S(20));
+            card.Controls.Add(note);
+
+            AddWorkspaceCard(card, 24, "工作资料 / Working files", "Mat_Local",
+                "上传本地记录的默认来源 / default source for progress upload", AppPaths.MatLocal(appDir));
+            AddWorkspaceCard(card, 306, "个人参考资料 / My references", "Reference",
+                "上传参考资料的默认来源 / default source for references", AppPaths.ReferenceDir(appDir));
+            AddWorkspaceCard(card, 588, "他人内容（临时） / Others (temp)", "Public_Temp",
+                "下载他人内容，退出即清空 / team downloads, cleared on exit", AppPaths.PublicTemp(appDir));
+
             Label fh = new Label();
-            fh.Text = "文件夹内容 / Files";
+            fh.Text = "工作资料文件 / Working files";
             fh.Font = Theme.FB(10.5f);
             fh.ForeColor = Theme.Navy;
             fh.BackColor = Color.White;
-            fh.SetBounds(Ui.S(24), Ui.S(204), Ui.S(320), Ui.S(24));
+            fh.SetBounds(Ui.S(24), Ui.S(316), Ui.S(320), Ui.S(24));
             card.Controls.Add(fh);
 
             Button bRefresh = new Button();
-            bRefresh.Text = "刷新";
+            bRefresh.Text = "刷新 / Refresh";
             bRefresh.Font = Theme.F(8.8f);
             bRefresh.FlatStyle = FlatStyle.Flat;
             bRefresh.FlatAppearance.BorderSize = 1;
@@ -149,7 +164,7 @@ namespace SRLogbook
             bRefresh.BackColor = Color.White;
             bRefresh.ForeColor = Theme.TextMain;
             bRefresh.Cursor = Cursors.Hand;
-            bRefresh.SetBounds(Ui.S(744), Ui.S(200), Ui.S(112), Ui.S(30));
+            bRefresh.SetBounds(Ui.S(744), Ui.S(312), Ui.S(112), Ui.S(30));
             bRefresh.Click += delegate { RefreshProgressFiles(); };
             card.Controls.Add(bRefresh);
 
@@ -163,7 +178,7 @@ namespace SRLogbook
             progList.Columns.Add("名称 / Name", Ui.S(380), HorizontalAlignment.Left);
             progList.Columns.Add("大小 / Size", Ui.S(150), HorizontalAlignment.Left);
             progList.Columns.Add("修改 / Modified", Ui.S(230), HorizontalAlignment.Left);
-            progList.SetBounds(Ui.S(24), Ui.S(234), Ui.S(832), Ui.S(300));
+            progList.SetBounds(Ui.S(24), Ui.S(346), Ui.S(832), Ui.S(236));
             progList.DoubleClick += delegate { OpenProgressListItem(); };
             card.Controls.Add(progList);
 
@@ -175,11 +190,49 @@ namespace SRLogbook
             return page;
         }
 
-        /// <summary>列出本地进度文件夹里的文件与子文件夹（用户要求：选定文件夹后在软件内直接看到内容）。</summary>
+        /// <summary>三个固定文件夹以“功能卡片”呈现，原始文件夹名作为副标题。</summary>
+        private void AddWorkspaceCard(Panel parent, int x, string title, string rawName, string desc, string path)
+        {
+            Panel p = new Panel();
+            p.SetBounds(Ui.S(x), Ui.S(196), Ui.S(270), Ui.S(104));
+            p.BackColor = Color.FromArgb(248, 250, 253);
+            p.Cursor = Cursors.Hand;
+            p.Paint += delegate(object s, PaintEventArgs e)
+            {
+                using (Pen pen = new Pen(Theme.CardBorder)) e.Graphics.DrawRectangle(pen, 0, 0, p.Width - 1, p.Height - 1);
+                using (SolidBrush b = new SolidBrush(Theme.Accent)) e.Graphics.FillRectangle(b, 0, 0, Ui.S(4), p.Height);
+            };
+            Label t = new Label();
+            t.Text = title;
+            t.Font = Theme.FB(9.2f);
+            t.ForeColor = Theme.Navy;
+            t.BackColor = p.BackColor;
+            t.SetBounds(Ui.S(14), Ui.S(10), Ui.S(244), Ui.S(20));
+            p.Controls.Add(t);
+            Label r = new Label();
+            r.Text = rawName;
+            r.Font = Theme.F(7.8f);
+            r.ForeColor = Theme.TextMuted;
+            r.BackColor = p.BackColor;
+            r.SetBounds(Ui.S(14), Ui.S(32), Ui.S(244), Ui.S(16));
+            p.Controls.Add(r);
+            Label d = new Label();
+            d.Text = desc;
+            d.Font = Theme.F(7.8f);
+            d.ForeColor = Theme.TextMuted;
+            d.BackColor = p.BackColor;
+            d.SetBounds(Ui.S(14), Ui.S(52), Ui.S(244), Ui.S(42));
+            p.Controls.Add(d);
+            EventHandler open = delegate { OpenPath(path); };
+            p.Click += open; t.Click += open; r.Click += open; d.Click += open;
+            parent.Controls.Add(p);
+        }
+
+        /// <summary>列出本地记录文件夹里的文件与子文件夹（用户要求：选定文件夹后在软件内直接看到内容）。</summary>
         private void RefreshProgressFiles()
         {
             if (progList == null) return;
-            string folder = LoadProgressFolder();
+            string folder = AppPaths.MatLocal(appDir);
             progList.BeginUpdate();
             progList.Items.Clear();
             if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder))
@@ -218,15 +271,15 @@ namespace SRLogbook
             if (string.IsNullOrEmpty(path)) return;
             if (Directory.Exists(path)) { OpenPath(path); return; }
             if (File.Exists(path)) { OpenPath(path); return; }
-            Msg.Show("文件不存在，可能已被移动或删除 / File not found.", "本地进度");
+            Msg.Show("文件不存在，可能已被移动或删除 / File not found.", "本地记录");
         }
 
         private void ChooseProgressFolder()
         {
-            if (!RequireLogin("本地进度")) return;
+            if (!RequireLogin("本地记录")) return;
             using (FolderBrowserDialog d = new FolderBrowserDialog())
             {
-                d.Description = "选择本地进度文件夹（所有内容都存放在这里）";
+                d.Description = "选择本地记录文件夹（所有内容都存放在这里）";
                 string cur = LoadProgressFolder();
                 if (Directory.Exists(cur)) d.SelectedPath = cur;
                 if (d.ShowDialog(this) != DialogResult.OK) return;
@@ -239,27 +292,25 @@ namespace SRLogbook
 
         private void CreateProgressDoc()
         {
-            if (!RequireLogin("本地进度")) return;
-            string folder = LoadProgressFolder();
-            if (!Directory.Exists(folder)) { ChooseProgressFolder(); folder = LoadProgressFolder(); }
-            if (!Directory.Exists(folder)) return;
-            string project = Prompt.Show(this, "新建文档", "项目名称", "本地进度");
+            if (!RequireLogin("本地记录")) return;
+            string folder = AppPaths.MatLocal(appDir);
+            Directory.CreateDirectory(folder);
+            string project = Prompt.Show(this, "新建文档", "项目名称", "本地记录");
             if (string.IsNullOrEmpty(project)) return;
             string title = DateTime.Now.ToString("yyyy-MM-dd") + " " + project;
             try
             {
                 string path = LocalDocs.CreateDocxIn(folder, project, title);
                 RefreshProgressFiles();
-                Msg.Show("文档已创建：" + path, "本地进度");
+                Msg.Show("文档已创建：" + path, "本地记录");
                 OpenPath(path);
             }
-            catch (Exception ex) { Msg.Show("创建失败：" + ex.Message, "本地进度"); }
+            catch (Exception ex) { Msg.Show("创建失败：" + ex.Message, "本地记录"); }
         }
 
         private void OpenProgressFolder()
         {
-            string folder = LoadProgressFolder();
-            if (!Directory.Exists(folder)) { ChooseProgressFolder(); folder = LoadProgressFolder(); }
+            string folder = AppPaths.MatLocal(appDir);
             if (Directory.Exists(folder)) OpenPath(folder);
         }
 
