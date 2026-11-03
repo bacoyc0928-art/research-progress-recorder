@@ -12,6 +12,7 @@ namespace SRLogbook
     {
         private FlowLayoutPanel teamFlow;
         private Label teamStatus;
+        private Label lblGithubState;
         private LinkLabel lblPersonal;
         private Label lblPersonalPath;
         private string personalFolder;
@@ -27,7 +28,7 @@ namespace SRLogbook
             top.BackColor = Color.White;
 
             Label h = new Label();
-            h.Text = "团队研究";
+            h.Text = "成员资料";
             h.Font = Theme.FB(13f);
             h.ForeColor = Theme.Navy;
             h.BackColor = Color.White;
@@ -39,7 +40,7 @@ namespace SRLogbook
             sub.Font = Theme.F(8.4f);
             sub.ForeColor = Theme.TextMuted;
             sub.BackColor = Color.White;
-            sub.SetBounds(Ui.S(2), Ui.S(52), Ui.S(880), Ui.S(40));
+            sub.SetBounds(Ui.S(2), Ui.S(52), Ui.S(880), Ui.S(20));
             sub.AutoEllipsis = true;
             top.Controls.Add(sub);
 
@@ -66,6 +67,16 @@ namespace SRLogbook
             teamStatus.BackColor = Color.White;
             teamStatus.SetBounds(Ui.S(2), Ui.S(96), Ui.S(880), Ui.S(18));
             top.Controls.Add(teamStatus);
+
+            lblGithubState = new Label();
+            lblGithubState.Text = "";
+            lblGithubState.Font = Theme.FB(9f);
+            lblGithubState.ForeColor = Theme.TextMuted;
+            lblGithubState.BackColor = Color.White;
+            lblGithubState.SetBounds(Ui.S(2), Ui.S(74), Ui.S(880), Ui.S(20));
+            top.Controls.Add(lblGithubState);
+            lblGithubState.BringToFront();
+            UpdateGithubState();
 
             Panel pp = new Panel();
             pp.Dock = DockStyle.Top;
@@ -160,6 +171,35 @@ namespace SRLogbook
             catch { }
         }
 
+        private static string MemberState(string login, bool uploaded, Dictionary<string, DateTime> last, HashSet<string> logged)
+        {
+            bool connected = logged.Contains(login);
+            if (!connected)
+                return uploaded
+                    ? (Lang.En ? "Uploaded · no login record" : "已上传 · 无登录记录")
+                    : (Lang.En ? "Joined · not connected" : "已加入 · 未连接");
+            DateTime t;
+            string when = last.TryGetValue(login, out t) ? t.ToLocalTime().ToString("MM-dd HH:mm") : "-";
+            return (Lang.En ? "Connected · last active " : "已连接 · 最近活动 ") + when;
+        }
+
+        private void UpdateGithubState()
+        {
+            if (lblGithubState == null) return;
+            bool signed = !string.IsNullOrEmpty(sessionLogin);
+            lblGithubState.Text = signed
+                ? "已连接 GitHub / Connected: " + sessionLogin
+                : "未连接 GitHub / Not connected";
+            lblGithubState.ForeColor = signed ? Color.FromArgb(24, 138, 86) : Theme.TextMuted;
+            if (lblSyncAccount != null)
+            {
+                lblSyncAccount.Text = signed
+                    ? "已连接 GitHub / Connected: " + sessionLogin
+                    : "未连接 GitHub / Not connected";
+                lblSyncAccount.ForeColor = signed ? Color.FromArgb(24, 138, 86) : Theme.TextMuted;
+            }
+        }
+
         private void UpdatePersonalLabels()
         {
             if (lblPersonalPath == null) return;
@@ -205,28 +245,55 @@ namespace SRLogbook
                 // Opening or refreshing this page only reads. Upload actions create the profile when needed.
                 bool created = false;
                 List<string> members = await Task.Run(() => GitHubSync.ListDir(cfg.owner, cfg.repo, "team", cfg.branch, token));
-                // Roster shows invited collaborators even before their first upload; failures are ignored on purpose.
+                // Roster shows accepted collaborators even before their first upload; failures are ignored on purpose.
                 List<string> roster = new List<string>();
                 try { roster = await Task.Run(() => GitHubSync.ListCollaborators(cfg.owner, cfg.repo, cfg.branch, token)); }
                 catch { roster = new List<string>(); }
+                List<string> invites = new List<string>();
+                try { invites = await Task.Run(() => GitHubSync.ListPendingInvitations(cfg.owner, cfg.repo, cfg.branch, token)); }
+                catch { invites = new List<string>(); }
+                Dictionary<string, DateTime> last = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+                HashSet<string> logged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    List<ActivityEntry> acts = await Task.Run(() => ActivityLog.Read(cfg.owner, cfg.repo, cfg.branch, token, ActivityLog.PublicPath));
+                    foreach (ActivityEntry a in acts)
+                    {
+                        if (a == null || string.IsNullOrEmpty(a.User) || string.IsNullOrEmpty(a.Time)) continue;
+                        DateTime t;
+                        if (!DateTime.TryParse(a.Time, out t)) continue;
+                        DateTime old;
+                        if (!last.TryGetValue(a.User, out old) || t > old) last[a.User] = t;
+                        if (!string.IsNullOrEmpty(a.Action) && a.Action.IndexOf("登录", StringComparison.Ordinal) >= 0)
+                            logged.Add(a.User);
+                    }
+                }
+                catch { }
                 teamFlow.SuspendLayout();
                 teamFlow.Controls.Clear();
-                AddTeamCard(login + "（我）", "已连接 GitHub 账号", true);
+                AddTeamCard(login + "（我）", Lang.En ? "Connected to GitHub" : "已连接 GitHub 账号", true, true);
                 foreach (string m in members)
                 {
                     if (m == login) continue;
-                    AddTeamCard(m, "项目成员", false);
+                    AddTeamCard(m, MemberState(m, true, last, logged), false, logged.Contains(m));
                     roster.RemoveAll(x => string.Equals(x, m, StringComparison.OrdinalIgnoreCase));
                 }
-                int pending = 0;
                 foreach (string m in roster)
                 {
                     if (string.Equals(m, login, StringComparison.OrdinalIgnoreCase)) continue;
-                    AddTeamCard(m, "项目成员", false);
-                    pending++;
+                    AddTeamCard(m, MemberState(m, false, last, logged), false, logged.Contains(m));
+                }
+                int invited = 0;
+                foreach (string m in invites)
+                {
+                    if (string.Equals(m, login, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (members.Exists(x => string.Equals(x, m, StringComparison.OrdinalIgnoreCase))) continue;
+                    if (roster.Exists(x => string.Equals(x, m, StringComparison.OrdinalIgnoreCase))) continue;
+                    AddTeamCard(m, Lang.En ? "Invitation pending" : "待接受邀请", false);
+                    invited++;
                 }
                 teamFlow.ResumeLayout();
-                teamStatus.Text = "共 " + (members.Count + pending) + " 位项目成员" + (created ? "；已为 " + login + " 创建 team/" + login + "/" : "");
+                teamStatus.Text = (Lang.En ? "Members: " : "共 ") + (members.Count + roster.Count) + (Lang.En ? " · pending invitations: " : " 位成员；待接受邀请：") + invited + (created ? (Lang.En ? "; created team/" + login + "/" : "；已为 " + login + " 创建 team/" + login + "/") : "");
             }
             catch (Exception ex)
             {
@@ -311,7 +378,7 @@ namespace SRLogbook
             if (syncBusy || teamLoading) return;
             SyncConfig cfg = GitHubSync.LoadConfig(appDir);
             string token = sessionToken;
-            if (string.IsNullOrEmpty(token)) { Msg.Show("请先在左下角登录 GitHub 账号。", "团队研究"); return; }
+            if (string.IsNullOrEmpty(token)) { Msg.Show("请先在左下角登录 GitHub 账号。", "成员资料"); return; }
             syncBusy = true; Cursor = Cursors.WaitCursor;
             try
             {
@@ -323,16 +390,16 @@ namespace SRLogbook
                     string refs = AppPaths.ReferenceDir(appDir);
                     if (refs != null && Directory.Exists(refs) && Directory.GetFiles(refs, "*", SearchOption.AllDirectories).Length > 0)
                     { ShowMemberFiles(login + "（我）", refs); return; }
-                    Msg.Show("这是你自己的账号。你上传的副本在个人文件夹的 references 子目录；团队区的文件请用“撤除我上传的参考资料”管理。 / These are your own files; use Remove My Uploaded References to manage the team area.", "团队研究");
+                    Msg.Show("这是你自己的账号。你上传的副本在个人文件夹的 references 子目录；团队区的文件请用“撤除我上传的参考资料”管理。 / These are your own files; use Remove My Uploaded References to manage the team area.", "成员资料");
                     if (!string.IsNullOrEmpty(personal) && Directory.Exists(personal)) OpenPath(personal);
                     return;
                 }
                 string dir = FileTransfers.Child(TeamConRefRoot(me), login);
                 bool downloaded = await Task.Run(() => GitHubSync.DownloadMemberFiles(cfg.owner, cfg.repo, login, cfg.branch, token, dir));
-                if (!downloaded) { Msg.Show("该成员尚未上传文件；已有本地副本保留。", "团队研究"); return; }
+                if (!downloaded) { Msg.Show("该成员尚未上传文件；已有本地副本保留。", "成员资料"); return; }
                 ShowMemberFiles(login, dir);
             }
-            catch (Exception ex) { Msg.Show("打开成员内容失败：" + ex.Message, "团队研究"); }
+            catch (Exception ex) { Msg.Show("打开成员内容失败：" + ex.Message, "成员资料"); }
             finally { syncBusy = false; Cursor = Cursors.Default; }
         }
 
@@ -355,7 +422,7 @@ namespace SRLogbook
             return b;
         }
 
-        private void AddTeamCard(string name, string note, bool me)
+        private void AddTeamCard(string name, string note, bool me, bool connected = false)
         {
             Panel card = new Panel();
             card.SetBounds(0, 0, Math.Max(Ui.S(600), teamFlow.ClientSize.Width - Ui.S(30)), Ui.S(64));
@@ -376,7 +443,7 @@ namespace SRLogbook
             Label d = new Label();
             d.Text = note;
             d.Font = Theme.F(8.6f);
-            d.ForeColor = Theme.TextMuted;
+            d.ForeColor = connected ? Color.FromArgb(24, 138, 86) : Theme.TextMuted;
             d.BackColor = Color.White;
             d.SetBounds(Ui.S(18), Ui.S(34), Ui.S(500), Ui.S(18));
             card.Controls.Add(d);
