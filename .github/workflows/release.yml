@@ -138,7 +138,8 @@ jobs:
           gh release view v0.2.12 >/dev/null 2>&1 || gh release create v0.2.12 --target "$GITHUB_SHA" --latest --title 'SRPRecorder2027 0.2.12 · 公开测试版 / Public Test' --notes-file RELEASE_NOTES.md
           old=$(gh api repos/${{ github.repository }}/git/ref/tags/v0.2.12 --jq '.object.sha')
           if [ "$old" != "$GITHUB_SHA" ]; then
-            test "$old" = '2c0c0535c827ac6608032e0810227bdecb15e0cd'
+            # 只允许把已发布的 v0.2.12（1a6bef9）前移到本次已通过全部测试的提交；其他情况一律停止。
+            test "$old" = '1a6bef9919a237859482c239234277c040f1ad60'
             gh api --method PATCH repos/${{ github.repository }}/git/refs/tags/v0.2.12 -f sha="$GITHUB_SHA" -F force=true
           fi
           gh release edit v0.2.12 --latest --notes-file RELEASE_NOTES.md
