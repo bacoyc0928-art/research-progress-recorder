@@ -34,6 +34,9 @@ namespace SRLogbook
         private Label syncHint;
         private Button btnActivity;
 
+        private Button[][] syncGroups;
+        private Label[] syncGroupTitles, syncGroupNotes;
+
         private Panel BuildSyncPage()
         {
             Panel page = new Panel();
@@ -109,6 +112,35 @@ namespace SRLogbook
             btnActivity = SButton("查看活动日志", 364, 200, 220);
             btnActivity.Click += delegate { ShowActivityLogs(); };
 
+            // 六个动作按用途分三组，每组一句话说明文件去向；上传是最常用的操作，用主要按钮突出。
+            syncGroups = new Button[][] { new[] { btnOthers, btnDefault }, new[] { btnUpRefs, btnUpProgress }, new[] { btnRemoveRefs, btnActivity } };
+            string[] groupTitles = { "从团队获取", "分享我的资料", "管理我的上传" };
+            string[] groupNotes = {
+                "下载到本机查看，不会改动团队资料。",
+                "把你勾选的文件上传到团队区你自己的文件夹；每个文件最大 50 MiB，只新增或覆盖。",
+                "撤除只影响你自己上传的文件；活动日志记录每个人的操作。" };
+            syncGroupTitles = new Label[3]; syncGroupNotes = new Label[3];
+            for (int i = 0; i < 3; i++)
+            {
+                Label title = new Label();
+                title.Text = groupTitles[i];
+                title.Font = Theme.FB(9.6f);
+                title.ForeColor = Theme.Navy;
+                title.BackColor = Color.White;
+                title.AutoEllipsis = true;
+                card.Controls.Add(title);
+                Label note = new Label();
+                note.Text = groupNotes[i];
+                note.Font = Theme.F(8.6f);
+                note.ForeColor = Theme.TextMuted;
+                note.BackColor = Color.White;
+                note.AutoEllipsis = true;
+                card.Controls.Add(note);
+                syncGroupTitles[i] = title; syncGroupNotes[i] = note;
+            }
+            SetPrimary(btnUpRefs);
+            SetPrimary(btnUpProgress);
+
             UpdateSyncActionState();
 
             lblSStatus = new Label();
@@ -161,19 +193,28 @@ namespace SRLogbook
                 lblSyncAccount.SetBounds(Ui.S(24), Ui.S(80), contentWidth, Ui.S(22));
             }
             syncHint.Top = Ui.S(104);
-            Button[] actions = new Button[] { btnOthers, btnDefault, btnUpRefs, btnUpProgress, btnRemoveRefs, btnActivity };
-            int x = Ui.S(24), y = Ui.S(136), gap = Ui.S(10);
-            foreach (Button action in actions)
+            int y = Ui.S(136), gap = Ui.S(10);
+            for (int g = 0; g < syncGroups.Length; g++)
             {
-                int width = Math.Min(contentWidth, Math.Max(Ui.S(160), TextRenderer.MeasureText(action.Text, action.Font).Width + Ui.S(28)));
-                if (x > Ui.S(24) && x + width > Ui.S(24) + contentWidth) { x = Ui.S(24); y += Ui.S(42); }
-                action.SetBounds(x, y, width, Ui.S(32)); x += width + gap;
+                Label title = syncGroupTitles[g], note = syncGroupNotes[g];
+                int titleWidth = Math.Min(contentWidth / 2, TextRenderer.MeasureText(title.Text, title.Font).Width + Ui.S(6));
+                title.SetBounds(Ui.S(24), y, titleWidth, Ui.S(26));
+                note.SetBounds(title.Right + Ui.S(10), y + Ui.S(2), Math.Max(Ui.S(40), contentWidth - titleWidth - Ui.S(10)), Ui.S(24));
+                y += Ui.S(30);
+                int x = Ui.S(24);
+                foreach (Button action in syncGroups[g])
+                {
+                    int width = Math.Min(contentWidth, Math.Max(Ui.S(160), TextRenderer.MeasureText(action.Text, action.Font).Width + Ui.S(28)));
+                    if (x > Ui.S(24) && x + width > Ui.S(24) + contentWidth) { x = Ui.S(24); y += Ui.S(42); }
+                    action.SetBounds(x, y, width, Ui.S(32)); x += width + gap;
+                }
+                y += Ui.S(32) + Ui.S(18);
             }
-            lblSStatus.Top = y + Ui.S(42);
+            lblSStatus.Top = y;
             txtSLog.Top = lblSStatus.Bottom + Ui.S(36);
             // The log caption is the only bold label immediately above the log.
             foreach (Control child in card.Controls)
-                if (child is Label && child.Font.Bold && child != lblSyncAccount && child.Top > Ui.S(180)) child.Top = txtSLog.Top - Ui.S(28);
+                if (child is Label && child.Font.Bold && child != lblSyncAccount && Array.IndexOf(syncGroupTitles, child) < 0 && child.Top > Ui.S(180)) child.Top = txtSLog.Top - Ui.S(28);
             txtSLog.Height = Math.Max(Ui.S(50), card.ClientSize.Height - txtSLog.Top - Ui.S(12));
         }
 
@@ -603,12 +644,27 @@ namespace SRLogbook
         {
             EventHandler apply = delegate
             {
-                b.BackColor = b.Enabled ? Color.White : Color.FromArgb(243, 245, 248);
-                b.FlatAppearance.BorderColor = b.Enabled ? Theme.CardBorder : Color.FromArgb(226, 230, 236);
+                bool primary = PrimaryButtons.Contains(b);
+                b.BackColor = !b.Enabled ? Color.FromArgb(243, 245, 248) : (primary ? Theme.Accent : Color.White);
+                b.ForeColor = primary && b.Enabled ? Color.White : Theme.TextMain;
+                b.FlatAppearance.BorderColor = !b.Enabled ? Color.FromArgb(226, 230, 236) : (primary ? Theme.Accent : Theme.CardBorder);
+                b.FlatAppearance.MouseOverBackColor = primary ? Theme.AccentHover : Theme.AccentSoft;
                 b.Cursor = b.Enabled ? Cursors.Hand : Cursors.Default;
             };
+            LookAppliers[b] = apply;
             b.EnabledChanged += apply;
             apply(b, EventArgs.Empty);
+        }
+
+        private static readonly HashSet<Button> PrimaryButtons = new HashSet<Button>();
+        private static readonly Dictionary<Button, EventHandler> LookAppliers = new Dictionary<Button, EventHandler>();
+
+        /// <summary>每页最常用的操作用蓝底白字突出，其余按钮保持白底；禁用时同样变灰。</summary>
+        internal static void SetPrimary(Button b)
+        {
+            PrimaryButtons.Add(b);
+            if (!LookAppliers.ContainsKey(b)) DisabledLook(b);
+            LookAppliers[b](b, EventArgs.Empty);
         }
 
         private void UpdateSyncActionState()

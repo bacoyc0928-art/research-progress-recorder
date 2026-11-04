@@ -208,10 +208,16 @@ public class Verify002
             typeof(MainForm).GetField("sessionToken",fields).SetValue(f,"offline-test-not-a-credential");
             typeof(MainForm).GetField("sessionLogin",fields).SetValue(f,"offline-tester");
             typeof(MainForm).GetMethod("UpdateLoginUi",fields).Invoke(f,null); Application.DoEvents();
-            bool signedInOpen = postPublish.Enabled && postHistory.Enabled && !postComposer.ReadOnly && !help.ReadOnly && postPublish.BackColor == Color.White;
+            bool signedInOpen = postPublish.Enabled && postHistory.Enabled && !postComposer.ReadOnly && !help.ReadOnly && postPublish.BackColor == Theme.Accent && postHistory.BackColor == Color.White;
             foreach (Button button in helpButtons) signedInOpen = signedInOpen && button.Enabled;
             foreach (Control child in syncCard.Controls) if (child is Button && child.Visible) signedInOpen = signedInOpen && child.Enabled;
             Check(signedInOpen, "signing in re-enables Quick Post, Help toolbar and sync actions with normal look");
+            var groupTitles = (Label[])typeof(MainForm).GetField("syncGroupTitles",fields).GetValue(f);
+            var upRefs = (Button)typeof(MainForm).GetField("btnUpRefs",fields).GetValue(f);
+            var others = (Button)typeof(MainForm).GetField("btnOthers",fields).GetValue(f);
+            f.SetPagePublic(4); Application.DoEvents();
+            Check(groupTitles.Length == 3 && groupTitles[0].Bottom <= others.Top && groupTitles[1].Bottom <= upRefs.Top && upRefs.BackColor == Theme.Accent && others.BackColor == Color.White,
+                "Progress Sync groups actions under three captions and highlights uploads as primary");
             var signedInIssues = new List<string>();
             for (int page = 0; page < 6; page++) { f.SetPagePublic(page); Application.DoEvents(); signedInIssues.AddRange(LayoutIssues(f, "signed-in page" + page)); }
             foreach (string issue in signedInIssues) Console.WriteLine("LAYOUT " + issue);

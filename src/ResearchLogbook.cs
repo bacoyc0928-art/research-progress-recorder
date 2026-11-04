@@ -123,6 +123,7 @@ namespace SRLogbook
         public static readonly Color SideActive = Color.FromArgb(43, 58, 88);
         public static readonly Color Accent = Color.FromArgb(45, 108, 223);
         public static readonly Color AccentSoft = Color.FromArgb(232, 239, 253);
+        public static readonly Color AccentHover = Color.FromArgb(37, 92, 196);
         public static readonly Color Warm = Color.FromArgb(196, 122, 42);
         public static readonly Color Bg = Color.FromArgb(244, 246, 250);
         public static readonly Color CardBorder = Color.FromArgb(226, 231, 240);
@@ -442,7 +443,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.12";
+            this.Text = "SRPRecorder2027 · 0.2.13";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
@@ -1624,7 +1625,7 @@ namespace SRLogbook
             string local = Path.Combine(appDir, "help_local.md");
             if (File.Exists(local))
             {
-                try { helpEditor.Text = File.ReadAllText(local, Encoding.UTF8); }
+                try { helpEditor.Text = HelpEditorText(File.ReadAllText(local, Encoding.UTF8)); }
                 catch { helpEditor.Text = Lang.HelpText(); }
             }
             else helpEditor.Text = Lang.HelpText();
@@ -1633,6 +1634,15 @@ namespace SRLogbook
             page.Controls.Add(helpEditor);
             page.Controls.Add(helpToolbar);
             return page;
+        }
+
+        /// <summary>
+        /// Windows 文本框只认 CRLF：Mac 或脚本上传的 help.md 只有 LF 时会挤成一整段。
+        /// 读入时统一换行，内容本身不变。
+        /// </summary>
+        internal static string HelpEditorText(string text)
+        {
+            return (text ?? "").Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
         }
 
         private Button CreateHelpButton(string text)
@@ -1706,7 +1716,7 @@ namespace SRLogbook
                     return;
                 }
                 if (IsDisposed || helpEditor.Text != before) return;
-                helpEditor.Text = text;
+                helpEditor.Text = HelpEditorText(text);
                 helpDirty = false;
                 SaveHelpDraft();
                 if (manual) Msg.Show("已读取云端使用说明。", "使用说明");
@@ -1734,6 +1744,8 @@ namespace SRLogbook
                     return;
                 }
                 string notes = (rel.body ?? "").Trim();
+                if (notes.Length == 0 && Updater.LastCheckUsedReleasePage)
+                    notes = "（GitHub 接口暂时限流，已改用发布页检查；更新说明见发布页。） / (GitHub API is rate-limited; checked via the release page. See the release page for notes.)\nhttps://github.com/" + Updater.Owner + "/" + Updater.Repo + "/releases/tag/" + rel.tag_name;
                 if (notes.Length > 1200) notes = notes.Substring(0, 1200) + "…";
                 string ask = "发现新版本 " + rel.tag_name + "（当前 " + Updater.CurrentText() + "）。\n\n" + notes +
                     "\n\n下载并在重启后安装？本地记录、参考资料与配置不会被删除。 / Download and install after restart? Local progress, references and settings are preserved.";

@@ -147,6 +147,12 @@ namespace SRLogbook
             { "打开", "Open" },
             { "移除", "Remove" },
             { "改动记录", "Change Log" },
+            { "从团队获取", "Get from the team" },
+            { "分享我的资料", "Share my files" },
+            { "管理我的上传", "Manage my uploads" },
+            { "下载到本机查看，不会改动团队资料。", "Downloads to this computer; team data is not changed." },
+            { "把你勾选的文件上传到团队区你自己的文件夹；每个文件最大 50 MiB，只新增或覆盖。", "Uploads the files you tick to your own team folder; up to 50 MiB each, only adds or overwrites." },
+            { "撤除只影响你自己上传的文件；活动日志记录每个人的操作。", "Removal affects only files you uploaded; the activity log shows everyone's actions." },
             { "选择文件夹", "Choose Folder" },
             { "补录文件", "Add Files" },
             { "保存配置", "Save Config" },
@@ -286,102 +292,137 @@ namespace SRLogbook
 
 
 
-        private const string HelpBoth = "SRPRecorder2027 · 0.2.12 · 中英双语界面 / Bilingual UI\r\n" +
-            "数据架构与使用说明 / Data architecture and usage guide\r\n" +
+        private const string HelpBoth =
+            "SRPRecorder2027 使用说明 / User Guide\r\n" +
+            "适用版本 / Version 0.2.13 · 中文在前，English follows each section\r\n" +
             "\r\n" +
-            "【0】总览 / Overview\r\n" +
-            "本程序没有自建服务器：团队数据全部存放在私有 GitHub 仓库 bacoyc0928-art/research-data，本机只保留工作副本、缓存与配置；程序源码、安装包和文档在公开仓库 research-progress-recorder，下载不需要登录。\r\n" +
-            "There is no self-hosted server: all team data lives in the private GitHub repository bacoyc0928-art/research-data; each machine keeps only working copies, caches and settings. Source, installers and docs live in the public repository research-progress-recorder and need no sign-in.\r\n" +
+            "本程序帮助课题组记录和交换研究资料。团队资料保存在私有 GitHub 仓库 bacoyc0928-art/research-data；程序本身从公开仓库 research-progress-recorder 下载，不需要登录。没有服务器，也没有实时同步：上传和下载都由你手动发起。\r\n" +
+            "The app helps the group record and exchange research files. Team data lives in the private GitHub repository bacoyc0928-art/research-data; the app is downloaded from the public repository research-progress-recorder without signing in. There is no server and no real-time sync: you start every upload and download yourself.\r\n" +
             "\r\n" +
-            "  本机 Local  ⇄  api.github.com  ⇄  私有仓库 research-data  ⇄  其他成员 other members\r\n" +
-            "                        └─ 公开仓库 research-progress-recorder：只放程序与说明 / program and docs only\r\n" +
             "\r\n" +
-            "同步是手动的：上传＝把勾选的文件复制到远端；下载＝把远端文件复制到本机（临时区或默认库）。没有后台实时同步，也没有自动冲突合并。\r\n" +
-            "Sync is manual: upload copies checked files to the remote; download copies remote files to this machine (temp area or default library). There is no background sync and no automatic conflict merging.\r\n" +
-            "第一次使用：左下角登录（可勾选“记住登录”，设置 6 位 PIN）→ 成员资料刷新成员 → 本地记录选择专用文件夹 → 进度同步按需上传/下载。\r\n" +
-            "First run: sign in at the bottom-left (optionally tick Remember and set a 6-digit PIN) → refresh members on Members → pick a dedicated folder on Local Records → upload/download from Progress Sync.\r\n" +
+            "【1】第一次使用 / Getting started\r\n" +
             "\r\n" +
-            "【1】Windows 本机目录 / Windows local layout\r\n" +
-            "SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）\r\n" +
-            "├─ SRPRecorder2027.exe             程序 0.2.12\r\n" +
-            "├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留\r\n" +
-            "├─ research_log.json               旧版研究记录\r\n" +
-            "├─ workspace.json                  工作区路径\r\n" +
-            "├─ progress.json                   进度文件夹路径（改过文件夹才有）\r\n" +
-            "├─ sync_config.json                绑定仓库信息（owner/repo/branch，无令牌）\r\n" +
-            "├─ news.json                       各栏目未读红点状态\r\n" +
-            "├─ data_version.txt                一次性迁移标记，固定 0.2.0\r\n" +
-            "├─ upgrade_cleanup.log             迁移删除记录\r\n" +
-            "├─ help_local.md                   使用说明本机草稿\r\n" +
-            "├─ References\\\r\n" +
-            "│  └─ Default\\                    团队默认资料库镜像（只读）\r\n" +
-            "└─ PersonalWorkspaceSRRec\\        默认本地记录文件夹\r\n" +
-            "   ├─ Mat_Local\\                  个人非参考资料（上传本地记录的默认来源）\r\n" +
-            "   ├─ Reference\\                  个人参考资料（上传参考资料的默认来源）\r\n" +
-            "   ├─ Public_Temp\\                他人内容临时区（启动清空、退出清空）\r\n" +
-            "   └─ references.json             上传后缓存的资料清单\r\n" +
-            "SRCRec\\ is the program and data root next to the exe; the whole folder is portable. References\\Default is the read-only team library. PersonalWorkspaceSRRec is the default progress workspace: Mat_Local for non-reference files (default progress-upload source), Reference for personal references (default reference-upload source), Public_Temp for other members' files (cleared on start and exit).\r\n" +
+            "1. 接受邀请：用你的 GitHub 账号接受 research-data 仓库的协作邀请。\r\n" +
+            "2. 创建令牌：GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)，勾选 repo，设置有效期。成员必须用 classic 令牌；fine-grained 令牌访问他人的私有仓库一律返回 404。\r\n" +
+            "3. 登录：Windows 在窗口左下角，macOS 在窗口底部。粘贴令牌，点「登录」。\r\n" +
+            "4. 可选「记住登录」：设置 6 位 PIN，令牌存入系统凭据库（Windows 凭据管理器 / macOS 钥匙串）。下次启动只输 PIN；连续 5 次输错会清除保存的令牌。\r\n" +
+            "5. 「退出」会在确认后直接关闭程序。\r\n" +
             "\r\n" +
-            "【2】macOS 本机目录 / macOS local layout\r\n" +
-            "/Applications/ResearchProgressRecorder.app        只放程序 / program only\r\n" +
-            "~/Library/Application Support/ResearchProgressRecorder/\r\n" +
-            "├─ config.json                     进度文件夹、登录名、未读状态\r\n" +
-            "├─ research_log.json               旧版研究记录\r\n" +
-            "├─ data_version.txt                迁移标记 0.2.0\r\n" +
-            "├─ upgrade_cleanup.log\r\n" +
-            "└─ SRCRec\\\r\n" +
-            "   ├─ References\\Default\\          团队默认资料库\r\n" +
-            "   └─ PersonalWorkspaceSRRec\\\r\n" +
-            "      ├─ Mat_Local\\                个人非参考资料\r\n" +
-            "      ├─ Reference\\                个人参考资料（上传副本直接放在 Reference\\）\r\n" +
-            "      └─ Public_Temp\\              他人内容（启动/退出清空）\r\n" +
-            "macOS keeps user data in Application Support; the app bundle holds only the program. The SRCRec subfolder mirrors the Windows layout with the same three workspace folders (uploaded reference copies are stored directly in Reference\\ on both platforms).\r\n" +
+            "1. Accept the invitation to the research-data repository with your GitHub account.\r\n" +
+            "2. Create a token: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic), tick repo and set an expiry. Members must use a classic token; fine-grained tokens always get 404 on another account's private repository.\r\n" +
+            "3. Sign in at the bottom-left (Windows) or bottom bar (macOS): paste the token and press Sign In.\r\n" +
+            "4. Optional \"Remember\": set a 6-digit PIN and the token is stored in the system credential store (Windows Credential Manager / macOS Keychain). Next time you only enter the PIN; five wrong PINs clear the saved token.\r\n" +
+            "5. \"Sign Out\" asks for confirmation and then closes the app.\r\n" +
             "\r\n" +
-            "【3】私有仓库 research-data / Private team repository\r\n" +
-            "team\\<账号>\\\r\n" +
-            "├─ references\\<文件>               上传的参考资料本体\r\n" +
-            "├─ references.json                 该账号的资料清单\r\n" +
-            "├─ progress\\<相对路径>             本地记录文件夹的镜像\r\n" +
-            "└─ profile.json                    首次上传时自动创建\r\n" +
-            "default\\<文件>                     团队默认资料库（成员只读）\r\n" +
-            "logs\\public\\activity.json          公开活动日志（≤2000 条，全员可见）\r\n" +
-            "logs\\private\\<账号>\\activity.json  本人明细（≤500 条）\r\n" +
-            "help\\help.md                       全员共享的使用说明（本页）\r\n" +
-            "help\\changelog.json                说明改动日志（≤200 条）\r\n" +
-            "posts\\<UTC时间>-<账号>-<4位随机>.txt  Quick Post 帖子\r\n" +
-            "posts\\read\\<账号>.json             该账号已阅的帖子 id\r\n" +
-            "sync\\                              0.0.2 遗留，只读保留\r\n" +
-            "team/<login>/references holds your uploaded files and references.json is their manifest; progress mirrors your progress folder; default is the team library; logs/public is shared and logs/private/<login> is yours; help and posts are shared; sync/ is 0.0.2 legacy and read-only.\r\n" +
+            "未登录时：同步、发帖、使用说明工具栏的按钮都是灰色的，参考资料页不能进入，程序不写任何配置。\r\n" +
+            "While signed out, sync, posting and Help toolbar buttons are greyed out, the References page is locked and the app writes no settings.\r\n" +
             "\r\n" +
-            "【4】同步动作与数据流向 / Sync actions and data flow\r\n" +
-            "上传参考资料 Upload refs：Reference\\ → 勾选 → team\\<我>\\references\\ + references.json（同时在本机 Reference 留一份副本 / also keeps a local copy）\r\n" +
-            "上传本地记录 Upload progress：Mat_Local\\ → 勾选 → team\\<我>\\progress\\<相对路径>（按进度文件夹的相对路径镜像 / mirrors the relative path）\r\n" +
-            "下载他人内容 Download team：team\\<成员>\\ → Public_Temp\\<成员>\\（退出即清空 / cleared on exit）\r\n" +
-            "下载默认库 Download default：default\\ → References\\Default\\（覆盖前保留 .bak-时间戳 / keeps a .bak copy）\r\n" +
-            "撤除参考资料 Remove refs：只删本人上传的文件与清单条目，团队区立即不可下载；本机 Reference 中的副本需自行清理 / removes your own remote files and manifest entries only; delete local copies manually\r\n" +
-            "Quick Post：发布 posts\\<id>.txt；已阅 posts\\read\\<我>.json；只能删自己的帖子 / publish, mark read, delete your own posts\r\n" +
-            "活动日志 Activity log：登录、上传、下载、撤除、发帖、删帖、改说明 → logs\\public + logs\\private\\<我> / sign-in, uploads, downloads, removals, posts, help edits\r\n" +
             "\r\n" +
-            "【5】清理、保留与升级 / Cleanup, retention and upgrade\r\n" +
-            "- Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。\r\n" +
-            "- References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。\r\n" +
-            "- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.12 不会重复清理。\r\n" +
-            "- 升级不会删除本地记录文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。\r\n" +
-            "- 远端上传只新增或覆盖，不自动删除旧文件。\r\n" +
-            "Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.\r\n" +
+            "【2】六个页面 / The six pages\r\n" +
             "\r\n" +
-            "【6】限制与安全 / Limits and safety\r\n" +
-            "- 单文件上限 50 MiB；不支持符号链接/目录联接；非法文件名会被拒绝。\r\n" +
-            "- 未登录不能进入“参考文献与资料”，不能上传、下载、发帖、改说明，也不会写任何 JSON。\r\n" +
-            "- 令牌默认只保存在内存，每次启动重新登录；勾选“记住登录”后，令牌存入系统凭据库（Windows 凭据管理器 / macOS 钥匙串），用 6 位 PIN 解锁，连续 5 次错误会清除。PIN 只是本机便捷锁，真正的保护是系统账户。\r\n" +
-            "- 同一文件被两人先后上传时，后上传覆盖先上传，请按成员目录分工并备份。\r\n" +
-            "Limits: 50 MiB per file; symlinks and invalid filenames are rejected; while signed out you cannot open References, upload, download, post or edit this page, and no JSON is written. The token lives only in memory by default; with Remember ticked it is stored in the system credential store (Windows Credential Manager / macOS Keychain) and unlocked with a 6-digit PIN after five wrong attempts clear it. The PIN is a local convenience lock; the real protection is your system account. If two people upload the same path the later upload wins, so divide work by member folder and keep backups.\r\n" +
+            "成员资料：列出所有成员及其状态（已连接 · 最近活动 / 已上传 / 已加入 · 未连接 / 待接受邀请）。打开他人的文件夹会先下载其文件再列出（macOS 先选中成员，再点「打开成员文件」）；自己的卡片打开本机 Reference 文件夹。\r\n" +
+            "Quick Post：给团队发短消息。点卡片看全文；「已阅」后移入「历史记录」；只能删除自己的帖子。\r\n" +
+            "参考资料：只读浏览团队默认资料库、我的参考资料，以及临时下载的他人内容。\r\n" +
+            "本地记录：选择本地记录文件夹；「新建文档」在 Mat_Local 中生成 Word 文档；下方列出 Mat_Local 中的文件。\r\n" +
+            "进度同步：所有上传、下载和撤除操作都在这里（见第 3 节）。\r\n" +
+            "使用说明：本页。登录后可编辑并上传给所有成员。\r\n" +
             "\r\n" +
-            "【7】本页 / This help page\r\n" +
-            "本页可编辑：点“上传到 GitHub”写入 help\\help.md，全员登录后读到同一份，并在 help\\changelog.json 留下改动日志；“恢复默认”回到本文件，“读取云端版本”重新拉取。\r\n" +
-            "Windows 左下侧栏（登录面板下方）与 macOS 窗口底部左侧的“检查更新 / Check updates”会从 GitHub 读取最新版本、按 SHA-256 校验后下载，重启时只替换程序文件；本地记录、参考资料与配置不会被删除。两处都显示当前版本号。\r\n" +
-            "This page is editable: Upload to GitHub writes help\\help.md for everyone and appends help\\changelog.json; Restore Default returns to this built-in text; Load From GitHub re-fetches the cloud copy.\r\n" +
-            "“Check updates” in the bottom-left of the sidebar on Windows and at the bottom-left of the window on macOS downloads the latest release from GitHub, verifies its SHA-256 and replaces only program files after restart; local progress, references and settings are not touched. Both show the current version.";
+            "Members: every member and their state (Connected · last active / Uploaded / Joined · not connected / Invitation pending). Opening another member's folder downloads and then lists their files (on macOS, select the member and press Open Member Files); your own card opens your local Reference folder.\r\n" +
+            "Quick Post: short team messages. Click a card for the full text; \"Mark Read\" moves it to History; you can delete only your own posts.\r\n" +
+            "References: read-only view of the team default library, your references and others' temporary downloads.\r\n" +
+            "Local Records: choose your local records folder; \"New Document\" creates a Word file in Mat_Local; the list shows the files in Mat_Local.\r\n" +
+            "Progress Sync: every upload, download and removal (see section 3).\r\n" +
+            "Help: this page. When signed in you can edit it and upload it for everyone.\r\n" +
+            "\r\n" +
+            "页面名称旁的红点表示该页有新内容，进入页面后消失。界面可用 EN / 中文 按钮切换语言（Windows 在左上角，macOS 在右上角）。\r\n" +
+            "A red dot next to a page name means something new; it clears when you open the page. Use the EN / 中文 button to switch the interface language (top-left on Windows, top-right on macOS).\r\n" +
+            "\r\n" +
+            "\r\n" +
+            "【3】同步操作 / Sync actions（进度同步页 / Progress Sync page）\r\n" +
+            "\r\n" +
+            "每个操作都会先列出清单，只处理你勾选的项目。\r\n" +
+            "Each action first shows a checklist and processes only the items you tick.\r\n" +
+            "\r\n" +
+            "- 下载他人内容：把选中成员的文件下载到 Public_Temp\\<成员>\\。临时区在启动和退出时清空。\r\n" +
+            "- 下载默认资料库：把团队默认资料下载到 References\\Default\\，覆盖前保留旧副本。\r\n" +
+            "- 上传参考资料：默认列出 Reference 中的文件，也可添加其他文件；上传到团队区你自己的目录。\r\n" +
+            "- 上传本地记录：默认列出 Mat_Local 中的文件，保持原有的子文件夹结构。\r\n" +
+            "- 撤除我上传的参考资料：从团队区删除你自己上传的文件，同时删除本机 Reference 中的副本，其他人从此无法下载。只能撤除自己的。\r\n" +
+            "- 查看活动日志：查看全员的登录、上传、下载、撤除、发帖和改说明记录。\r\n" +
+            "\r\n" +
+            "- Download team files: selected members' files go to Public_Temp\\<member>\\, which is cleared on start and exit.\r\n" +
+            "- Download default library: team default files go to References\\Default\\; older copies are kept before overwriting.\r\n" +
+            "- Upload references: lists files in Reference by default (you can add others) and uploads them to your own team folder.\r\n" +
+            "- Upload local records: lists files in Mat_Local by default and keeps their sub-folder structure.\r\n" +
+            "- Remove my uploaded references: deletes your own uploads from the team area and the copy in your local Reference, so others can no longer download them. You can remove only your own.\r\n" +
+            "- Activity log: everyone's sign-ins, uploads, downloads, removals, posts and help edits.\r\n" +
+            "\r\n" +
+            "需要记住的规则 / Rules to remember\r\n" +
+            "- 上传前先保存文件；本地保存不等于上传。\r\n" +
+            "- 两人上传同名文件时，后上传的会覆盖先上传的，程序不做合并。请按各自目录分工。\r\n" +
+            "- 单个文件不超过 50 MiB。\r\n" +
+            "- 上传只新增或覆盖，不会删除团队区里的旧文件。\r\n" +
+            "\r\n" +
+            "- Save before uploading; saving locally is not uploading.\r\n" +
+            "- If two people upload the same file name, the later upload wins; nothing is merged. Keep to your own folder.\r\n" +
+            "- Each file must be 50 MiB or smaller.\r\n" +
+            "- Uploads only add or overwrite; they never delete older files in the team area.\r\n" +
+            "\r\n" +
+            "\r\n" +
+            "【4】文件放在哪里 / Where files live\r\n" +
+            "\r\n" +
+            "Windows：程序所在的 SRCRec 文件夹\r\n" +
+            "macOS：~/Library/Application Support/ResearchProgressRecorder/SRCRec\r\n" +
+            "\r\n" +
+            "PersonalWorkspaceSRRec\\Mat_Local      你的工作资料，上传本地记录的默认来源 / your working files; default source for local-record uploads\r\n" +
+            "PersonalWorkspaceSRRec\\Reference      你的参考资料，上传参考资料的默认来源 / your references; default source for reference uploads\r\n" +
+            "PersonalWorkspaceSRRec\\Public_Temp    他人内容的临时区，启动和退出时清空 / temporary area for others' files, cleared on start and exit\r\n" +
+            "References\\Default                    团队默认资料库，只读 / team default library, read-only\r\n" +
+            "*.json                                程序配置，请勿手动修改 / app settings, do not edit by hand\r\n" +
+            "\r\n" +
+            "令牌不会写入这些文件。替换或升级程序不会删除上面的资料。\r\n" +
+            "The token is never written to these files. Replacing or upgrading the app keeps all of the above.\r\n" +
+            "\r\n" +
+            "\r\n" +
+            "【5】更新与升级 / Updates\r\n" +
+            "\r\n" +
+            "Windows：点左下角「检查更新」。程序下载新版并校验 SHA-256，退出后只替换程序文件，然后自动重启；上一版保留为 SRPRecorder2027.exe.previous。\r\n" +
+            "macOS：点窗口左下角「检查更新」。程序下载并校验 DMG 后打开它，请退出程序，把新的 app 拖进「应用程序」替换旧版。较早版本若检查更新立即失败，请用浏览器从发布页下载对应芯片的 DMG：Apple 芯片用 arm64，Intel 用 x64。\r\n" +
+            "发布页：https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest\r\n" +
+            "\r\n" +
+            "Windows: press \"Check updates\" at the bottom-left. The app downloads the new version, verifies its SHA-256, replaces only program files after exit and restarts; the previous exe is kept as SRPRecorder2027.exe.previous.\r\n" +
+            "macOS: press \"Check updates\" at the bottom-left. The app downloads and verifies the DMG and opens it; quit the app and drag the new app into Applications to replace the old one. If an older version fails immediately, download the DMG for your chip from the release page in a browser: arm64 for Apple silicon, x64 for Intel.\r\n" +
+            "Release page: https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest\r\n" +
+            "\r\n" +
+            "\r\n" +
+            "【6】常见问题 / Troubleshooting\r\n" +
+            "\r\n" +
+            "- 登录提示 401：令牌无效或已过期，请重新创建。\r\n" +
+            "- 登录提示 403 / 404：确认已接受仓库邀请，并且使用的是勾选了 repo 的 classic 令牌。\r\n" +
+            "- 看不到成员或帖子：先确认已登录，再在成员资料页点「刷新」。\r\n" +
+            "- Windows 首次运行出现 SmartScreen：点「更多信息 → 仍要运行」。程序没有购买代码签名证书。\r\n" +
+            "- macOS 提示无法验证开发者：确认 DMG 来自上述发布页后，先尝试打开一次，再到「系统设置 → 隐私与安全性」点「仍要打开」。如果提示文件已损坏或会损害电脑，请停止使用并反馈原文。\r\n" +
+            "- 上传只成功一部分：多文件上传不是一次性完成的，重新上传即可，同名文件会被覆盖。\r\n" +
+            "- 检查更新失败：多为网络问题或 GitHub 暂时限流，请稍后重试，或直接从发布页下载。\r\n" +
+            "\r\n" +
+            "- 401 on sign-in: the token is invalid or expired; create a new one.\r\n" +
+            "- 403 / 404 on sign-in: make sure you accepted the invitation and use a classic token with repo.\r\n" +
+            "- No members or posts: check that you are signed in, then press Refresh on Members.\r\n" +
+            "- SmartScreen on first run (Windows): choose \"More info → Run anyway\". The app has no paid code-signing certificate.\r\n" +
+            "- \"Developer cannot be verified\" (macOS): after confirming the DMG came from the release page, try to open the app once, then choose Open Anyway in System Settings → Privacy & Security. If macOS says the file is damaged or harmful, stop and report the exact message.\r\n" +
+            "- Upload only partly succeeded: multi-file uploads are not all-or-nothing; upload again and same-named files are overwritten.\r\n" +
+            "- Update check failed: usually the network or a temporary GitHub rate limit; retry later or download from the release page.\r\n" +
+            "\r\n" +
+            "\r\n" +
+            "【7】安全与隐私 / Security and privacy\r\n" +
+            "\r\n" +
+            "- 令牌只用于连接 GitHub，不会上传、打印或写进日志。请不要把令牌发给别人；不用时可在 GitHub 上撤销。\r\n" +
+            "- 能写入 research-data 的人在技术上可以修改任何成员的目录。请只邀请信任的成员。\r\n" +
+            "- 卸载程序不会撤销令牌，请到 GitHub 自行撤销。\r\n" +
+            "\r\n" +
+            "- The token is used only to talk to GitHub; it is never uploaded, printed or logged. Do not share it; revoke it on GitHub when no longer needed.\r\n" +
+            "- Anyone who can write to research-data can technically change any member's folder. Invite only trusted members.\r\n" +
+            "- Uninstalling does not revoke the token; revoke it on GitHub yourself.\r\n";
 
         public static void Apply(Control root)
         {
