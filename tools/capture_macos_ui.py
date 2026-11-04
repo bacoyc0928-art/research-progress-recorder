@@ -138,6 +138,8 @@ def main():
     print(json.dumps(manifest,ensure_ascii=False))
     issues=[(c['file'],w['text']) for c in manifest['captures'] for w in c['clipped_controls'] if w['class'] in ('TButton','TCheckbutton')]
     issues+=[(c['file'],text) for c in manifest['captures'] for text in c.get('hidden_buttons',[])]
+    # 弹窗内的提示文字也不允许被截断（0.2.12 首次原生截图发现撤除参考资料弹窗在最小尺寸截断提示）。
+    issues+=[(c['file'],w['text']) for c in manifest['captures'] if c.get('dialog') for w in c['clipped_controls'] if w['class']=='TLabel']
     if a.strict and issues: raise RuntimeError('Clipped actions: '+str(issues))
 
 if __name__=='__main__': main()

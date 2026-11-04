@@ -1625,7 +1625,8 @@ class Client:
     def choose_references_to_remove(self,api,config,login,names):
         win=self.tk.Toplevel(self.root); win.title(self.tr('撤除我上传的参考资料','Remove My Uploaded References'))
         self.fit_dialog(win,560,420); win.transient(self.root); win.grab_set()
-        self.ttk.Label(win,text=self.tr('选择要从团队区永久删除的参考资料（其他人将无法再下载）：','Select uploaded references to remove permanently from the team area:'),wraplength=520).pack(anchor='w',padx=12,pady=8)
+        # 换行宽度随弹窗宽度变化；固定 520 会在最小尺寸（约 360 宽）时截断提示文字。
+        self.wrapped_label(win,self.tr('选择要从团队区永久删除的参考资料（其他人将无法再下载）：','Select uploaded references to remove permanently from the team area:'),pack_options={'padx':12,'pady':8})
         box=self.tk.Listbox(win,selectmode='extended',height=12); box.pack(fill='both',expand=True,padx=12)
         for name in names: box.insert('end',name)
         bar=self.bottom_bar(win,pady=8)
