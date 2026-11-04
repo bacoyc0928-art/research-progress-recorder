@@ -12,6 +12,21 @@ public static class LocalTransferChecks
     public static void Run(string root)
     {
         string t = Path.Combine(root, "transfer-tests"); Directory.CreateDirectory(t);
+        // 使用说明：Mac/脚本上传的 LF 文本在 Windows 文本框中必须能换行，且已有 CRLF 不被重复转换。
+        Check(MainForm.HelpEditorText("a\nb\r\nc\rd") == "a\r\nb\r\nc\r\nd" && MainForm.HelpEditorText("x\r\ny") == "x\r\ny", "help text from any platform shows line breaks in the Windows editor");
+        // 更新检查的发布页回退：只接受本仓库 github.com 的 vX.Y.Z 标签，只取符合命名规则的安装包。
+        Check(Updater.TagFromReleaseUrl(new Uri("https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13")) == "v0.2.13", "release-page fallback reads the version tag");
+        Check(Updater.TagFromReleaseUrl(new Uri("https://evil.example/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13")) == null
+            && Updater.TagFromReleaseUrl(new Uri("http://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13")) == null
+            && Updater.TagFromReleaseUrl(new Uri("https://github.com/bacoyc0928-art/research-progress-recorder/releases")) == null
+            && Updater.TagFromReleaseUrl(new Uri("https://github.com/other/repo/releases/tag/v9.9.9")) == null
+            && Updater.TagFromReleaseUrl(new Uri("https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13-rc")) == null,
+            "release-page fallback rejects other hosts, plain HTTP, other repositories and malformed tags");
+        string sumsText = new string('a', 64) + "  research-progress-recorder-0.2.13-Windows.zip\n" + new string('b', 64) + " *research-progress-recorder-0.2.13-macOS-arm64.dmg\n"
+            + new string('c', 64) + "  ../evil.exe\nnot-a-hash  research-progress-recorder-0.2.13-macOS-x64.dmg\n";
+        List<string> sumNames = Updater.AssetNamesFromSums(sumsText);
+        Check(sumNames.Count == 2 && sumNames[0] == "research-progress-recorder-0.2.13-Windows.zip" && sumNames[1] == "research-progress-recorder-0.2.13-macOS-arm64.dmg",
+            "release-page fallback takes only well-formed package names from SHA256SUMS");
         Check(AppPaths.Root(t) == Path.GetFullPath(t), "SRCRec root has no extra Sync/SRCRec nesting");
         AppPaths.Ensure(t); Check(Directory.Exists(Path.Combine(t,"PersonalWorkspaceSRRec")), "portable progress folder created");
         Check(AppPaths.MemberReferences(t,"Default") != AppPaths.DefaultReferences(t), "member Default cannot overwrite default library");

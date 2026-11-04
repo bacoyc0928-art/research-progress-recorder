@@ -56,6 +56,7 @@ namespace SRLogbook
             card.Controls.Add(postComposer);
 
             postPublishButton = PostButton("发布", 660, 74, 100);
+            SetPrimary(postPublishButton);
             postPublishButton.Click += delegate { PublishPost(); };
             card.Controls.Add(postPublishButton);
 

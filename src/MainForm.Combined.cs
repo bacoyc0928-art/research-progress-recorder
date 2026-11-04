@@ -98,10 +98,13 @@ namespace SRLogbook
             bChoose.Text = "选择文件夹 / Choose";
             bChoose.Font = Theme.F(9f);
             bChoose.FlatStyle = FlatStyle.Flat;
-            bChoose.FlatAppearance.BorderSize = 0;
-            bChoose.BackColor = Theme.Accent;
-            bChoose.ForeColor = Color.White;
+            // 换文件夹是偶尔才做的设置，用次要按钮；本页的主要操作是“新建文档”。
+            bChoose.FlatAppearance.BorderSize = 1;
+            bChoose.FlatAppearance.BorderColor = Theme.CardBorder;
+            bChoose.BackColor = Color.White;
+            bChoose.ForeColor = Theme.TextMain;
             bChoose.Cursor = Cursors.Hand;
+            DisabledLook(bChoose);
             bChoose.SetBounds(Ui.S(660), Ui.S(84), Ui.S(160), Ui.S(30));
             bChoose.Click += delegate { ChooseProgressFolder(); };
             card.Controls.Add(bChoose);
@@ -117,6 +120,7 @@ namespace SRLogbook
             bDoc.Cursor = Cursors.Hand;
             bDoc.SetBounds(Ui.S(24), Ui.S(128), Ui.S(220), Ui.S(40));
             bDoc.Click += delegate { CreateProgressDoc(); };
+            SetPrimary(bDoc);
             card.Controls.Add(bDoc);
 
             Button bOpen = new Button();
@@ -130,6 +134,7 @@ namespace SRLogbook
             bOpen.Cursor = Cursors.Hand;
             bOpen.SetBounds(Ui.S(258), Ui.S(128), Ui.S(280), Ui.S(40));
             bOpen.Click += delegate { OpenProgressFolder(); };
+            DisabledLook(bOpen);
             card.Controls.Add(bOpen);
 
             Label note = new Label();

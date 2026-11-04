@@ -59,20 +59,85 @@ namespace SRLogbook
             return remote > new Version(local.Major, local.Minor, local.Build);
         }
 
+        /// <summary>true 表示最近一次 Check 因 GitHub API 限流而改用发布页（界面据此说明更新说明在网页上）。</summary>
+        public static bool LastCheckUsedReleasePage { get; private set; }
+
         public static Release Check()
         {
+            LastCheckUsedReleasePage = false;
             try
             {
                 ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                string url = "https://api.github.com/repos/" + Owner + "/" + Repo + "/releases/latest";
-                string json = HttpGet(url, "application/vnd.github+json");
-                Release rel = Json.Deserialize<Release>(json);
+                Release rel;
+                try
+                {
+                    string url = "https://api.github.com/repos/" + Owner + "/" + Repo + "/releases/latest";
+                    rel = Json.Deserialize<Release>(HttpGet(url, "application/vnd.github+json"));
+                }
+                catch (WebException ex)
+                {
+                    // 匿名 API 按 IP 限流（共享出口网络常见）：改走不受该额度限制的发布页与下载地址。
+                    HttpWebResponse resp = ex.Response as HttpWebResponse;
+                    int code = resp == null ? 0 : (int)resp.StatusCode;
+                    if (code != 403 && code != 429) throw;
+                    rel = CheckFromReleasePage();
+                    LastCheckUsedReleasePage = true;
+                }
                 if (rel == null || string.IsNullOrEmpty(rel.tag_name) || rel.assets == null) return null;
                 Asset win = rel.assets.Find(a => a != null && a.name != null && a.name.EndsWith("-Windows.zip", StringComparison.OrdinalIgnoreCase));
                 if (win == null) return null;
                 return rel;
             }
             catch { return null; }
+        }
+
+        /// <summary>
+        /// 从 github.com/&lt;repo&gt;/releases/latest 的跳转得到标签，再读同一 Release 的 SHA256SUMS.txt 得到安装包清单；
+        /// 返回与 API 相同的结构，下载后仍按 SHA256SUMS 校验。
+        /// </summary>
+        public static Release CheckFromReleasePage()
+        {
+            string baseUrl = "https://github.com/" + Owner + "/" + Repo + "/releases";
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(baseUrl + "/latest");
+            req.UserAgent = "SRPRecorder2027";
+            req.Timeout = 30000;
+            Uri final;
+            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) final = resp.ResponseUri;
+            string tag = TagFromReleaseUrl(final);
+            if (tag == null) throw new InvalidDataException("The public release page did not identify a version tag.");
+            string download = baseUrl + "/download/" + tag + "/";
+            List<string> names = AssetNamesFromSums(HttpGet(download + "SHA256SUMS.txt", "text/plain"));
+            if (names.Count == 0) throw new InvalidDataException("The public release checksum file lists no packages.");
+            Release rel = new Release { tag_name = tag, name = tag, body = "", assets = new List<Asset>() };
+            foreach (string name in names) rel.assets.Add(new Asset { name = name, browser_download_url = download + name });
+            rel.assets.Add(new Asset { name = "SHA256SUMS.txt", browser_download_url = download + "SHA256SUMS.txt" });
+            return rel;
+        }
+
+        /// <summary>只接受 https://github.com/&lt;owner&gt;/&lt;repo&gt;/releases/tag/vX.Y.Z。</summary>
+        public static string TagFromReleaseUrl(Uri final)
+        {
+            if (final == null || final.Scheme != Uri.UriSchemeHttps || !string.Equals(final.Host, "github.com", StringComparison.OrdinalIgnoreCase)) return null;
+            string prefix = "/" + Owner + "/" + Repo + "/releases/tag/";
+            string path = final.AbsolutePath;
+            if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return null;
+            string tag = path.Substring(prefix.Length);
+            return System.Text.RegularExpressions.Regex.IsMatch(tag, @"^v\d+\.\d+\.\d+$") ? tag : null;
+        }
+
+        /// <summary>从 SHA256SUMS.txt 取出本项目的安装包文件名（忽略任何不符合命名规则的行）。</summary>
+        public static List<string> AssetNamesFromSums(string sums)
+        {
+            List<string> names = new List<string>();
+            foreach (string line in (sums ?? "").Split('\n'))
+            {
+                string[] parts = line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2 || !System.Text.RegularExpressions.Regex.IsMatch(parts[0], "^[0-9a-fA-F]{64}$")) continue;
+                string name = parts[parts.Length - 1].TrimStart('*');
+                if (System.Text.RegularExpressions.Regex.IsMatch(name, @"^research-progress-recorder-\d+\.\d+\.\d+-(Windows\.zip|macOS-(arm64|x64)\.dmg)$") && !names.Contains(name))
+                    names.Add(name);
+            }
+            return names;
         }
 
         /// <summary>下载 Windows ZIP、按 Release 的 SHA256SUMS.txt 校验并解压到临时目录；返回 SRCRec 目录。</summary>

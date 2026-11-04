@@ -22,10 +22,59 @@ class SyncTests(unittest.TestCase):
             context=SimpleNamespace(check_hostname=True,verify_mode=ssl.CERT_REQUIRED)
             release=dict(tag_name='v0.2.12',assets=[dict(name='SHA256SUMS.txt',browser_download_url='https://example.invalid/sums')])
             checksum=('a'*64+'  app.dmg').encode()
-            with patch.object(m,'network_context',return_value=context), patch.object(m,'release_info',return_value=release), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(checksum)), patch.object(m,'app_bundle_path',return_value=None):
+            page=dict(tag_name='v0.2.12',assets=[dict(name='research-progress-recorder-0.2.12-macOS-arm64.dmg'),dict(name='research-progress-recorder-0.2.12-macOS-x64.dmg')],source='release-page')
+            with patch.object(m,'network_context',return_value=context), patch.object(m,'release_info',return_value=release), patch.object(m,'release_info_from_page',return_value=page), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(checksum)), patch.object(m,'app_bundle_path',return_value=None):
                 m.verify_update_runtime(target)
             result=m.json.loads(target.read_text())
             self.assertTrue(result['tls_verified']); self.assertTrue(result['checksum_download']); self.assertEqual(result['version'],m.VERSION)
+            self.assertEqual(result['page_fallback'],'v0.2.12')
+
+    class _Response(io.BytesIO):
+        def __init__(self,body=b'',url=''):
+            super().__init__(body); self._url=url
+        def geturl(self): return self._url
+
+    def _rate_limited(self):
+        return urllib.error.HTTPError('https://api.github.com/x',403,'rate limit exceeded',{},None)
+
+    def test_release_check_falls_back_to_release_page_when_api_rate_limited(self):
+        tag_url='https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13'
+        sums=('a'*64+'  research-progress-recorder-0.2.13-Windows.zip\n'+'b'*64+'  research-progress-recorder-0.2.13-macOS-arm64.dmg\n'
+              +'c'*64+'  research-progress-recorder-0.2.13-macOS-x64.dmg\n'+'d'*64+'  ../evil.dmg\n').encode()
+        calls=[]
+        def fake(req,**kwargs):
+            calls.append(req.full_url)
+            if 'api.github.com' in req.full_url: raise self._rate_limited()
+            if req.full_url.endswith('/releases/latest'): return self._Response(b'<html/>',tag_url)
+            return self._Response(sums)
+        with patch.object(m.urllib.request,'urlopen',side_effect=fake):
+            rel=m.release_info()
+        self.assertEqual(rel['tag_name'],'v0.2.13'); self.assertEqual(rel['source'],'release-page')
+        names=[a['name'] for a in rel['assets']]
+        self.assertNotIn('../evil.dmg',names); self.assertIn('SHA256SUMS.txt',names)
+        self.assertTrue(all(a['browser_download_url'].startswith('https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.13/') for a in rel['assets']))
+        with patch.object(m.platform,'machine',return_value='arm64'):
+            self.assertEqual(m.update_asset(rel)['name'],'research-progress-recorder-0.2.13-macOS-arm64.dmg')
+        self.assertEqual(len(calls),3)
+
+    def test_release_page_fallback_rejects_unexpected_redirects(self):
+        for url in ('https://evil.example/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13',
+                    'https://github.com/other/repo/releases/tag/v0.2.13',
+                    'https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13-rc',
+                    'https://github.com/login'):
+            def fake(req,**kwargs): return self._Response(b'',url)
+            with patch.object(m.urllib.request,'urlopen',side_effect=fake):
+                with self.assertRaises(m.UpdateError): m.release_info_from_page()
+
+    def test_help_newlines_strip_windows_carriage_returns(self):
+        self.assertEqual(m.help_newlines('a\r\nb\rc\nd'),'a\nb\nc\nd')
+        self.assertEqual(m.help_newlines(None),'')
+        self.assertNotIn('\r',m.HELP_TEXT)
+
+    def test_release_check_does_not_hide_other_api_errors(self):
+        def fake(req,**kwargs): raise urllib.error.HTTPError(req.full_url,500,'server error',{},None)
+        with patch.object(m.urllib.request,'urlopen',side_effect=fake):
+            with self.assertRaises(urllib.error.HTTPError): m.release_info()
 
     def test_updater_and_sync_use_verified_system_ca_context_on_macos(self):
         with patch.object(m.sys,'platform','darwin'), patch.object(m.Path,'is_file',return_value=True), patch.object(m.ssl,'create_default_context') as create:
@@ -420,6 +469,25 @@ class SignedOutStateTkTests(unittest.TestCase):
                 self.assertEqual(str(client.post_text.cget('state')),'normal')
                 client.toggle_language(); root.update()
                 self.assertTrue(all(str(b.cget('state'))=='normal' for b in actions))
+        finally:
+            root.destroy()
+    def test_sync_page_groups_actions_and_marks_primary_uploads(self):
+        try:
+            import tkinter
+            root=tkinter.Tk(); root.withdraw()
+        except Exception as error:
+            self.skipTest('Tk unavailable: '+str(error))
+        try:
+            with tempfile.TemporaryDirectory() as home, patch.object(m,'remembered_blob',return_value=None), patch.object(m.GitHub,'request',side_effect=AssertionError('offline')):
+                client=m.Client(root,home,smoke=True); client.run=lambda *a:None; client.load_help=lambda *a,**k:None
+                root.update()
+                frames=[w for w in client.tabs[4].winfo_children() if w.winfo_class()=='TLabelframe']
+                self.assertEqual([str(f.cget('text')) for f in frames],['从团队获取','分享我的资料','管理我的上传'])
+                primary=[str(b.cget('text')) for b in client.sync_actions if str(b.cget('default'))=='active']
+                self.assertEqual(primary,['上传参考资料','上传本地记录'])
+                self.assertEqual(len(client.sync_actions),6)
+                client.toggle_language(); root.update()
+                self.assertEqual(str(frames[1].cget('text')),'Share my files')
         finally:
             root.destroy()
     def test_member_files_dialog_handles_unresolved_folder_path(self):
