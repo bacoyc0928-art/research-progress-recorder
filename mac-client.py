@@ -1222,8 +1222,12 @@ class Client:
     def show_member_files(self,member,folder):
         dialog=self.tk.Toplevel(self.root); dialog.title(member+' · SRPRecorder2027'); self.fit_dialog(dialog,850,520)
         tree=self.table(dialog,[self.tr('文件','File'),self.tr('目录','Folder')]); paths={}
+        # upload_files 返回解析后的真实路径（macOS 上 /var → /private/var），相对路径也要基于解析后的根目录。
+        root=Path(folder).resolve()
         for file in upload_files(folder):
-            ident=tree.insert('', 'end',values=(file.name,str(file.parent.relative_to(folder)))); paths[ident]=file
+            try: where=str(file.parent.resolve().relative_to(root))
+            except ValueError: where=str(file.parent)
+            ident=tree.insert('', 'end',values=(file.name,where)); paths[ident]=file
         bar=self.bottom_bar(dialog)
         def open_selected():
             selected=tree.selection()

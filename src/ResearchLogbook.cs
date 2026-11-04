@@ -1535,6 +1535,13 @@ namespace SRLogbook
             bFile.Visible = false;
             bFolder.Visible = false;
             t.Text = "参考资料为只读；个人资料请在“进度同步”页上传。";
+            // 添加文件/文件夹已隐藏：“改动记录”靠最右，提示文字只占用按钮左侧，任何 DPI 下都不与按钮重叠。
+            top.Resize += delegate
+            {
+                bHist.Left = Math.Max(h.Right, top.ClientSize.Width - bHist.Width - Ui.S(12));
+                t.Width = Math.Max(Ui.S(80), bHist.Left - t.Left - Ui.S(12));
+                h.Width = Math.Max(Ui.S(80), Math.Min(h.Width, bHist.Left - h.Left - Ui.S(12)));
+            };
 
             flow = new FlowLayoutPanel();
             Application.AddMessageFilter(new WheelRouter(flow));

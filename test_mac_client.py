@@ -422,5 +422,30 @@ class SignedOutStateTkTests(unittest.TestCase):
                 self.assertTrue(all(str(b.cget('state'))=='normal' for b in actions))
         finally:
             root.destroy()
+    def test_member_files_dialog_handles_unresolved_folder_path(self):
+        # macOS 上临时目录 /var 是 /private/var 的链接；upload_files 返回解析后的路径，弹窗不能因此崩溃。
+        try:
+            import tkinter
+            root=tkinter.Tk(); root.withdraw()
+        except Exception as error:
+            self.skipTest('Tk unavailable: '+str(error))
+        try:
+            with tempfile.TemporaryDirectory() as home, patch.object(m,'remembered_blob',return_value=None), patch.object(m.GitHub,'request',side_effect=AssertionError('offline')):
+                client=m.Client(root,home,smoke=True); client.run=lambda *a:None; client.load_help=lambda *a,**k:None
+                real=Path(home).resolve()/'member'; (real/'sub').mkdir(parents=True); (real/'sub'/'a.txt').write_text('x',encoding='utf-8')
+                unresolved=Path(home)/'member'/'sub'/'..'
+                before=set(root.winfo_children())
+                client.show_member_files('sample',unresolved); root.update()
+                win=[w for w in root.winfo_children() if w not in before][-1]
+                trees=[]
+                def collect(w):
+                    if w.winfo_class()=='Treeview': trees.append(w)
+                    for c in w.winfo_children(): collect(c)
+                collect(win)
+                rows=[trees[0].item(i,'values') for i in trees[0].get_children()]
+                self.assertEqual([tuple(r) for r in rows],[('a.txt','sub')])
+                win.destroy()
+        finally:
+            root.destroy()
 
 if __name__=='__main__': unittest.main()
