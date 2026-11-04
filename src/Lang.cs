@@ -151,7 +151,7 @@ namespace SRLogbook
             { "分享我的资料", "Share my files" },
             { "管理我的上传", "Manage my uploads" },
             { "下载到本机查看，不会改动团队资料。", "Downloads to this computer; team data is not changed." },
-            { "把你勾选的文件上传到团队区你自己的文件夹。", "Uploads the files you tick to your own folder in the team area." },
+            { "把你勾选的文件上传到团队区你自己的文件夹；每个文件最大 50 MiB，只新增或覆盖。", "Uploads the files you tick to your own team folder; up to 50 MiB each, only adds or overwrites." },
             { "撤除只影响你自己上传的文件；活动日志记录每个人的操作。", "Removal affects only files you uploaded; the activity log shows everyone's actions." },
             { "选择文件夹", "Choose Folder" },
             { "补录文件", "Add Files" },

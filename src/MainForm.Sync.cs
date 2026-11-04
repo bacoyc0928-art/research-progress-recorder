@@ -117,7 +117,7 @@ namespace SRLogbook
             string[] groupTitles = { "从团队获取", "分享我的资料", "管理我的上传" };
             string[] groupNotes = {
                 "下载到本机查看，不会改动团队资料。",
-                "把你勾选的文件上传到团队区你自己的文件夹。",
+                "把你勾选的文件上传到团队区你自己的文件夹；每个文件最大 50 MiB，只新增或覆盖。",
                 "撤除只影响你自己上传的文件；活动日志记录每个人的操作。" };
             syncGroupTitles = new Label[3]; syncGroupNotes = new Label[3];
             for (int i = 0; i < 3; i++)

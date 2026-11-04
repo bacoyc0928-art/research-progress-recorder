@@ -1528,13 +1528,13 @@ class Client:
         downloads=group('从团队获取','Get from the team','下载到本机查看，不会改动团队资料。','Downloads to this computer; team data is not changed.')
         action(downloads,'从 GitHub 下载他人内容','Download Team Files',self.pull_others)
         action(downloads,'从 GitHub 下载默认资料库','Download Default Library',self.pull_default)
-        uploads=group('分享我的资料','Share my files','把你勾选的文件上传到团队区你自己的文件夹。','Uploads the files you tick to your own folder in the team area.')
+        uploads=group('分享我的资料','Share my files','把你勾选的文件上传到团队区你自己的文件夹；每个文件最大 50 MiB，只新增或覆盖，不删除旧文件。',
+                      'Uploads the files you tick to your own team folder; up to 50 MiB each, only adds or overwrites, never deletes older files.')
         action(uploads,'上传参考资料','Upload References',self.upload_references,primary=True)
         action(uploads,'上传本地记录','Upload Local Records',self.upload_progress,primary=True)
         removals=group('管理我的上传','Manage my uploads','撤除只影响你自己上传的文件；活动日志记录每个人的操作。',"Removal affects only files you uploaded; the activity log shows everyone's actions.")
         action(removals,'撤除我上传的参考资料','Remove My Uploaded References',self.remove_my_references)
         action(removals,'查看活动日志','View Activity Log',self.view_activity)
-        self.wrapped_label(p,self.tr('每个文件最大 50 MiB；上传只新增或覆盖，不删除团队区旧文件；部分上传失败时重新上传即可。','Each file can be up to 50 MiB. Uploads only add or overwrite and never delete older team files; if an upload partly fails, just upload again.'),foreground='#5e697a',pack_options={'pady':(6,0)})
     def save_sync(self):
         api,config=self.api()
         def work():
