@@ -185,7 +185,8 @@ namespace SRLogbook
             page.AutoScroll = true;
             Action layout = delegate
             {
-                card.Width = Math.Min(Ui.S(880), Math.Max(Ui.S(320), page.ClientSize.Width - Ui.S(20)));
+                // 与其他页一致铺满页面宽度（留 4px 防止触发横向滚动条）。
+                card.Width = Math.Max(Ui.S(320), page.ClientSize.Width - Ui.S(4));
                 card.Height = Math.Max(Ui.S(460), page.ClientSize.Height - Ui.S(2));
                 int contentWidth = Math.Max(Ui.S(260), card.Width - Ui.S(48));
                 hint.Width = note.Width = contentWidth;
@@ -193,7 +194,8 @@ namespace SRLogbook
                 bChoose.Left = card.Width - Ui.S(24) - bChoose.Width;
                 txtProgPath.Width = Math.Max(Ui.S(60), bChoose.Left - txtProgPath.Left - Ui.S(12));
                 bDoc.Width = Math.Min(Ui.S(220), (contentWidth - Ui.S(14)) / 2);
-                bOpen.Left = bDoc.Right + Ui.S(14); bOpen.Width = contentWidth - bDoc.Width - Ui.S(14);
+                // 两个同级操作按钮等宽，不再让“打开工作资料”横跨整行。
+                bOpen.Left = bDoc.Right + Ui.S(14); bOpen.Width = bDoc.Width;
                 int index = 0, gap = Ui.S(10), tileWidth = (contentWidth - gap * 2) / 3;
                 foreach (Control child in card.Controls)
                 {

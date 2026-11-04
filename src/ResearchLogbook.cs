@@ -442,7 +442,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.11";
+            this.Text = "SRPRecorder2027 · 0.2.12";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
@@ -1262,6 +1262,8 @@ namespace SRLogbook
                 pages[i].Visible = false;
                 pagesHost.Controls.Add(pages[i]);
             }
+            // UpdateLoginUi 在页面建立前就运行过；页面齐全后再套用一次登录状态，未登录时按钮一开始就是禁用外观。
+            UpdateSyncActionState();
         }
 
         private Panel BuildLogPage()
@@ -1641,6 +1643,7 @@ namespace SRLogbook
             b.MinimumSize = new Size(Ui.S(130), Ui.S(34));
             b.Padding = new Padding(Ui.S(8), Ui.S(2), Ui.S(8), Ui.S(2));
             b.Margin = new Padding(Ui.S(4));
+            DisabledLook(b);
             return b;
         }
 

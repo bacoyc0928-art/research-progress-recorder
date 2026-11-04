@@ -85,8 +85,9 @@ namespace SRLogbook
         private void LayoutPostsPage(Panel page)
         {
             if (postCard == null || postFlow == null) return;
-            postCard.Width = Math.Min(Ui.S(920), Math.Max(Ui.S(400), page.ClientSize.Width - Ui.S(2)));
-            postCard.Height = Math.Min(Ui.S(640), Math.Max(Ui.S(400), page.ClientSize.Height - Ui.S(2)));
+            // 与成员资料、使用说明页一致：卡片铺满页面，宽窗口下不再在右侧留出一条空白。
+            postCard.Width = Math.Max(Ui.S(400), page.ClientSize.Width - Ui.S(2));
+            postCard.Height = Math.Max(Ui.S(400), page.ClientSize.Height - Ui.S(2));
             int margin = Ui.S(24), gap = Ui.S(8);
             int contentWidth = Math.Max(Ui.S(320), postCard.ClientSize.Width - margin * 2);
             int publishWidth = Ui.S(100), historyWidth = Ui.S(114);
@@ -112,6 +113,7 @@ namespace SRLogbook
             b.ForeColor = Theme.TextMain;
             b.Cursor = Cursors.Hand;
             b.SetBounds(Ui.S(x), Ui.S(y), Ui.S(w), Ui.S(34));
+            DisabledLook(b);
             return b;
         }
 
@@ -222,8 +224,7 @@ namespace SRLogbook
             using (Form dialog = new Form())
             {
                 dialog.Text = p.Author + " · " + p.Time;
-                dialog.Size = new Size(720, 560);
-                dialog.StartPosition = FormStartPosition.CenterParent;
+                Dlg.Fit(dialog, 720, 520);
                 dialog.BackColor = Color.White;
                 TextBox body = new TextBox();
                 body.Dock = DockStyle.Fill;
@@ -234,24 +235,13 @@ namespace SRLogbook
                 body.BorderStyle = BorderStyle.None;
                 body.Font = Theme.F(10f);
                 body.Text = p.Body;
-                Panel bottom = new Panel();
-                bottom.Dock = DockStyle.Bottom;
-                bottom.Height = 52;
-                Button read = new Button();
-                read.Text = "已阅";
-                read.FlatStyle = FlatStyle.Flat;
-                read.SetBounds(12, 10, 100, 32);
+                Button read = Dlg.Button("已阅");
                 read.Click += delegate { dialog.Close(); MarkPostRead(p); };
-                bottom.Controls.Add(read);
-                Button close = new Button();
-                close.Text = "关闭";
-                close.FlatStyle = FlatStyle.Flat;
-                close.SetBounds(dialog.Width - 130, 10, 100, 32);
-                close.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
+                Button close = Dlg.Button("关闭");
                 close.Click += delegate { dialog.Close(); };
-                bottom.Controls.Add(close);
                 dialog.Controls.Add(body);
-                dialog.Controls.Add(bottom);
+                // 后加入的 Dock=Bottom 按钮栏先停靠，正文 Fill 只占剩余空间；窗口缩小时按钮不被挤掉。
+                Dlg.BottomBar(dialog, close, read);
                 Lang.Apply(dialog);
                 dialog.ShowDialog(this);
             }
@@ -302,8 +292,7 @@ namespace SRLogbook
                 using (Form dialog = new Form())
                 {
                     dialog.Text = "历史记录（已阅）";
-                    dialog.Size = new Size(820, 520);
-                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    Dlg.Fit(dialog, 820, 480);
                     dialog.BackColor = Color.White;
                     ListView list = new ListView();
                     list.Dock = DockStyle.Fill;
@@ -324,17 +313,10 @@ namespace SRLogbook
                     {
                         if (list.SelectedItems.Count > 0) ShowPost((PostItem)list.SelectedItems[0].Tag);
                     };
-                    Button close = new Button();
-                    close.Text = "关闭";
-                    close.FlatStyle = FlatStyle.Flat;
-                    Panel bottom = new Panel();
-                    bottom.Dock = DockStyle.Bottom;
-                    bottom.Height = 50;
-                    close.SetBounds(12, 9, 100, 32);
+                    Button close = Dlg.Button("关闭");
                     close.Click += delegate { dialog.Close(); };
-                    bottom.Controls.Add(close);
                     dialog.Controls.Add(list);
-                    dialog.Controls.Add(bottom);
+                    Dlg.BottomBar(dialog, close);
                     Lang.Apply(dialog);
                     dialog.ShowDialog(this);
                 }

@@ -1,4 +1,4 @@
-# SRPRecorder2027 0.2.11 · Complete User Guide (English)
+# SRPRecorder2027 0.2.12 · Complete User Guide (English)
 
 > Maintained together with the in-app Help page and `help/help.md` in the private repository; the data-storage section is authoritative.
 > 中文说明: [使用说明.md](使用说明.md)
@@ -9,21 +9,21 @@
 
 | Platform | File | Requirement |
 |---|---|---|
-| Windows 64-bit | [research-progress-recorder-0.2.11-Windows.zip](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.11/research-progress-recorder-0.2.11-Windows.zip) | Windows 10/11 + .NET Framework 4.8 |
-| Apple Silicon | [research-progress-recorder-0.2.11-macOS-arm64.dmg](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.11/research-progress-recorder-0.2.11-macOS-arm64.dmg) | macOS 14 or later |
-| Intel Mac | [research-progress-recorder-0.2.11-macOS-x64.dmg](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.11/research-progress-recorder-0.2.11-macOS-x64.dmg) | macOS 15 or later |
-| Checksums | [SHA256SUMS.txt](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.11/SHA256SUMS.txt) | SHA-256 of the three packages |
+| Windows 64-bit | [research-progress-recorder-0.2.12-Windows.zip](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.12/research-progress-recorder-0.2.12-Windows.zip) | Windows 10/11 + .NET Framework 4.8 |
+| Apple Silicon | [research-progress-recorder-0.2.12-macOS-arm64.dmg](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.12/research-progress-recorder-0.2.12-macOS-arm64.dmg) | macOS 14 or later |
+| Intel Mac | [research-progress-recorder-0.2.12-macOS-x64.dmg](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.12/research-progress-recorder-0.2.12-macOS-x64.dmg) | macOS 15 or later |
+| Checksums | [SHA256SUMS.txt](https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.12/SHA256SUMS.txt) | SHA-256 of the three packages |
 
 Releases: https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest
 
-No GitHub sign-in is needed to download. The Windows build reports `0.2.11.0`; macOS reports `0.2.11`. Both DMGs are functionally identical and differ only in the bundled runtime architecture — arm64 for Apple Silicon, x64 for Intel.
+No GitHub sign-in is needed to download. The Windows build reports `0.2.12.0`; macOS reports `0.2.12`. Both DMGs are functionally identical and differ only in the bundled runtime architecture — arm64 for Apple Silicon, x64 for Intel.
 
 ```powershell
-Get-FileHash .\research-progress-recorder-0.2.11-Windows.zip -Algorithm SHA256
+Get-FileHash .\research-progress-recorder-0.2.12-Windows.zip -Algorithm SHA256
 ```
 
 ```bash
-shasum -a 256 research-progress-recorder-0.2.11-macOS-arm64.dmg
+shasum -a 256 research-progress-recorder-0.2.12-macOS-arm64.dmg
 ```
 
 ---
@@ -67,7 +67,7 @@ shasum -a 256 research-progress-recorder-0.2.11-macOS-arm64.dmg
 
 ## 3. The six pages
 
-The interface can be switched between Chinese and English (next to `SR` on Windows, at the right of the header on macOS). The choice is remembered; version 0.2.11 switches in place on both platforms, preserving sign-in and unfinished edits.
+The interface can be switched between Chinese and English (next to `SR` on Windows, at the right of the header on macOS). The choice is remembered; version 0.2.12 switches in place on both platforms, preserving sign-in and unfinished edits.
 
 The sections are **Members, Quick Post, References & Materials, Local Records, Progress Sync and Help**. Each has its own unread dot, cleared when you enter it; dots are computed only while signed in.
 
@@ -146,7 +146,7 @@ There is no self-hosted server: all team data lives in the private repository `b
 
 ```
 SRCRec\
-├─ SRPRecorder2027.exe             app 0.2.11
+├─ SRPRecorder2027.exe             app 0.2.12
 ├─ SRPRecorder2027.exe.config      high-DPI / long-path config, keep next to the exe
 ├─ research_log.json               legacy research entries
 ├─ workspace.json                  workspace path
@@ -245,8 +245,8 @@ research-data/
 ## 8. Upgrade, backup and uninstall
 
 - **Upgrade**: quit the app → on Windows replace the whole `SRCRec\` folder (keep `.exe.config`); on macOS overwrite the old app in `Applications`. Config, logs, download cache and personal files are preserved.
-- **In-app update**: Windows continues to download, verify and replace program files after exit. Mac 0.2.11 now uses the same verified system-CA context for updater and sync requests. Current ad-hoc builds open the verified DMG for manual replacement rather than promising unattended installation/relaunch. Developer ID builds can use the automatic helper, which checks the new app’s developer identity and Gatekeeper assessment. Read-only, disk-image and App Translocation locations fall back to manual installation. Users whose older update check fails can download a DMG in their browser, quit the app and replace the app in Applications.
-- **Migration marker**: `data_version.txt` stays `0.2.0`; cleanup runs only when upgrading from an older release and never repeats on 0.2.11.
+- **In-app update**: Windows continues to download, verify and replace program files after exit. Mac 0.2.12 now uses the same verified system-CA context for updater and sync requests. Current ad-hoc builds open the verified DMG for manual replacement rather than promising unattended installation/relaunch. Developer ID builds can use the automatic helper, which checks the new app’s developer identity and Gatekeeper assessment. Read-only, disk-image and App Translocation locations fall back to manual installation. Users whose older update check fails can download a DMG in their browser, quit the app and replace the app in Applications.
+- **Migration marker**: `data_version.txt` stays `0.2.0`; cleanup runs only when upgrading from an older release and never repeats on 0.2.12.
 - **Backup**: copy the whole `SRCRec\` folder (Windows) or `~/Library/Application Support/ResearchProgressRecorder/` (macOS).
 - **Uninstall**: run `卸载SRPRecorder2027.exe` on Windows (research files kept by default); run `uninstall-macos.command` from the DMG on macOS (app to Trash, data kept). Uninstalling does not revoke the token.
 
@@ -277,4 +277,4 @@ research-data/
 
 ---
 
-*Document version: 0.2.11 · 2026-11-03 · maintained with `help/help.md` and the in-app Help page.*
+*Document version: 0.2.12 · 2026-11-03 · maintained with `help/help.md` and the in-app Help page.*

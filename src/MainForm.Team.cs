@@ -47,7 +47,8 @@ namespace SRLogbook
             // 只占标题那一行的高度；用 Anchor 而不是 Dock=Right，否则白色面板会盖住下面的副标题。
             FlowLayoutPanel topRight = new FlowLayoutPanel();
             topRight.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            topRight.Size = new Size(Ui.S(500), Ui.S(56));
+            // 高度只容纳一行按钮（32 + 上边距 6），不能伸到 y=52 的副标题行，否则会遮住路径文字。
+            topRight.Size = new Size(Ui.S(500), Ui.S(46));
             topRight.FlowDirection = FlowDirection.RightToLeft;
             topRight.WrapContents = false;
             topRight.BackColor = Color.White;
@@ -106,7 +107,7 @@ namespace SRLogbook
             lblPersonalPath.Font = Theme.F(8.6f);
             lblPersonalPath.ForeColor = Theme.TextMuted;
             lblPersonalPath.BackColor = Color.White;
-            lblPersonalPath.SetBounds(Ui.S(2), Ui.S(40), Ui.S(880), Ui.S(18));
+            lblPersonalPath.SetBounds(Ui.S(2), Ui.S(48), Ui.S(880), Ui.S(22));
             lblPersonalPath.AutoEllipsis = true;
             pp.Controls.Add(lblPersonalPath);
             personalFolder = LoadPersonalFolder();
@@ -114,7 +115,7 @@ namespace SRLogbook
 
             FlowLayoutPanel ppRight = new FlowLayoutPanel();
             ppRight.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            ppRight.Size = new Size(Ui.S(300), Ui.S(46));
+            ppRight.Size = new Size(Ui.S(300), Ui.S(44));
             ppRight.FlowDirection = FlowDirection.RightToLeft;
             ppRight.WrapContents = false;
             ppRight.BackColor = Color.White;
@@ -149,7 +150,9 @@ namespace SRLogbook
                 teamStatus.Width = Math.Max(Ui.S(240), tw - Ui.S(14));
                 int pw = Math.Max(Ui.S(360), pp.ClientSize.Width);
                 ppRight.Left = Math.Max(Ui.S(2), pw - ppRight.Width - Ui.S(8));
-                int labelW = Math.Max(Ui.S(180), pw - ppRight.Width - Ui.S(20));
+                // 状态链接紧跟“我的参考资料”标题，不再固定在 x=240 处与标题隔开一大段。
+                ph.Width = Math.Min(Ui.S(230), TextRenderer.MeasureText(ph.Text, ph.Font).Width + Ui.S(6));
+                lblPersonal.Left = ph.Right + Ui.S(8);
                 lblPersonal.Width = Math.Max(Ui.S(80), ppRight.Left - lblPersonal.Left - Ui.S(12));
                 lblPersonalPath.Width = Math.Max(Ui.S(180), pw - Ui.S(20));
             };

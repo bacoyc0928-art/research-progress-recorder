@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
@@ -12,6 +14,51 @@ public class Verify002
     static int count;
     static void Check(bool ok, string message) { if (!ok) throw new Exception(message); Console.WriteLine("PASS " + message); count++; }
     static Entry E(string id, string date, string title) { return new Entry { Id=id, Updated=date, Title=title, Date="2026-10-20", Category="", Status="进行中", Progress=0, Content="" }; }
+    /// <summary>通用布局审计：同一容器内可见控件不得重叠、不得超出父容器，单行标签的文字高度不得被裁掉。</summary>
+    static List<string> LayoutIssues(Control top, string where)
+    {
+        var issues = new List<string>();
+        Action<Control> walk = null;
+        walk = delegate(Control parent)
+        {
+            var kids = new List<Control>();
+            foreach (Control c in parent.Controls) if (c.Visible && c.Width > 0 && c.Height > 0) kids.Add(c);
+            foreach (Control c in kids)
+            {
+                bool leaf = c is Label || c is Button || c is TextBox || c is CheckBox || c is ListView;
+                if (leaf && !(parent is FlowLayoutPanel) && !(parent is ScrollableControl && ((ScrollableControl)parent).AutoScroll))
+                {
+                    Rectangle area = parent.ClientRectangle;
+                    if (!area.Contains(c.Bounds)) issues.Add(where + ": '" + Name(c) + "' exceeds " + Name(parent) + " " + c.Bounds + " / " + area);
+                }
+                Label l = c as Label;
+                if (l != null && !l.AutoSize && !string.IsNullOrEmpty(l.Text) && l.Text.IndexOf('\n') < 0)
+                {
+                    int need = TextRenderer.MeasureText(l.Text, l.Font).Height;
+                    if (need > l.ClientSize.Height + 2) issues.Add(where + ": label '" + Name(l) + "' text height " + need + " > " + l.ClientSize.Height);
+                }
+            }
+            if (!(parent is FlowLayoutPanel))
+                for (int i = 0; i < kids.Count; i++)
+                    for (int j = i + 1; j < kids.Count; j++)
+                    {
+                        Control a = kids[i], b = kids[j];
+                        bool la = a is Label || a is Button || a is TextBox || a is CheckBox, lb = b is Label || b is Button || b is TextBox || b is CheckBox;
+                        // 叶子控件与叶子控件、或叶子控件与兄弟容器（列表/卡片流）重叠都会遮挡文字。
+                        if ((la || lb) && a.Bounds.IntersectsWith(b.Bounds))
+                            issues.Add(where + ": '" + Name(a) + "' overlaps '" + Name(b) + "' " + a.Bounds + " " + b.Bounds);
+                    }
+            foreach (Control c in kids) if (c.Controls.Count > 0) walk(c);
+        };
+        walk(top);
+        return issues;
+    }
+    static string Name(Control c)
+    {
+        string t = (c.Text ?? "").Replace("\r", " ").Replace("\n", " ");
+        if (t.Length > 24) t = t.Substring(0, 24);
+        return c.GetType().Name + ":" + (string.IsNullOrEmpty(c.Name) ? t : c.Name);
+    }
     static void PickerCheck(MainForm owner, string root, bool browse)
     {
         Exception failure = null; bool inspected = false;
@@ -152,6 +199,27 @@ public class Verify002
             f.CaptureTo(Path.Combine(root,"local-minimum.png"));
             var help = (TextBox)typeof(MainForm).GetField("helpEditor",fields).GetValue(f);
             Check(help.ReadOnly, "help is read-only before login on a fresh launch");
+            var helpButtons = (Button[])typeof(MainForm).GetField("helpToolbarButtons",fields).GetValue(f);
+            bool signedOutLocked = !postPublish.Enabled && !postHistory.Enabled && postComposer.ReadOnly;
+            foreach (Button button in helpButtons) signedOutLocked = signedOutLocked && !button.Enabled;
+            foreach (Control child in syncCard.Controls) if (child is Button && child.Visible) signedOutLocked = signedOutLocked && !child.Enabled;
+            Check(signedOutLocked, "signed-out state visibly disables Quick Post, Help toolbar and all sync actions");
+            Check(syncCard.Controls.Count > 0 && postPublish.BackColor != Color.White, "disabled buttons use the grey disabled look");
+            typeof(MainForm).GetField("sessionToken",fields).SetValue(f,"offline-test-not-a-credential");
+            typeof(MainForm).GetField("sessionLogin",fields).SetValue(f,"offline-tester");
+            typeof(MainForm).GetMethod("UpdateLoginUi",fields).Invoke(f,null); Application.DoEvents();
+            bool signedInOpen = postPublish.Enabled && postHistory.Enabled && !postComposer.ReadOnly && !help.ReadOnly && postPublish.BackColor == Color.White;
+            foreach (Button button in helpButtons) signedInOpen = signedInOpen && button.Enabled;
+            foreach (Control child in syncCard.Controls) if (child is Button && child.Visible) signedInOpen = signedInOpen && child.Enabled;
+            Check(signedInOpen, "signing in re-enables Quick Post, Help toolbar and sync actions with normal look");
+            var signedInIssues = new List<string>();
+            for (int page = 0; page < 6; page++) { f.SetPagePublic(page); Application.DoEvents(); signedInIssues.AddRange(LayoutIssues(f, "signed-in page" + page)); }
+            foreach (string issue in signedInIssues) Console.WriteLine("LAYOUT " + issue);
+            Check(signedInIssues.Count == 0, "signed-in pages have no overlapping or clipped controls");
+            typeof(MainForm).GetField("sessionToken",fields).SetValue(f,null);
+            typeof(MainForm).GetField("sessionLogin",fields).SetValue(f,null);
+            typeof(MainForm).GetMethod("UpdateLoginUi",fields).Invoke(f,null); Application.DoEvents();
+            f.SetPagePublic(3); Application.DoEvents();
             help.Text = "LOCAL DRAFT - must survive language switch";
             Lang.En = true; Lang.Apply(f); Lang.En = false; Lang.Apply(f);
             Check(help.Text == "LOCAL DRAFT - must survive language switch", "language switching preserves help drafts");
@@ -165,6 +233,24 @@ public class Verify002
             Label memberNote=null; Button view=null;
             foreach(Control child in memberCard.Controls) { if(child is Label && child.Top>Ui.S(25)) memberNote=(Label)child; if(child is Button) view=(Button)child; }
             Check(memberNote != null && view != null && memberNote.Right<=view.Left, "other-member state cannot overlap its open button");
+            var layoutIssues = new List<string>();
+            foreach (bool en in new[] { false, true })
+            {
+                Lang.En = en; Lang.Apply(f);
+                foreach (int[] size in new[] { new[] { 1280, 800 }, new[] { 1020, 680 } })
+                {
+                    f.SetSizePublic(size[0], size[1]); Application.DoEvents();
+                    for (int page = 0; page < 6; page++)
+                    {
+                        f.SetPagePublic(page); Application.DoEvents();
+                        layoutIssues.AddRange(LayoutIssues(f, (en ? "en" : "zh") + " " + size[0] + " page" + page));
+                    }
+                }
+            }
+            Lang.En = false; Lang.Apply(f);
+            var distinct = new List<string>(new HashSet<string>(layoutIssues)); distinct.Sort();
+            foreach (string issue in distinct) Console.WriteLine("LAYOUT " + issue);
+            Check(distinct.Count == 0 || Environment.GetEnvironmentVariable("SRPREC_LAYOUT_REPORT_ONLY") == "1", "no overlapping, clipped or out-of-card controls on six pages, both languages, default and minimum size (" + distinct.Count + " issues)");
             f.Close();
             Check(File.ReadAllText(Path.Combine(root,"help_local.md"))=="LOCAL DRAFT - must survive language switch", "help draft survives normal application exit");
             var sf=typeof(MainForm).GetField("store",BindingFlags.NonPublic|BindingFlags.Instance); var data=(Store)sf.GetValue(f);

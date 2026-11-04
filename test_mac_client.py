@@ -20,7 +20,7 @@ class SyncTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target=Path(tmp)/'result.json'
             context=SimpleNamespace(check_hostname=True,verify_mode=ssl.CERT_REQUIRED)
-            release=dict(tag_name='v0.2.11',assets=[dict(name='SHA256SUMS.txt',browser_download_url='https://example.invalid/sums')])
+            release=dict(tag_name='v0.2.12',assets=[dict(name='SHA256SUMS.txt',browser_download_url='https://example.invalid/sums')])
             checksum=('a'*64+'  app.dmg').encode()
             with patch.object(m,'network_context',return_value=context), patch.object(m,'release_info',return_value=release), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(checksum)), patch.object(m,'app_bundle_path',return_value=None):
                 m.verify_update_runtime(target)
@@ -37,8 +37,8 @@ class SyncTests(unittest.TestCase):
 
     def test_release_check_passes_verified_tls_context(self):
         context=object()
-        with patch.object(m,'network_context',return_value=context), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(b'{"tag_name":"v0.2.11"}')) as request:
-            self.assertEqual(m.release_info()['tag_name'],'v0.2.11')
+        with patch.object(m,'network_context',return_value=context), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(b'{"tag_name":"v0.2.12"}')) as request:
+            self.assertEqual(m.release_info()['tag_name'],'v0.2.12')
             self.assertIs(request.call_args.kwargs['context'],context)
 
     def test_download_and_checksum_both_pass_verified_tls_context(self):
@@ -335,5 +335,92 @@ class SyncTests(unittest.TestCase):
     def test_missing_personal_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(ValueError): m.GitHub({'repo':'a/b'},'x').personal(m.empty(),str(Path(tmp)/'missing'),True)
+
+class DialogLayoutTests(unittest.TestCase):
+    SCREEN=(0,0,1440,900)
+    def test_dialog_fits_primary_screen_with_menu_and_dock_margins(self):
+        w,h,left,top=m.dialog_geometry(900,520,self.SCREEN,(100,80,1120,760))
+        self.assertEqual((w,h),(900,520))
+        self.assertGreaterEqual(left,0); self.assertLessEqual(left+w,1440)
+        self.assertGreaterEqual(top,28); self.assertLessEqual(top+h,900-48)
+    def test_dialog_is_clamped_on_small_primary_screen(self):
+        w,h,left,top=m.dialog_geometry(900,540,(0,0,800,600),(0,0,800,600))
+        self.assertEqual((w,h),(768,500))
+        self.assertGreaterEqual(left,0); self.assertLessEqual(left+w,800)
+        self.assertGreaterEqual(top,28); self.assertLessEqual(top+h,600-48)
+    def test_dialog_stays_on_secondary_display_right_of_primary(self):
+        parent=(1440+200,100,1120,760)
+        w,h,left,top=m.dialog_geometry(850,520,self.SCREEN,parent)
+        self.assertGreaterEqual(left,parent[0]); self.assertLessEqual(left+w,parent[0]+parent[2])
+        self.assertGreaterEqual(top,parent[1]); self.assertLessEqual(top+h,parent[1]+parent[3])
+    def test_dialog_stays_on_secondary_display_left_of_or_above_primary(self):
+        for parent in [(-1300,50,1120,760),(200,-900,940,640)]:
+            w,h,left,top=m.dialog_geometry(780,540,self.SCREEN,parent)
+            self.assertGreaterEqual(left,parent[0]); self.assertLessEqual(left+w,parent[0]+parent[2])
+            self.assertGreaterEqual(top,parent[1]); self.assertLessEqual(top+h,parent[1]+parent[3])
+    def test_dialog_larger_than_secondary_window_is_shrunk_to_window(self):
+        parent=(2000,0,600,400)
+        w,h,left,top=m.dialog_geometry(900,520,self.SCREEN,parent)
+        self.assertLessEqual(w,600); self.assertLessEqual(h,400)
+        self.assertEqual(left,2000)
+
+class DialogBottomBarTkTests(unittest.TestCase):
+    def setUp(self):
+        try:
+            import tkinter
+            from tkinter import ttk
+            self.root=tkinter.Tk(); self.root.withdraw()
+        except Exception as error:
+            self.skipTest('Tk unavailable: '+str(error))
+        self.tk,self.ttk=tkinter,ttk
+        ns=SimpleNamespace(ttk=ttk,root=self.root)
+        ns.flow_bar=lambda win,**k:m.Client.flow_bar(ns,win,**k)
+        self.client=ns
+    def tearDown(self):
+        if hasattr(self,'root'): self.root.destroy()
+    def assert_button_visible(self,win,button):
+        win.update()
+        self.assertGreaterEqual(button.winfo_height(),button.winfo_reqheight()-2)
+        self.assertLessEqual(button.winfo_rooty()+button.winfo_height(),win.winfo_rooty()+win.winfo_height()+1)
+    def test_shrunken_dialog_keeps_close_button_after_tall_content(self):
+        win=self.tk.Toplevel(self.root); win.geometry('360x220+40+40')
+        self.ttk.Label(win,text='header',padding=8).pack(anchor='w')
+        self.tk.Text(win,height=24).pack(fill='both',expand=True)
+        button=self.ttk.Button(m.Client.bottom_bar(self.client,win),text='Close'); button.pack(pady=8)
+        self.assert_button_visible(win,button)
+    def test_flow_bar_variant_stays_at_bottom_below_list(self):
+        win=self.tk.Toplevel(self.root); win.geometry('360x220+40+40')
+        self.ttk.Label(win,text='hint').pack(fill='x')
+        bar=m.Client.bottom_bar(self.client,win,flow=True,padx=12,pady=8)
+        button=self.ttk.Button(bar,text='OK'); bar._flow_buttons.append(button)
+        body=self.tk.Listbox(win,height=18); body.pack(fill='both',expand=True)
+        win.update(); bar._reflow(); win.update()
+        self.assertGreater(bar.winfo_y(),body.winfo_y())
+        self.assert_button_visible(win,button)
+
+class SignedOutStateTkTests(unittest.TestCase):
+    def test_signed_out_disables_posts_help_and_sync_then_sign_in_restores(self):
+        try:
+            import tkinter
+            root=tkinter.Tk(); root.withdraw()
+        except Exception as error:
+            self.skipTest('Tk unavailable: '+str(error))
+        try:
+            with tempfile.TemporaryDirectory() as home, patch.object(m,'remembered_blob',return_value=None), patch.object(m.GitHub,'request',side_effect=AssertionError('offline')):
+                client=m.Client(root,home,smoke=True); client.run=lambda *a:None; client.load_help=lambda *a,**k:None
+                root.update()
+                actions=client.sync_actions+client.login_actions
+                self.assertEqual(len(client.help_actions),4)
+                self.assertTrue(all(str(b.cget('state'))=='disabled' for b in actions))
+                self.assertEqual(str(client.post_text.cget('state')),'disabled')
+                self.assertEqual(str(client.help_text.cget('state')),'disabled')
+                client.session_login=client.login='offline-tester'; client.session_token='offline-not-a-credential'
+                client.update_login_ui(); root.update()
+                self.assertTrue(all(str(b.cget('state'))=='normal' for b in actions))
+                self.assertEqual(str(client.post_text.cget('state')),'normal')
+                client.toggle_language(); root.update()
+                self.assertTrue(all(str(b.cget('state'))=='normal' for b in actions))
+        finally:
+            root.destroy()
 
 if __name__=='__main__': unittest.main()

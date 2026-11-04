@@ -144,9 +144,12 @@ namespace SRLogbook
 
         private void LayoutSyncPage(Panel page, Panel card)
         {
-            card.Width = Math.Min(Ui.S(880), Math.Max(Ui.S(400), page.ClientSize.Width - Ui.S(2)));
-            card.Height = Math.Min(Ui.S(590), Math.Max(Ui.S(400), page.ClientSize.Height - Ui.S(2)));
+            // 与成员资料、使用说明页一致：卡片铺满页面，日志框随窗口增高。
+            card.Width = Math.Max(Ui.S(400), page.ClientSize.Width - Ui.S(2));
+            card.Height = Math.Max(Ui.S(400), page.ClientSize.Height - Ui.S(2));
             int contentWidth = Math.Max(Ui.S(300), card.ClientSize.Width - Ui.S(48));
+            // 仓库说明只有一行；原 40px 高度会压到 y=80 的账号状态，把“未连接 GitHub”上半截盖掉。
+            boundLabel.Height = Ui.S(26);
             boundLabel.Width = contentWidth;
             syncHint.Width = contentWidth;
             lblSStatus.Width = contentWidth;
@@ -197,6 +200,7 @@ namespace SRLogbook
             b.ForeColor = Theme.TextMain;
             b.Cursor = Cursors.Hand;
             b.SetBounds(Ui.S(x), Ui.S(y), Ui.S(w), Ui.S(32));
+            DisabledLook(b);
             syncCard.Controls.Add(b);
             return b;
         }
@@ -594,9 +598,28 @@ namespace SRLogbook
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
         }
 
+        /// <summary>平面按钮禁用时默认几乎看不出区别；未登录时用浅灰底和浅边框明确表示“暂不可用”。</summary>
+        internal static void DisabledLook(Button b)
+        {
+            EventHandler apply = delegate
+            {
+                b.BackColor = b.Enabled ? Color.White : Color.FromArgb(243, 245, 248);
+                b.FlatAppearance.BorderColor = b.Enabled ? Theme.CardBorder : Color.FromArgb(226, 230, 236);
+                b.Cursor = b.Enabled ? Cursors.Hand : Cursors.Default;
+            };
+            b.EnabledChanged += apply;
+            apply(b, EventArgs.Empty);
+        }
+
         private void UpdateSyncActionState()
         {
             bool has = !string.IsNullOrEmpty(sessionToken);
+            // 快速发行同样需要登录：未登录时禁用发帖与历史记录，避免点了才弹提示。
+            if (postPublishButton != null) postPublishButton.Enabled = has;
+            if (postHistoryButton != null) postHistoryButton.Enabled = has;
+            if (postComposer != null) postComposer.ReadOnly = !has;
+            // 使用说明未登录时只读：上传、读取云端、恢复默认、改动日志都需要登录。
+            if (helpToolbarButtons != null) foreach (Button b in helpToolbarButtons) b.Enabled = has;
             if (btnOthers != null) btnOthers.Enabled = has;
             if (btnDefault != null) btnDefault.Enabled = has;
             if (btnUpRefs != null) btnUpRefs.Enabled = has;

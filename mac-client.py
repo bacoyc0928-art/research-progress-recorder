@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.2.11. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.12. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -27,14 +27,14 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.11'
+VERSION = '0.2.12'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
 APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
-HELP_TEXT = """SRPRecorder2027 · 0.2.11 · 中英双语界面 / Bilingual UI
+HELP_TEXT = """SRPRecorder2027 · 0.2.12 · 中英双语界面 / Bilingual UI
 数据架构与使用说明 / Data architecture and usage guide
 
 【0】总览 / Overview
@@ -51,7 +51,7 @@ First run: sign in at the bottom-left (optionally tick Remember and set a 6-digi
 
 【1】Windows 本机目录 / Windows local layout
 SRCRec\\                            程序与数据根目录（exe 所在处，可整体搬移）
-├─ SRPRecorder2027.exe             程序 0.2.11
+├─ SRPRecorder2027.exe             程序 0.2.12
 ├─ SRPRecorder2027.exe.config      高 DPI / 长路径配置，必须随 exe 保留
 ├─ research_log.json               旧版研究记录
 ├─ workspace.json                  工作区路径
@@ -113,7 +113,7 @@ Quick Post：发布 posts\\<id>.txt；已阅 posts\\read\\<我>.json；只能删
 【5】清理、保留与升级 / Cleanup, retention and upgrade
 - Public_Temp 每次启动和每次退出都会清空，只用于临时查看他人内容。
 - References 下只保留 Default；References\\<账号>\\、References\\references\\、References\\references.json、personal.json 都是废弃路径，启动时自动删除。
-- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.11 不会重复清理。
+- data_version.txt 固定 0.2.0：只有从更早版本首次升级时清理一次，0.2.12 不会重复清理。
 - 升级不会删除本地进度文件夹、Reference 中的资料和下载缓存；默认库可登录后重新下载。
 - 远端上传只新增或覆盖，不自动删除旧文件。
 Cleanup rules: Public_Temp is cleared on every start and exit; under References only Default is kept, and the legacy paths References/<login>, References/references, References/references.json and personal.json are deleted at startup; data_version.txt stays 0.2.0 so the one-time cleanup never repeats; upgrades never delete your progress folder, Reference files or download cache, and the default library can be re-downloaded; remote uploads never delete older files.
@@ -619,6 +619,22 @@ def delete_post(api,pid):
     info=api.request('GET',endpoint+'?ref='+urllib.parse.quote(api.branch,safe=''))
     api.request('DELETE',endpoint,{'message':'post: delete','branch':api.branch,'sha':info['sha']})
 
+def dialog_geometry(width,height,screen,parent):
+    """计算弹窗尺寸和位置：screen 为 Tk 报告的主显示器 (x,y,w,h)，parent 为主窗口 (x,y,w,h)。
+    Tk 在 macOS 上只知道主显示器；主窗口在副屏时改以主窗口自身为边界，避免把弹窗拉回主屏。"""
+    sx,sy,sw,sh=screen; px,py,pw,ph=parent
+    cx,cy=px+pw//2,py+ph//2
+    if sx<=cx<sx+sw and sy<=cy<sy+sh:
+        # 主显示器：为菜单栏、标题栏和 Dock 留出空间。
+        bx,by,bw,bh,top_gap,bottom_gap,side_gap=sx,sy,sw,sh,28,48,32
+    else:
+        # 副显示器：主窗口一定完整落在某块屏幕上，以它为边界最安全。
+        bx,by,bw,bh,top_gap,bottom_gap,side_gap=px,py,max(1,pw),max(1,ph),0,0,0
+    width=max(1,min(width,bw-side_gap)); height=max(1,min(height,bh-top_gap-bottom_gap-24))
+    left=max(bx,min(px+(pw-width)//2,bx+bw-width))
+    top=max(by+top_gap,min(py+(ph-height)//2,by+bh-height-bottom_gap))
+    return width,height,left,top
+
 class Client:
     def clean_previous_data(self):
         """0.2.0 一次性迁移：清掉更早版本的软件数据（配置、日志、默认库副本、成员缓存），
@@ -748,6 +764,12 @@ class Client:
                 x+=width+8; line=max(line,height)
             bar.configure(height=y+line+5)
         bar._reflow=reflow; bar.bind('<Configure>',reflow)
+        return bar
+    def bottom_bar(self,win,flow=False,**pad):
+        """弹窗按钮栏：放在底部并排在打包顺序最前，弹窗缩小时先压缩内容而不是按钮。"""
+        bar=self.flow_bar(win) if flow else self.ttk.Frame(win)
+        first=[w for w in win.pack_slaves() if w is not bar]
+        bar.pack_configure(side='bottom',fill='x',**pad,**({'before':first[0]} if first else {}))
         return bar
     def wrapped_label(self,parent,text,pack_options=None,**options):
         label=self.ttk.Label(parent,text=text,wraplength=100,**options)
@@ -880,7 +902,8 @@ class Client:
         else:
             self.pin_frame.pack_forget(); self.logout_btn.pack_forget(); self.token_frame.pack(side='left',padx=0,fill='x',expand=True)
         if hasattr(self,'help_text'): self.help_text.configure(state='normal' if signed else 'disabled')
-        for action in getattr(self,'sync_actions',[]): action.configure(state='normal' if signed else 'disabled')
+        for action in getattr(self,'sync_actions',[])+getattr(self,'login_actions',[]): action.configure(state='normal' if signed else 'disabled')
+        if hasattr(self,'post_text'): self.post_text.configure(state='normal' if signed else 'disabled')
         self.draw_avatar()
         self.update_github_state()
     def update_github_state(self):
@@ -1064,7 +1087,7 @@ class Client:
             rows=list(reversed(pub))+list(reversed(mine))
             for row in rows:
                 tree.insert('','end',values=(row.get('time',''),row.get('user',''),row.get('action',''),row.get('detail','')))
-            self.ttk.Button(win,text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
+            self.ttk.Button(self.bottom_bar(win),text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
         self.run(work,done)
     def choose_workspace(self):
         if not self.require_login(): return
@@ -1201,7 +1224,7 @@ class Client:
         tree=self.table(dialog,[self.tr('文件','File'),self.tr('目录','Folder')]); paths={}
         for file in upload_files(folder):
             ident=tree.insert('', 'end',values=(file.name,str(file.parent.relative_to(folder)))); paths[ident]=file
-        bar=self.ttk.Frame(dialog); bar.pack(fill='x')
+        bar=self.bottom_bar(dialog)
         def open_selected():
             selected=tree.selection()
             if selected: self.open_path(paths[selected[0]])
@@ -1212,9 +1235,11 @@ class Client:
         self.post_text=self.tk.Text(p,height=4,wrap='word')
         self.post_text.pack(fill='x')
         bar=self.ttk.Frame(p); bar.pack(fill='x',pady=6)
-        self.button(bar,'发布','Publish',self.publish_post)
-        self.button(bar,'历史记录','History',self.show_post_history)
-        self.button(bar,'刷新','Refresh',self.refresh_posts)
+        # 与 Windows 一致：未登录时发帖、历史、刷新都禁用，输入框只读（update_login_ui 统一切换）。
+        self.login_actions=getattr(self,'login_actions',[])
+        self.login_actions+=[self.button(bar,'发布','Publish',self.publish_post),
+            self.button(bar,'历史记录','History',self.show_post_history),
+            self.button(bar,'刷新','Refresh',self.refresh_posts)]
         self.post_status=self.ttk.Label(p,text=self.tr('登录后查看帖子。','Sign in to see posts.'))
         self.post_status.pack(anchor='w')
         wrap=self.ttk.Frame(p); wrap.pack(fill='both',expand=True)
@@ -1285,7 +1310,7 @@ class Client:
         self.fit_dialog(win,720,520); win.transient(self.root); win.grab_set()
         box=self.tk.Text(win,wrap='word',padx=12,pady=12); box.pack(fill='both',expand=True)
         box.insert('1.0',post.get('body','')); box.configure(state='disabled')
-        bar=self.ttk.Frame(win); bar.pack(fill='x',pady=6)
+        bar=self.bottom_bar(win,pady=6)
         self.ttk.Button(bar,text=self.tr('已阅','Mark Read'),command=lambda:(win.destroy(),self.mark_post_read(post,login))).pack(side='right',padx=6)
         self.ttk.Button(bar,text=self.tr('关闭','Close'),command=win.destroy).pack(side='right')
     def mark_post_read(self,post,login):
@@ -1327,7 +1352,7 @@ class Client:
                 iid=tree.insert('','end',values=(post['author'],post['time'],' '.join(str(post.get('body','')).split())[:120]))
                 self._history_posts[iid]=post
             tree.bind('<Double-1>',lambda e:self.open_history_item(tree,login))
-            self.ttk.Button(win,text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
+            self.ttk.Button(self.bottom_bar(win),text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
         self.run(work,done)
     def open_history_item(self,tree,login):
         selection=tree.selection()
@@ -1453,12 +1478,10 @@ class Client:
         self.run(work,done)
     def fit_dialog(self,win,width,height):
         self.root.update_idletasks()
-        x,y,sw,sh=self.root.winfo_vrootx(),self.root.winfo_vrooty(),self.root.winfo_vrootwidth(),self.root.winfo_vrootheight()
-        if sw<=1 or sh<=1: x,y,sw,sh=0,0,self.root.winfo_screenwidth(),self.root.winfo_screenheight()
-        # Reserve room for the menu/title bars and Dock.
-        width=max(1,min(width,sw-32)); height=max(1,min(height,sh-100))
-        left=max(x,min(self.root.winfo_rootx()+(self.root.winfo_width()-width)//2,x+sw-width))
-        top=max(y+28,min(self.root.winfo_rooty()+(self.root.winfo_height()-height)//2,y+sh-height-48))
+        screen=(self.root.winfo_vrootx(),self.root.winfo_vrooty(),self.root.winfo_vrootwidth(),self.root.winfo_vrootheight())
+        if screen[2]<=1 or screen[3]<=1: screen=(0,0,self.root.winfo_screenwidth(),self.root.winfo_screenheight())
+        parent=(self.root.winfo_rootx(),self.root.winfo_rooty(),self.root.winfo_width(),self.root.winfo_height())
+        width,height,left,top=dialog_geometry(width,height,screen,parent)
         win.geometry(f'{width}x{height}{left:+d}{top:+d}')
         win.minsize(min(360,width),min(220,height)); win.transient(self.root)
     def pick(self, title, hint, items, extra_files=False, labels=None):
@@ -1474,7 +1497,7 @@ class Client:
         rows = list(items)
         for row in rows: box.insert('end', (labels or {}).get(row,row))
         box.selection_set(0, 'end')
-        bar = self.flow_bar(win,padx=12,pady=8)
+        bar = self.bottom_bar(win,flow=True,padx=12,pady=8)
         def add_files():
             for path in self.fd.askopenfilenames(parent=win):
                 if path in rows: continue
@@ -1601,7 +1624,7 @@ class Client:
         self.ttk.Label(win,text=self.tr('选择要从团队区永久删除的参考资料（其他人将无法再下载）：','Select uploaded references to remove permanently from the team area:'),wraplength=520).pack(anchor='w',padx=12,pady=8)
         box=self.tk.Listbox(win,selectmode='extended',height=12); box.pack(fill='both',expand=True,padx=12)
         for name in names: box.insert('end',name)
-        bar=self.ttk.Frame(win); bar.pack(fill='x',pady=8)
+        bar=self.bottom_bar(win,pady=8)
         def confirm():
             picked=[box.get(i) for i in box.curselection()]
             if not picked: return
@@ -1624,10 +1647,13 @@ class Client:
     def build_help(self):
         panel=self.tabs[5]
         bar=self.flow_bar(panel)
-        self.button(bar,'上传到 GitHub','Upload to GitHub',self.upload_help)
-        self.button(bar,'读取云端版本','Load From GitHub',self.load_help)
-        self.button(bar,'恢复默认','Restore Default',self.default_help)
-        self.button(bar,'改动日志','Change Log',self.show_help_changelog)
+        # 使用说明未登录只读：四个工具按钮都需要登录（与 Windows 一致）。
+        self.login_actions=getattr(self,'login_actions',[])
+        self.help_actions=[self.button(bar,'上传到 GitHub','Upload to GitHub',self.upload_help),
+            self.button(bar,'读取云端版本','Load From GitHub',self.load_help),
+            self.button(bar,'恢复默认','Restore Default',self.default_help),
+            self.button(bar,'改动日志','Change Log',self.show_help_changelog)]
+        self.login_actions+=self.help_actions
         body=self.ttk.Frame(panel); body.pack(fill='both',expand=True)
         self.help_text=self.tk.Text(body,wrap='word',padx=16,pady=16)
         scroll=self.ttk.Scrollbar(body,orient='vertical',command=self.help_text.yview)
@@ -1763,7 +1789,7 @@ class Client:
             tree=self.table(win,[self.tr('时间','Time'),self.tr('用户','User'),self.tr('说明','Detail')])
             for row in reversed(rows):
                 tree.insert('','end',values=(row.get('time',''),row.get('user',''),row.get('detail','')))
-            self.ttk.Button(win,text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
+            self.ttk.Button(self.bottom_bar(win),text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
         self.run(work,done)
 
 def verify_update_runtime(output=None):
