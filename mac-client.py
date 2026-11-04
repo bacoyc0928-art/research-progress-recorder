@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.2.13. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.14. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -27,7 +27,7 @@ import zipfile
 from xml.sax.saxutils import escape
 from file_channels import FileChannels, no_links, child, member_folder, upload_files
 
-VERSION = '0.2.13'
+VERSION = '0.2.14'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
@@ -35,7 +35,7 @@ APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
 HELP_TEXT = """SRPRecorder2027 使用说明 / User Guide
-适用版本 / Version 0.2.13 · 中文在前，English follows each section
+适用版本 / Version 0.2.14 · 中文在前，English follows each section
 
 本程序帮助课题组记录和交换研究资料。团队资料保存在私有 GitHub 仓库 bacoyc0928-art/research-data；程序本身从公开仓库 research-progress-recorder 下载，不需要登录。没有服务器，也没有实时同步：上传和下载都由你手动发起。
 The app helps the group record and exchange research files. Team data lives in the private GitHub repository bacoyc0928-art/research-data; the app is downloaded from the public repository research-progress-recorder without signing in. There is no server and no real-time sync: you start every upload and download yourself.
@@ -679,6 +679,37 @@ def publish_post(api,login,body):
     pid=dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')+'-'+login+'-'+uuid.uuid4().hex[:4]
     put_text(api,'posts/'+pid+'.txt',body); return pid
 
+RELEASE_PAGE='https://github.com/'+RELEASE_REPO+'/releases/latest'
+
+def write_update_log(folder,error):
+    """保存一次更新失败的诊断信息（版本、系统、架构、错误原文与原始异常），不含令牌或用户资料。"""
+    try:
+        folder=Path(folder); folder.mkdir(parents=True,exist_ok=True)
+        cause=getattr(error,'__cause__',None)
+        lines=['SRPRecorder2027 update check',' time: '+now(),' version: '+VERSION,' platform: '+sys.platform+' '+platform.mac_ver()[0],
+               ' architecture: '+platform.machine(),' message: '+str(error).replace('\n',' / '),
+               ' cause: '+(type(cause).__name__+': '+str(cause) if cause else '-')]
+        target=folder/('check-'+dt.datetime.now().strftime('%Y%m%d-%H%M%S')+'.log')
+        target.write_text('\n'.join(lines)+'\n',encoding='utf-8'); return target
+    except Exception: return None
+
+def open_release_page():
+    try:
+        if sys.platform=='darwin': subprocess.run(['/usr/bin/open',RELEASE_PAGE],check=False,timeout=15)
+        else:
+            import webbrowser; webbrowser.open(RELEASE_PAGE)
+    except Exception: pass
+
+def legacy_data_present(home,marker_text=None):
+    """0.1.x 及更早版本才有的文件或缓存结构；仅凭标记缺失不足以判定为旧版（与 Windows CleanUpgrade 一致）。"""
+    if marker_text: return True
+    home=Path(home)
+    if (home/'personal.json').exists(): return True
+    refs=home/'SRCRec'/'References'
+    if not refs.is_dir(): return False
+    if (refs/'references.json').exists() or (refs/'references').is_dir(): return True
+    return any((d/'TeamConRef').is_dir() or (d/'references.json').exists() for d in refs.iterdir() if d.is_dir() and d.name!='Default')
+
 def help_newlines(text):
     """使用说明统一为 LF 换行（Windows 客户端上传的是 CRLF）。"""
     return (text or '').replace('\r\n','\n').replace('\r','\n')
@@ -709,37 +740,38 @@ class Client:
         """0.2.0 一次性迁移：清掉更早版本的软件数据（配置、日志、默认库副本、成员缓存），
         保留用户自己的本地进度文件夹。清理清单写到 upgrade_cleanup.log。"""
         marker=self.home/'data_version.txt'
+        current=None
         try:
-            if marker.exists() and version_key(marker.read_text(encoding='utf-8-sig',errors='ignore').strip()) >= version_key(DATA_VERSION): return
+            if marker.exists():
+                current=marker.read_text(encoding='utf-8-sig',errors='ignore').strip()
+                if version_key(current) >= version_key(DATA_VERSION): return
         except Exception: pass
-        removed=[]
+        refs=self.home/'SRCRec'/'References'
+        if not legacy_data_present(self.home,current):
+            # 没有 0.1.x 及更早版本的痕迹（例如新装后先放入了资料）：只记下版本，保留所有文件。
+            try: marker.write_text(DATA_VERSION,encoding='utf-8')
+            except Exception: pass
+            return
+        # 确认是旧版升级：移入 upgrade-backup-<时间>，不再直接删除，需要时可以找回。
+        backup=self.home/('upgrade-backup-'+dt.datetime.now().strftime('%Y%m%d-%H%M%S')); moved=[]
+        def keep(path):
+            try:
+                target=backup/path.relative_to(self.home); target.parent.mkdir(parents=True,exist_ok=True)
+                shutil.move(str(path),str(target)); moved.append(str(path)+' -> '+str(target))
+            except Exception: pass
         for name in ('config.json','research_log.json','progress.json','personal.json','workspace.json',
                      'sync_config.json','news.json','help_local.md','startup_error.txt'):
-            p=self.home/name
-            if p.exists():
-                try: p.unlink(); removed.append(str(p))
-                except Exception: pass
-        refs=self.home/'SRCRec'/'References'
+            if (self.home/name).exists(): keep(self.home/name)
         if refs.is_dir():
             default=refs/'Default'
             if default.is_dir():
-                for f in default.rglob('*'):
-                    if f.is_file() and f.name.lower()!='readme.txt':
-                        try: f.unlink(); removed.append(str(f))
-                        except Exception: pass
-            for d in refs.iterdir():
-                if not d.is_dir(): continue
-                team=d/'TeamConRef'
-                if team.is_dir():
-                    try: shutil.rmtree(team); removed.append(str(team))
-                    except Exception: pass
-                try:
-                    for f in d.glob('references.json'):
-                        f.unlink(); removed.append(str(f))
-                except Exception: pass
+                for f in [f for f in default.rglob('*') if f.is_file() and f.name.lower()!='readme.txt']: keep(f)
+            for d in [d for d in refs.iterdir() if d.is_dir() and d.name!='Default']:
+                if (d/'TeamConRef').is_dir(): keep(d/'TeamConRef')
+                for f in list(d.glob('references.json')): keep(f)
         try: marker.write_text(DATA_VERSION,encoding='utf-8')
         except Exception: pass
-        try: (self.home/'upgrade_cleanup.log').write_text('\n'.join(removed),encoding='utf-8')
+        try: (self.home/'upgrade_cleanup.log').write_text('\n'.join(moved),encoding='utf-8')
         except Exception: pass
     def __init__(self, root, home=None, smoke=False):
         import tkinter as tk
@@ -865,7 +897,8 @@ class Client:
                 except Exception: pass
             if error:
                 self.status.set(self.tr('更新未完成，详见错误说明。','Update incomplete; see the error details.') if isinstance(error,UpdateError) else self.tr('操作失败；上传可能部分完成，旧下载副本保留。','Failed; uploads may be partially complete. Previous downloads were preserved.'))
-                self.mb.showerror('SRPRecorder2027',str(error),parent=self.root)
+                if isinstance(error,UpdateError): self.update_failed(error)
+                else: self.mb.showerror('SRPRecorder2027',str(error),parent=self.root)
             else:
                 try: done(result)
                 except Exception as failure: self.mb.showerror('SRPRecorder2027',str(failure),parent=self.root)
@@ -1770,6 +1803,13 @@ class Client:
     def update_job(self,work):
         try: return work()
         except Exception as error: raise UpdateError(update_error_message(error,self.en)) from error
+    def update_failed(self,error):
+        """任何一步失败：写诊断记录，并提供用浏览器打开发布页手动下载（网络拦截、限流、旧版问题时的出路）。"""
+        log=write_update_log(self.home/'updates',error)
+        message=str(error)+self.tr('\n\n要用浏览器打开发布页，手动下载对应芯片的 DMG 吗？','\n\nOpen the release page in your browser to download the DMG for your chip manually?')
+        if log: message+=self.tr('\n\n诊断记录已保存（反馈问题时请附上）：\n','\n\nA diagnostic record was saved (attach it when reporting):\n')+str(log)
+        if self.mb.askyesno('SRPRecorder2027',message,icon='warning',parent=self.root):
+            open_release_page()
     def check_updates(self):
         def done(rel):
             tag=str(rel.get('tag_name') or '')
@@ -1797,10 +1837,11 @@ class Client:
                         'not-writable':self.tr('当前安装目录不可写。','The installation directory is not writable.'),
                         'not-installed':self.tr('当前运行位置不是已安装的应用包。','This is not an installed application bundle.')}
                     self.status.set(self.tr('安装包已验证；等待手动安装，当前版本未改变。','Package verified; manual installation pending. The installed version is unchanged.'))
+                    # 程序仍在运行时拖入替换会被 Finder 拒绝（“正在使用”），所以直接询问并代为退出。
                     message=reasons.get(plan['reason'],'')+self.tr(
-                        '\n\n已打开 DMG。请先保存内容并退出本程序，再将 ResearchProgressRecorder.app 拖入 Applications 替换。重新打开若提示“无法验证开发者”，确认来自官方发布页后，由本人在系统设置 → 隐私与安全性 → 仍要打开中处理。若提示文件损坏或会损害电脑，请停止安装并反馈原文。用户资料保留在 Application Support。',
-                        '\n\nThe DMG is open. Save your work and quit this app, then drag ResearchProgressRecorder.app into Applications to replace it. If macOS cannot verify the developer, confirm the official download source and personally use System Settings → Privacy & Security → Open Anyway. Stop and report any damaged-app or malware warning. Data in Application Support is preserved.')
-                    self.mb.showinfo('SRPRecorder2027',message,parent=self.root)
+                        '\n\n新版安装包已通过校验并已打开。\n\n接下来：\n1. 点“是”退出本程序（内容会自动保存）；\n2. 在打开的窗口中把 ResearchProgressRecorder.app 拖到 Applications，选择“替换”；\n3. 重新打开程序。若提示“无法验证开发者”，确认来自官方发布页后，到 系统设置 → 隐私与安全性 点“仍要打开”。\n若提示文件已损坏或会损害电脑，请停止并反馈原文。用户资料保留在 Application Support，不受影响。\n\n现在退出程序以便替换吗？',
+                        '\n\nThe new package passed verification and is now open.\n\nNext:\n1. Press Yes to quit this app (your work is saved);\n2. In the opened window drag ResearchProgressRecorder.app to Applications and choose Replace;\n3. Reopen the app. If macOS cannot verify the developer, confirm the official source and choose Open Anyway in System Settings → Privacy & Security.\nStop and report any damaged-app or malware warning. Data in Application Support is preserved.\n\nQuit now so the app can be replaced?')
+                    if self.mb.askyesno('SRPRecorder2027',message,parent=self.root): self.close()
                 self.run(lambda:self.update_job(lambda:install_update(path,self.home/'updates')),installed)
             self.run(lambda:self.update_job(lambda:download_update(rel,asset)),done2)
         self.run(lambda:self.update_job(release_info),done)

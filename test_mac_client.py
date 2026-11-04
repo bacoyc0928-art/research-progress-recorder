@@ -20,14 +20,14 @@ class SyncTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target=Path(tmp)/'result.json'
             context=SimpleNamespace(check_hostname=True,verify_mode=ssl.CERT_REQUIRED)
-            release=dict(tag_name='v0.2.13',assets=[dict(name='SHA256SUMS.txt',browser_download_url='https://example.invalid/sums')])
+            release=dict(tag_name='v0.2.14',assets=[dict(name='SHA256SUMS.txt',browser_download_url='https://example.invalid/sums')])
             checksum=('a'*64+'  app.dmg').encode()
-            page=dict(tag_name='v0.2.13',assets=[dict(name='research-progress-recorder-0.2.13-macOS-arm64.dmg'),dict(name='research-progress-recorder-0.2.13-macOS-x64.dmg')],source='release-page')
+            page=dict(tag_name='v0.2.14',assets=[dict(name='research-progress-recorder-0.2.14-macOS-arm64.dmg'),dict(name='research-progress-recorder-0.2.14-macOS-x64.dmg')],source='release-page')
             with patch.object(m,'network_context',return_value=context), patch.object(m,'release_info',return_value=release), patch.object(m,'release_info_from_page',return_value=page), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(checksum)), patch.object(m,'app_bundle_path',return_value=None):
                 m.verify_update_runtime(target)
             result=m.json.loads(target.read_text())
             self.assertTrue(result['tls_verified']); self.assertTrue(result['checksum_download']); self.assertEqual(result['version'],m.VERSION)
-            self.assertEqual(result['page_fallback'],'v0.2.13')
+            self.assertEqual(result['page_fallback'],'v0.2.14')
 
     class _Response(io.BytesIO):
         def __init__(self,body=b'',url=''):
@@ -38,9 +38,9 @@ class SyncTests(unittest.TestCase):
         return urllib.error.HTTPError('https://api.github.com/x',403,'rate limit exceeded',{},None)
 
     def test_release_check_falls_back_to_release_page_when_api_rate_limited(self):
-        tag_url='https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13'
-        sums=('a'*64+'  research-progress-recorder-0.2.13-Windows.zip\n'+'b'*64+'  research-progress-recorder-0.2.13-macOS-arm64.dmg\n'
-              +'c'*64+'  research-progress-recorder-0.2.13-macOS-x64.dmg\n'+'d'*64+'  ../evil.dmg\n').encode()
+        tag_url='https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.14'
+        sums=('a'*64+'  research-progress-recorder-0.2.14-Windows.zip\n'+'b'*64+'  research-progress-recorder-0.2.14-macOS-arm64.dmg\n'
+              +'c'*64+'  research-progress-recorder-0.2.14-macOS-x64.dmg\n'+'d'*64+'  ../evil.dmg\n').encode()
         calls=[]
         def fake(req,**kwargs):
             calls.append(req.full_url)
@@ -49,18 +49,18 @@ class SyncTests(unittest.TestCase):
             return self._Response(sums)
         with patch.object(m.urllib.request,'urlopen',side_effect=fake):
             rel=m.release_info()
-        self.assertEqual(rel['tag_name'],'v0.2.13'); self.assertEqual(rel['source'],'release-page')
+        self.assertEqual(rel['tag_name'],'v0.2.14'); self.assertEqual(rel['source'],'release-page')
         names=[a['name'] for a in rel['assets']]
         self.assertNotIn('../evil.dmg',names); self.assertIn('SHA256SUMS.txt',names)
-        self.assertTrue(all(a['browser_download_url'].startswith('https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.13/') for a in rel['assets']))
+        self.assertTrue(all(a['browser_download_url'].startswith('https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.14/') for a in rel['assets']))
         with patch.object(m.platform,'machine',return_value='arm64'):
-            self.assertEqual(m.update_asset(rel)['name'],'research-progress-recorder-0.2.13-macOS-arm64.dmg')
+            self.assertEqual(m.update_asset(rel)['name'],'research-progress-recorder-0.2.14-macOS-arm64.dmg')
         self.assertEqual(len(calls),3)
 
     def test_release_page_fallback_rejects_unexpected_redirects(self):
-        for url in ('https://evil.example/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13',
-                    'https://github.com/other/repo/releases/tag/v0.2.13',
-                    'https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.13-rc',
+        for url in ('https://evil.example/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.14',
+                    'https://github.com/other/repo/releases/tag/v0.2.14',
+                    'https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.14-rc',
                     'https://github.com/login'):
             def fake(req,**kwargs): return self._Response(b'',url)
             with patch.object(m.urllib.request,'urlopen',side_effect=fake):
@@ -86,8 +86,8 @@ class SyncTests(unittest.TestCase):
 
     def test_release_check_passes_verified_tls_context(self):
         context=object()
-        with patch.object(m,'network_context',return_value=context), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(b'{"tag_name":"v0.2.13"}')) as request:
-            self.assertEqual(m.release_info()['tag_name'],'v0.2.13')
+        with patch.object(m,'network_context',return_value=context), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(b'{"tag_name":"v0.2.14"}')) as request:
+            self.assertEqual(m.release_info()['tag_name'],'v0.2.14')
             self.assertIs(request.call_args.kwargs['context'],context)
 
     def test_download_and_checksum_both_pass_verified_tls_context(self):
@@ -324,6 +324,52 @@ class SyncTests(unittest.TestCase):
             self.assertTrue((member.parent/'references.json').exists())
             self.assertEqual((home/'data_version.txt').read_text(encoding='utf-8'),'0.2.0')
             self.assertFalse((home/'upgrade_cleanup.log').exists())
+
+    def test_update_failure_saves_diagnostics_and_offers_release_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            client=m.Client.__new__(m.Client); client.home=Path(tmp); client.en=False; client.root=None
+            asked=[]
+            client.mb=SimpleNamespace(askyesno=lambda title,message,**k:(asked.append(message),True)[1])
+            cause=urllib.error.HTTPError('https://api.github.com/x',403,'rate limit exceeded',{},None)
+            try: raise m.UpdateError(m.update_error_message(cause)) from cause
+            except m.UpdateError as error: failure=error
+            with patch.object(m,'open_release_page') as opened:
+                client.update_failed(failure)
+            opened.assert_called_once()
+            logs=list((Path(tmp)/'updates').glob('check-*.log'))
+            self.assertEqual(len(logs),1)
+            text=logs[0].read_text(encoding='utf-8')
+            self.assertIn('HTTPError',text); self.assertIn(m.VERSION,text); self.assertNotIn('Bearer',text)
+            self.assertIn('发布页',asked[0]); self.assertIn(str(logs[0]),asked[0])
+    def test_release_page_constant_points_to_public_repo(self):
+        self.assertEqual(m.RELEASE_PAGE,'https://github.com/bacoyc0928-art/research-progress-recorder/releases/latest')
+
+    def test_missing_marker_without_legacy_keeps_user_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home=Path(tmp)
+            for name in ('config.json','research_log.json','help_local.md'):
+                (home/name).write_text('keep-'+name,encoding='utf-8')
+            client=m.Client.__new__(m.Client); client.home=home
+            client.clean_previous_data()
+            for name in ('config.json','research_log.json','help_local.md'):
+                self.assertEqual((home/name).read_text(encoding='utf-8'),'keep-'+name)
+            self.assertEqual((home/'data_version.txt').read_text(encoding='utf-8'),'0.2.0')
+            self.assertFalse(list(home.glob('upgrade-backup-*')))
+
+    def test_legacy_migration_moves_data_to_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home=Path(tmp)
+            (home/'personal.json').write_text('{}',encoding='utf-8')
+            (home/'research_log.json').write_text('old-records',encoding='utf-8')
+            cache=home/'SRCRec'/'References'/'alice'/'TeamConRef'; cache.mkdir(parents=True)
+            (cache/'n.txt').write_text('cache',encoding='utf-8')
+            client=m.Client.__new__(m.Client); client.home=home
+            client.clean_previous_data()
+            backups=list(home.glob('upgrade-backup-*'))
+            self.assertEqual(len(backups),1)
+            self.assertFalse((home/'research_log.json').exists())
+            self.assertEqual((backups[0]/'research_log.json').read_text(encoding='utf-8'),'old-records')
+            self.assertTrue((backups[0]/'SRCRec'/'References'/'alice'/'TeamConRef'/'n.txt').exists())
 
     def test_merge_and_subseconds(self):
         a=m.empty(); b=m.empty(); a['Entries']=[entry('a')]; b['Entries']=[entry('a','B',NEW),entry('b')]

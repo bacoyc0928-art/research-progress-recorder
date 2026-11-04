@@ -443,7 +443,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.13";
+            this.Text = "SRPRecorder2027 · 0.2.14";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
@@ -1735,7 +1735,9 @@ namespace SRLogbook
                 Cursor = Cursors.Default;
                 if (rel == null)
                 {
-                    Msg.Show("检查更新失败：无法读取 GitHub 发布信息（请确认网络可用）。 / Update check failed: cannot read GitHub releases (check your connection).", "检查更新", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    // 与 Mac 一致：检查失败时提供用浏览器打开发布页手动下载。
+                    if (Msg.Show("检查更新失败：无法读取 GitHub 发布信息（请确认网络可用，或稍后再试）。\n\n要用浏览器打开发布页手动下载吗？ / Update check failed: cannot read GitHub releases. Open the release page in your browser to download manually?", "检查更新", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                        OpenReleasePage();
                     return;
                 }
                 if (!Updater.IsNewer(rel.tag_name))
@@ -1754,7 +1756,9 @@ namespace SRLogbook
                 {
                     if (form.ShowDialog(this) != DialogResult.OK)
                     {
-                        Msg.Show("下载或校验失败 / Download or verification failed: " + (form.Error == null ? "cancelled" : form.Error.Message), "检查更新", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        if (form.Error == null) return;   // 用户取消
+                        if (Msg.Show("下载或校验失败 / Download or verification failed: " + form.Error.Message + "\n\n要用浏览器打开发布页手动下载吗？ / Open the release page to download manually?", "检查更新", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                            OpenReleasePage();
                         return;
                     }
                     if (Msg.Show("更新已下载并通过 SHA-256 校验。现在关闭程序并安装？安装后会自动重新打开。 / The update is downloaded and verified. Close and install now? The app reopens automatically.", "检查更新", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
@@ -1765,9 +1769,17 @@ namespace SRLogbook
             catch (Exception ex)
             {
                 Cursor = Cursors.Default;
-                Msg.Show("检查更新失败 / Update failed: " + ex.Message, "检查更新", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                if (Msg.Show("检查更新失败 / Update failed: " + ex.Message + "\n\n要用浏览器打开发布页手动下载吗？ / Open the release page to download manually?", "检查更新", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                    OpenReleasePage();
             }
             finally { Cursor = Cursors.Default; }
+        }
+
+        /// <summary>只打开本仓库的公开发布页（固定地址），用于更新失败时手动下载。</summary>
+        private static void OpenReleasePage()
+        {
+            try { Process.Start(new ProcessStartInfo("https://github.com/" + Updater.Owner + "/" + Updater.Repo + "/releases/latest") { UseShellExecute = true }); }
+            catch { }
         }
 
         private void RestoreDefaultHelp()
@@ -2604,6 +2616,8 @@ namespace SRLogbook
             Application.SetCompatibleTextRenderingDefault(false);
             // 0.2.0 的一次性迁移：清理更早版本留下的软件数据；后续更新保留用户状态。
             try { CleanUpgrade.Run(AppDomain.CurrentDomain.BaseDirectory); } catch { }
+            // 0.2.13 及更早的更新脚本会把 src、卸载工具 复制成 src\src 等嵌套副本；新版启动时清掉这些纯程序文件副本。
+            try { Updater.RemoveNestedProgramCopies(AppDomain.CurrentDomain.BaseDirectory); } catch { }
             // Public_Temp 只放本次运行临时下载的他人内容：启动时先清空。
             try { AppPaths.ClearPublicTemp(AppDomain.CurrentDomain.BaseDirectory); } catch { }
             try { AppPaths.MigrateLegacyReferences(AppDomain.CurrentDomain.BaseDirectory); } catch { }

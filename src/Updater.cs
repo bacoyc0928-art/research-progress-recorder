@@ -174,8 +174,24 @@ namespace SRLogbook
         {
             string script = Path.Combine(Path.GetTempPath(), "SRPRecorder2027", "apply-update-" + Guid.NewGuid().ToString("N") + ".ps1");
             Directory.CreateDirectory(Path.GetDirectoryName(script));
-            string body =
-                "param([int]$AppPid,[string]$Source,[string]$Target,[string]$Exe)\r\n" +
+            File.WriteAllText(script, ApplyScript(), new UTF8Encoding(true));
+            int pid = pidOverride ?? Process.GetCurrentProcess().Id;
+            string args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + script + "\"" +
+                " -AppPid " + pid +
+                " -Source \"" + source + "\"" +
+                " -Target \"" + appDir + "\"" +
+                " -Exe \"" + exePath + "\"";
+            Process.Start(new ProcessStartInfo("powershell.exe", args) { UseShellExecute = false, CreateNoWindow = true });
+        }
+
+        /// <summary>
+        /// 替换脚本正文（单独成方法便于离线测试）。文件夹必须合并“内容”：
+        /// 旧脚本对已存在的 src、卸载工具 执行 Copy-Item -Recurse，会在里面再套一层 src\src。
+        /// </summary>
+        internal static string ApplyScript()
+        {
+            return
+                "param([int]$AppPid,[string]$Source,[string]$Target,[string]$Exe,[switch]$NoRestart)\r\n" +
                 "$ErrorActionPreference = 'Stop'\r\n" +
                 "try { Wait-Process -Id $AppPid -Timeout 120 -ErrorAction SilentlyContinue } catch { }\r\n" +
                 "if (Get-Process -Id $AppPid -ErrorAction SilentlyContinue) { throw 'Application is still running; update cancelled.' }\r\n" +
@@ -186,20 +202,46 @@ namespace SRLogbook
                 "$programNames = @('app.ico','app.manifest','app.config','README.md','使用说明.md','使用说明-EN.md','build.ps1','package-local.ps1','说明.md','说明.txt','分发与使用说明.md','SRPRecorder2027.exe.config','卸载SRPRecorder2027.exe','卸载SRPRecorder2027.exe.config','.srprec-install','SHA256SUMS.txt','src','卸载工具')\r\n" +
                 "Get-ChildItem -LiteralPath $Source -Force | ForEach-Object {\r\n" +
                 "  if ($programNames -notcontains $_.Name) { return }\r\n" +
-                "  Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $Target $_.Name) -Recurse -Force\r\n" +
+                "  $dest = Join-Path $Target $_.Name\r\n" +
+                "  if ($_.PSIsContainer) {\r\n" +
+                "    New-Item -ItemType Directory -Force -Path $dest | Out-Null\r\n" +
+                "    Get-ChildItem -LiteralPath $_.FullName -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest -Recurse -Force }\r\n" +
+                "  } else { Copy-Item -LiteralPath $_.FullName -Destination $dest -Force }\r\n" +
                 "}\r\n" +
                 "$newExe = $oldExe + '.new'\r\n" +
                 "Copy-Item -LiteralPath (Join-Path $Source $exeName) -Destination $newExe -Force\r\n" +
                 "if (Test-Path -LiteralPath $oldExe) { [IO.File]::Replace($newExe, $oldExe, ($oldExe + '.previous'), $true) } else { Move-Item -LiteralPath $newExe -Destination $oldExe }\r\n" +
-                "Start-Process -FilePath $Exe\r\n";
-            File.WriteAllText(script, body, new UTF8Encoding(true));
-            int pid = pidOverride ?? Process.GetCurrentProcess().Id;
-            string args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + script + "\"" +
-                " -AppPid " + pid +
-                " -Source \"" + source + "\"" +
-                " -Target \"" + appDir + "\"" +
-                " -Exe \"" + exePath + "\"";
-            Process.Start(new ProcessStartInfo("powershell.exe", args) { UseShellExecute = false, CreateNoWindow = true });
+                "if (-not $NoRestart) { Start-Process -FilePath $Exe }\r\n";
+        }
+
+        /// <summary>
+        /// 清理旧版更新脚本留下的嵌套副本（src\src、卸载工具\卸载工具）。只处理里面的程序源码与说明文件，
+        /// 其他任何文件存在时保留整个文件夹不动。
+        /// </summary>
+        public static List<string> RemoveNestedProgramCopies(string appDir)
+        {
+            List<string> removed = new List<string>();
+            string[][] nests = { new[] { "src", "src" }, new[] { "卸载工具", "卸载工具" } };
+            foreach (string[] nest in nests)
+            {
+                string outer = Path.Combine(appDir, nest[0]);
+                string inner = Path.Combine(outer, nest[1]);
+                if (!Directory.Exists(inner)) continue;
+                try
+                {
+                    bool onlyProgramFiles = true;
+                    foreach (string file in Directory.GetFiles(inner, "*", SearchOption.AllDirectories))
+                    {
+                        string ext = Path.GetExtension(file).ToLowerInvariant();
+                        if (ext != ".cs" && ext != ".md" && ext != ".command") { onlyProgramFiles = false; break; }
+                    }
+                    if (!onlyProgramFiles) continue;
+                    Directory.Delete(inner, true);
+                    removed.Add(inner);
+                }
+                catch { }
+            }
+            return removed;
         }
 
         private static string HttpGet(string url, string accept)

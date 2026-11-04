@@ -12,6 +12,47 @@ public static class LocalTransferChecks
     public static void Run(string root)
     {
         string t = Path.Combine(root, "transfer-tests"); Directory.CreateDirectory(t);
+        // 软件内更新替换脚本：已有 src、卸载工具 时必须合并内容，不能套出 src\src；且保留上一版 exe。
+        string upSource = Path.Combine(root, "update-source"), upTarget = Path.Combine(root, "update-target");
+        foreach (string d in new[] { Path.Combine(upSource, "src"), Path.Combine(upSource, "卸载工具"), Path.Combine(upTarget, "src"), Path.Combine(upTarget, "卸载工具"), Path.Combine(upTarget, "PersonalWorkspaceSRRec") }) Directory.CreateDirectory(d);
+        File.WriteAllText(Path.Combine(upSource, "src", "New.cs"), "new"); File.WriteAllText(Path.Combine(upSource, "卸载工具", "说明.md"), "new-doc");
+        File.WriteAllText(Path.Combine(upSource, "SRPRecorder2027.exe"), "new-exe"); File.WriteAllText(Path.Combine(upSource, "README.md"), "new-readme");
+        File.WriteAllText(Path.Combine(upTarget, "src", "Old.cs"), "old"); File.WriteAllText(Path.Combine(upTarget, "SRPRecorder2027.exe"), "old-exe");
+        File.WriteAllText(Path.Combine(upTarget, "research_log.json"), "user-data"); File.WriteAllText(Path.Combine(upTarget, "PersonalWorkspaceSRRec", "note.txt"), "user-note");
+        string scriptPath = Path.Combine(root, "apply-test.ps1"); File.WriteAllText(scriptPath, Updater.ApplyScript(), new System.Text.UTF8Encoding(true));
+        var apply = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("powershell.exe",
+            "-NoProfile -ExecutionPolicy Bypass -File \"" + scriptPath + "\" -AppPid 2147483000 -Source \"" + upSource + "\" -Target \"" + upTarget + "\" -Exe none -NoRestart") { UseShellExecute = false, CreateNoWindow = true });
+        apply.WaitForExit(120000);
+        Check(apply.ExitCode == 0 && File.ReadAllText(Path.Combine(upTarget, "src", "New.cs")) == "new" && File.Exists(Path.Combine(upTarget, "src", "Old.cs"))
+            && !Directory.Exists(Path.Combine(upTarget, "src", "src")) && !Directory.Exists(Path.Combine(upTarget, "卸载工具", "卸载工具"))
+            && File.ReadAllText(Path.Combine(upTarget, "卸载工具", "说明.md")) == "new-doc",
+            "update script merges src and 卸载工具 into place without nesting src\\src");
+        Check(File.ReadAllText(Path.Combine(upTarget, "SRPRecorder2027.exe")) == "new-exe" && File.ReadAllText(Path.Combine(upTarget, "SRPRecorder2027.exe.previous")) == "old-exe"
+            && File.ReadAllText(Path.Combine(upTarget, "research_log.json")) == "user-data" && File.ReadAllText(Path.Combine(upTarget, "PersonalWorkspaceSRRec", "note.txt")) == "user-note",
+            "update script replaces the exe, keeps .previous and leaves user data untouched");
+        // 旧版脚本已经套出的嵌套副本：只含程序文件时清理，混有其他文件时保留。
+        Directory.CreateDirectory(Path.Combine(upTarget, "src", "src")); File.WriteAllText(Path.Combine(upTarget, "src", "src", "Old.cs"), "dup");
+        Directory.CreateDirectory(Path.Combine(upTarget, "卸载工具", "卸载工具")); File.WriteAllText(Path.Combine(upTarget, "卸载工具", "卸载工具", "keep.txt"), "user");
+        List<string> cleaned = Updater.RemoveNestedProgramCopies(upTarget);
+        Check(cleaned.Count == 1 && !Directory.Exists(Path.Combine(upTarget, "src", "src")) && File.Exists(Path.Combine(upTarget, "卸载工具", "卸载工具", "keep.txt")) && File.Exists(Path.Combine(upTarget, "src", "New.cs")),
+            "startup removes nested program-only copies and keeps anything unexpected");
+        // 0.2.0 迁移：缺少版本标记但没有旧版痕迹时不得动任何文件；确认旧版时移入备份而不是删除。
+        string freshDir = Path.Combine(root, "upgrade-fresh"); Directory.CreateDirectory(freshDir);
+        File.WriteAllText(Path.Combine(freshDir, "research_log.json"), "{\"Entries\":[]}");
+        File.WriteAllText(Path.Combine(freshDir, "help_local.md"), "my draft");
+        Check(!CleanUpgrade.Run(freshDir) && File.ReadAllText(Path.Combine(freshDir, "research_log.json")) == "{\"Entries\":[]}"
+            && File.Exists(Path.Combine(freshDir, "help_local.md")) && File.ReadAllText(Path.Combine(freshDir, "data_version.txt")) == CleanUpgrade.Target,
+            "missing version marker without legacy traces keeps every user file");
+        string legacyDir = Path.Combine(root, "upgrade-legacy"); Directory.CreateDirectory(Path.Combine(legacyDir, "References", "alice", "TeamConRef"));
+        File.WriteAllText(Path.Combine(legacyDir, "personal.json"), "{}");
+        File.WriteAllText(Path.Combine(legacyDir, "research_log.json"), "old-records");
+        File.WriteAllText(Path.Combine(legacyDir, "References", "alice", "TeamConRef", "n.txt"), "cache");
+        bool migrated = CleanUpgrade.Run(legacyDir);
+        string[] backups = Directory.GetDirectories(legacyDir, "upgrade-backup-*");
+        Check(migrated && backups.Length == 1 && !File.Exists(Path.Combine(legacyDir, "research_log.json"))
+            && File.ReadAllText(Path.Combine(backups[0], "research_log.json")) == "old-records"
+            && File.Exists(Path.Combine(backups[0], "References", "alice", "TeamConRef", "n.txt")),
+            "legacy migration moves old data into upgrade-backup instead of deleting it");
         // 使用说明：Mac/脚本上传的 LF 文本在 Windows 文本框中必须能换行，且已有 CRLF 不被重复转换。
         Check(MainForm.HelpEditorText("a\nb\r\nc\rd") == "a\r\nb\r\nc\r\nd" && MainForm.HelpEditorText("x\r\ny") == "x\r\ny", "help text from any platform shows line breaks in the Windows editor");
         // 更新检查的发布页回退：只接受本仓库 github.com 的 vX.Y.Z 标签，只取符合命名规则的安装包。

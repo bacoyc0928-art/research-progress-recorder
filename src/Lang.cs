@@ -294,7 +294,7 @@ namespace SRLogbook
 
         private const string HelpBoth =
             "SRPRecorder2027 使用说明 / User Guide\r\n" +
-            "适用版本 / Version 0.2.13 · 中文在前，English follows each section\r\n" +
+            "适用版本 / Version 0.2.14 · 中文在前，English follows each section\r\n" +
             "\r\n" +
             "本程序帮助课题组记录和交换研究资料。团队资料保存在私有 GitHub 仓库 bacoyc0928-art/research-data；程序本身从公开仓库 research-progress-recorder 下载，不需要登录。没有服务器，也没有实时同步：上传和下载都由你手动发起。\r\n" +
             "The app helps the group record and exchange research files. Team data lives in the private GitHub repository bacoyc0928-art/research-data; the app is downloaded from the public repository research-progress-recorder without signing in. There is no server and no real-time sync: you start every upload and download yourself.\r\n" +
