@@ -443,7 +443,7 @@ namespace SRLogbook
             defaultRef.Path = AppPaths.DefaultReferences(appDir);
             defaultRef.RelPath = "";
 
-            this.Text = "SRPRecorder2027 · 0.2.14";
+            this.Text = "SRPRecorder2027 · 0.2.15";
             // 主窗口与最小尺寸都限制在屏幕工作区内，避免小屏/高缩放下窗口比屏幕还高、底部按钮被切掉。
             Rectangle work = Screen.PrimaryScreen == null ? new Rectangle(0, 0, 1280, 800) : Screen.PrimaryScreen.WorkingArea;
             int fitW = Math.Max(Ui.S(760), work.Width - Ui.S(40));
@@ -966,6 +966,7 @@ namespace SRLogbook
             Lang.ApplyAll();
             UpdateLoginUi();
             RefreshSyncPage();
+            if (refsFolders != null) { refsFolders.Invalidate(); ShowRefsFolder(); }
             if (navs != null && navTexts != null)
                 for (int i = 0; i < navs.Length && i < navTexts.Length; i++)
                 {
@@ -1056,7 +1057,6 @@ namespace SRLogbook
                 RefreshTeamPage();
                 RefreshNews();
                 StartNewsTimer();
-                await LogActivityAsync("登录", "身份验证成功");
                 if (rememberCheck.Checked) SaveLoginWithPin(login, token);
             }
             catch (Exception ex)
@@ -1135,7 +1135,6 @@ namespace SRLogbook
                 RefreshTeamPage();
                 RefreshNews();
                 StartNewsTimer();
-                await LogActivityAsync("登录", "PIN 解锁");
             }
             catch (Exception ex)
             {
@@ -1179,6 +1178,7 @@ namespace SRLogbook
             Controls.Add(header);
 
             lblHeaderTitle = new Label();
+            lblHeaderTitle.UseMnemonic = false;   // “References & Materials”中的 & 不是快捷键前缀，要原样显示
             lblHeaderTitle.Text = "研究日志";
             lblHeaderTitle.Font = Theme.FB(15.5f);
             lblHeaderTitle.ForeColor = Theme.Navy;
@@ -1501,62 +1501,249 @@ namespace SRLogbook
             page.Controls.Add(top);
             refsTop = top;
 
-            Label t = new Label();
-            t.Text = "点击卡片即可打开对应的书籍、文档或文件夹";
-            t.Font = Theme.F(8.8f);
-            t.ForeColor = Theme.TextMuted;
-            t.SetBounds(2, 50, 520, 20);
-            top.Controls.Add(t);
-
             Label h = new Label();
             h.Text = "资料库";
             h.Font = Theme.FB(12.5f);
             h.ForeColor = Theme.Navy;
-            h.SetBounds(0, 14, 200, 26);
+            h.BackColor = Color.White;
+            h.SetBounds(0, 14, 400, 26);
             top.Controls.Add(h);
 
-            Button bHist = MakeTopButton("改动记录", 130);
-            bHist.SetBounds(top.Width - 424, 22, 130, 32);
-            bHist.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            bHist.Click += delegate { ShowChangeHistory(); };
-            top.Controls.Add(bHist);
+            Label t = new Label();
+            t.Text = "左边选择文件夹，右边查看其中的文件；参考资料只读，上传与下载在“进度同步”页。";
+            t.Font = Theme.F(8.8f);
+            t.ForeColor = Theme.TextMuted;
+            t.BackColor = Color.White;
+            t.AutoEllipsis = true;
+            t.SetBounds(2, 46, 900, 22);
+            top.Controls.Add(t);
+            top.Resize += delegate { t.Width = Math.Max(Ui.S(80), top.ClientSize.Width - Ui.S(8)); h.Width = Math.Max(Ui.S(80), top.ClientSize.Width - Ui.S(8)); };
 
-            Button bFile = MakeTopButton("添加文件", 120);
-            bFile.SetBounds(top.Width - 274, 22, 120, 32);
-            bFile.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            bFile.Click += delegate { AddFileRef(); };
-            top.Controls.Add(bFile);
+            // 用户 2026-11-05 要求：竖排文件夹列表 + 右侧文件列表（可滚动），取代横排卡片。
+            Panel body = new Panel();
+            body.Dock = DockStyle.Fill;
+            body.BackColor = Color.White;
 
-            Button bFolder = MakeTopButton("添加文件夹", 120);
-            bFolder.SetBounds(top.Width - 144, 22, 120, 32);
-            bFolder.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            bFolder.Click += delegate { AddFolderRef(); };
-            top.Controls.Add(bFolder);
+            refsFolders = new ListBox();
+            refsFolders.Dock = DockStyle.Left;
+            refsFolders.Width = Ui.S(270);
+            refsFolders.BorderStyle = BorderStyle.None;
+            refsFolders.BackColor = Theme.Bg;
+            refsFolders.DrawMode = DrawMode.OwnerDrawFixed;
+            refsFolders.ItemHeight = Ui.S(52);
+            refsFolders.IntegralHeight = false;
+            refsFolders.DrawItem += DrawRefsFolder;
+            refsFolders.SelectedIndexChanged += delegate { ShowRefsFolder(); };
 
-            bFile.Visible = false;
-            bFolder.Visible = false;
-            t.Text = "参考资料为只读；个人资料请在“进度同步”页上传。";
-            // 添加文件/文件夹已隐藏：“改动记录”靠最右，提示文字只占用按钮左侧，任何 DPI 下都不与按钮重叠。
-            top.Resize += delegate
+            Panel right = new Panel();
+            right.Dock = DockStyle.Fill;
+            right.BackColor = Color.White;
+            right.Padding = new Padding(Ui.S(16), 0, 0, 0);
+
+            Panel head = new Panel();
+            head.Dock = DockStyle.Top;
+            head.Height = Ui.S(66);
+            head.BackColor = Color.White;
+            refsFolderTitle = new Label();
+            refsFolderTitle.Font = Theme.FB(11f);
+            refsFolderTitle.ForeColor = Theme.Navy;
+            refsFolderTitle.BackColor = Color.White;
+            refsFolderTitle.AutoEllipsis = true;
+            refsFolderTitle.SetBounds(0, Ui.S(6), Ui.S(400), Ui.S(26));
+            head.Controls.Add(refsFolderTitle);
+            refsFolderPath = new Label();
+            refsFolderPath.Font = Theme.F(8.4f);
+            refsFolderPath.ForeColor = Theme.TextMuted;
+            refsFolderPath.BackColor = Color.White;
+            refsFolderPath.AutoEllipsis = true;
+            refsFolderPath.SetBounds(0, Ui.S(36), Ui.S(400), Ui.S(22));
+            head.Controls.Add(refsFolderPath);
+            refsOpenButton = MakeTopButton("打开文件", 120);
+            refsOpenButton.Click += delegate { OpenRefsSelection(); };
+            DisabledLook(refsOpenButton); SetPrimary(refsOpenButton);
+            head.Controls.Add(refsOpenButton);
+            refsLocateButton = MakeTopButton("打开文件夹", 120);
+            refsLocateButton.Click += delegate { LocateRefsSelection(); };
+            DisabledLook(refsLocateButton);
+            head.Controls.Add(refsLocateButton);
+            head.Resize += delegate
             {
-                bHist.Left = Math.Max(h.Right, top.ClientSize.Width - bHist.Width - Ui.S(12));
-                t.Width = Math.Max(Ui.S(80), bHist.Left - t.Left - Ui.S(12));
-                h.Width = Math.Max(Ui.S(80), Math.Min(h.Width, bHist.Left - h.Left - Ui.S(12)));
+                int w = head.ClientSize.Width;
+                int bw = Math.Max(Ui.S(110), TextRenderer.MeasureText(refsLocateButton.Text, refsLocateButton.Font).Width + Ui.S(28));
+                int ow = Math.Max(Ui.S(110), TextRenderer.MeasureText(refsOpenButton.Text, refsOpenButton.Font).Width + Ui.S(28));
+                refsLocateButton.SetBounds(Math.Max(0, w - bw - Ui.S(4)), Ui.S(12), bw, Ui.S(34));
+                refsOpenButton.SetBounds(Math.Max(0, refsLocateButton.Left - ow - Ui.S(8)), Ui.S(12), ow, Ui.S(34));
+                int textWidth = Math.Max(Ui.S(80), refsOpenButton.Left - Ui.S(12));
+                refsFolderTitle.Width = textWidth; refsFolderPath.Width = textWidth;
             };
 
-            flow = new FlowLayoutPanel();
-            Application.AddMessageFilter(new WheelRouter(flow));
-            flow.Dock = DockStyle.None;
-            flow.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            flow.SetBounds(0, 76, 100, 100);
-            flow.AutoScroll = true;
-            flow.BackColor = Color.White;
-            flow.Padding = new Padding(0, 10, 0, 0);
-            flow.WrapContents = true;
-            page.Controls.Add(flow);
+            refsFiles = new ListView();
+            refsFiles.Dock = DockStyle.Fill;
+            refsFiles.View = View.Details;
+            refsFiles.FullRowSelect = true;
+            refsFiles.MultiSelect = false;
+            refsFiles.HideSelection = false;
+            refsFiles.BorderStyle = BorderStyle.FixedSingle;
+            refsFiles.Font = Theme.F(9.2f);
+            refsFiles.Columns.Add("名称", Ui.S(360));
+            refsFiles.Columns.Add("子文件夹", Ui.S(160));
+            refsFiles.Columns.Add("大小", Ui.S(100));
+            refsFiles.Columns.Add("修改时间", Ui.S(170));
+            refsFiles.DoubleClick += delegate { OpenRefsSelection(); };
+            refsFiles.Resize += delegate
+            {
+                int w = Math.Max(Ui.S(300), refsFiles.ClientSize.Width);
+                refsFiles.Columns[1].Width = Ui.S(150); refsFiles.Columns[2].Width = Ui.S(90); refsFiles.Columns[3].Width = Ui.S(160);
+                refsFiles.Columns[0].Width = Math.Max(Ui.S(140), w - Ui.S(400) - Ui.S(4));
+            };
 
-            page.Resize += delegate { if (uiReady) LayoutRefsPage(); };
+            refsEmpty = new Label();
+            refsEmpty.Dock = DockStyle.Fill;
+            refsEmpty.TextAlign = ContentAlignment.MiddleCenter;
+            refsEmpty.Font = Theme.F(9.5f);
+            refsEmpty.ForeColor = Theme.TextMuted;
+            refsEmpty.BackColor = Color.White;
+            refsEmpty.Visible = false;
+
+            right.Controls.Add(refsFiles);
+            right.Controls.Add(refsEmpty);
+            right.Controls.Add(head);
+            body.Controls.Add(right);
+            body.Controls.Add(refsFolders);
+            page.Controls.Add(body);
+            page.Controls.Add(top);
             return page;
+        }
+
+        /* ---------- 参考资料页：竖排文件夹 + 文件列表 ---------- */
+
+        private ListBox refsFolders;
+        private ListView refsFiles;
+        private Label refsFolderTitle, refsFolderPath, refsEmpty;
+        private Button refsOpenButton, refsLocateButton;
+        private class RefsFolder { public string Zh, En, Path, EmptyZh, EmptyEn; public int Count; }
+        private readonly List<RefsFolder> refsFolderItems = new List<RefsFolder>();
+
+        private static int CountRefFiles(string dir)
+        {
+            try { return Directory.Exists(dir) ? RefFiles(dir).Count : 0; } catch { return 0; }
+        }
+
+        /// <summary>文件夹中的资料文件（递归），不含下载过程中的临时文件与 .bak 备份。</summary>
+        private static List<string> RefFiles(string dir)
+        {
+            List<string> files = new List<string>();
+            foreach (string f in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+            {
+                string name = Path.GetFileName(f);
+                if (name.IndexOf(".bak-", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf(".tmp-", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    name.IndexOf(".dl-", StringComparison.OrdinalIgnoreCase) >= 0 || name.Equals("README.txt", StringComparison.OrdinalIgnoreCase) || name.StartsWith("~$")) continue;
+                files.Add(f);
+            }
+            files.Sort(StringComparer.OrdinalIgnoreCase);
+            return files;
+        }
+
+        private void DrawRefsFolder(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0 || e.Index >= refsFolderItems.Count) return;
+            RefsFolder item = refsFolderItems[e.Index];
+            bool selected = (e.State & DrawItemState.Selected) != 0;
+            using (SolidBrush bg = new SolidBrush(selected ? Color.White : Theme.Bg)) e.Graphics.FillRectangle(bg, e.Bounds);
+            if (selected) using (SolidBrush bar = new SolidBrush(Theme.Accent)) e.Graphics.FillRectangle(bar, e.Bounds.X, e.Bounds.Y, Ui.S(4), e.Bounds.Height);
+            Rectangle title = new Rectangle(e.Bounds.X + Ui.S(16), e.Bounds.Y + Ui.S(7), e.Bounds.Width - Ui.S(24), Ui.S(22));
+            Rectangle sub = new Rectangle(title.X, e.Bounds.Y + Ui.S(28), title.Width, Ui.S(18));
+            TextRenderer.DrawText(e.Graphics, Lang.En ? item.En : item.Zh, selected ? Theme.FB(9.6f) : Theme.F(9.6f), title, selected ? Theme.Navy : Theme.TextMain, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(e.Graphics, item.Count + (Lang.En ? " file(s)" : " 个文件"), Theme.F(8.2f), sub, Theme.TextMuted, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        }
+
+        private void LayoutRefsPage() { RebuildRefs(); }
+
+        /// <summary>刷新文件夹列表（团队默认资料库、公共资料、我的参考资料、他人内容），保留当前选择。</summary>
+        private void RebuildRefs()
+        {
+            if (refsFolders == null || !uiReady) return;
+            string keep = refsFolders.SelectedIndex >= 0 && refsFolders.SelectedIndex < refsFolderItems.Count ? refsFolderItems[refsFolders.SelectedIndex].Path : null;
+            refsFolderItems.Clear();
+            refsFolderItems.Add(new RefsFolder { Zh = "团队默认资料库", En = "Team default library", Path = AppPaths.DefaultReferences(appDir),
+                EmptyZh = "还没有下载团队默认资料库。\n在“进度同步 → 从团队获取”点“下载默认资料库”。", EmptyEn = "The team default library has not been downloaded.\nUse Progress Sync → Get from the team → Download Default Library." });
+            refsFolderItems.Add(new RefsFolder { Zh = "公共资料", En = "Public library", Path = AppPaths.PublicLib(appDir),
+                EmptyZh = "还没有公共资料。\n在“进度同步”点“下载公共资料库”，文件会永久保存在这里。", EmptyEn = "No public files yet.\nUse Progress Sync → Download Public Library; files stay here permanently." });
+            refsFolderItems.Add(new RefsFolder { Zh = "我的参考资料", En = "My references", Path = AppPaths.ReferenceDir(appDir),
+                EmptyZh = "这里放你自己的参考资料（PersonalWorkspaceSRRec\\Reference）。", EmptyEn = "Put your own references here (PersonalWorkspaceSRRec\\Reference)." });
+            string pub = AppPaths.PublicTemp(appDir);
+            if (Directory.Exists(pub))
+                foreach (string d in Directory.GetDirectories(pub))
+                    refsFolderItems.Add(new RefsFolder { Zh = "他人内容（临时）· " + Path.GetFileName(d), En = "Others (temp) · " + Path.GetFileName(d), Path = d,
+                        EmptyZh = "该成员还没有可查看的文件。", EmptyEn = "No files from this member." });
+            foreach (RefsFolder f in refsFolderItems) f.Count = CountRefFiles(f.Path);
+            refsFolders.BeginUpdate();
+            refsFolders.Items.Clear();
+            foreach (RefsFolder f in refsFolderItems) refsFolders.Items.Add(f.Zh);
+            int index = refsFolderItems.FindIndex(f => string.Equals(f.Path, keep, StringComparison.OrdinalIgnoreCase));
+            refsFolders.SelectedIndex = index >= 0 ? index : 0;
+            refsFolders.EndUpdate();
+            ShowRefsFolder();
+        }
+
+        private RefsFolder CurrentRefsFolder()
+        {
+            int i = refsFolders == null ? -1 : refsFolders.SelectedIndex;
+            return i >= 0 && i < refsFolderItems.Count ? refsFolderItems[i] : null;
+        }
+
+        private void ShowRefsFolder()
+        {
+            RefsFolder folder = CurrentRefsFolder();
+            if (folder == null || refsFiles == null) return;
+            refsFolderTitle.Text = Lang.En ? folder.En : folder.Zh;
+            refsFolderPath.Text = folder.Path;
+            refsFiles.BeginUpdate();
+            refsFiles.Items.Clear();
+            List<string> files = Directory.Exists(folder.Path) ? RefFiles(folder.Path) : new List<string>();
+            foreach (string f in files)
+            {
+                FileInfo info = new FileInfo(f);
+                string sub = Path.GetDirectoryName(f).Length > folder.Path.Length ? Path.GetDirectoryName(f).Substring(folder.Path.Length).TrimStart('\\') : "";
+                ListViewItem item = new ListViewItem(info.Name);
+                item.SubItems.Add(sub);
+                item.SubItems.Add(Math.Max(1, info.Length / 1024).ToString("N0") + " KB");
+                item.SubItems.Add(info.LastWriteTime.ToString("yyyy-MM-dd HH:mm"));
+                item.Tag = f;
+                refsFiles.Items.Add(item);
+            }
+            refsFiles.EndUpdate();
+            folder.Count = files.Count;
+            refsFolders.Invalidate();
+            refsEmpty.Text = Lang.En ? folder.EmptyEn : folder.EmptyZh;
+            refsEmpty.Visible = files.Count == 0;
+            refsFiles.Visible = files.Count > 0;
+            if (refsOpenButton != null) refsOpenButton.Enabled = files.Count > 0;
+        }
+
+        private void OpenRefsSelection()
+        {
+            if (refsFiles == null || refsFiles.SelectedItems.Count == 0)
+            {
+                if (refsFiles != null && refsFiles.Items.Count > 0) Msg.Show("请先在右侧列表中选择一个文件。 / Select a file first.", "参考资料");
+                return;
+            }
+            string file = refsFiles.SelectedItems[0].Tag as string;
+            if (File.Exists(file)) OpenPath(file); else { Msg.Show("找不到该文件，它可能已被移动或删除。 / File not found.", "参考资料"); RebuildRefs(); }
+        }
+
+        private void LocateRefsSelection()
+        {
+            RefsFolder folder = CurrentRefsFolder();
+            if (folder == null) return;
+            try
+            {
+                string file = refsFiles != null && refsFiles.SelectedItems.Count > 0 ? refsFiles.SelectedItems[0].Tag as string : null;
+                Directory.CreateDirectory(folder.Path);
+                if (file != null && File.Exists(file)) Process.Start("explorer.exe", "/select,\"" + file + "\"");
+                else Process.Start("explorer.exe", "\"" + folder.Path + "\"");
+            }
+            catch { }
         }
 
         private Button MakeTopButton(string text, int w)
@@ -1606,9 +1793,8 @@ namespace SRLogbook
             reload.Click += delegate { LoadHelpFromGitHub(true); };
             Button reset = CreateHelpButton("恢复默认");
             reset.Click += delegate { RestoreDefaultHelp(); };
-            Button history = CreateHelpButton("改动日志");
-            history.Click += delegate { ShowHelpChangelog(); };
-            helpToolbarButtons = new Button[] { upload, reload, reset, history };
+            // 日志同步已取消（用户 2026-11-05 要求），不再提供“改动日志”。
+            helpToolbarButtons = new Button[] { upload, reload, reset };
             foreach (Button button in helpToolbarButtons) helpToolbar.Controls.Add(button);
 
             helpEditor = new TextBox();
@@ -1676,10 +1862,8 @@ namespace SRLogbook
                 string sha = null;
                 await Task.Run(() => GitHubSync.GetFile(c.owner, c.repo, "help/help.md", c.branch, token, out sha));
                 await Task.Run(() => GitHubSync.PutFile(c.owner, c.repo, "help/help.md", c.branch, token, text, sha));
-                await Task.Run(() => ActivityLog.AppendTo(c.owner, c.repo, c.branch, token, "help/changelog.json", login, "更新使用说明", text.Length + " 字符", 200));
                 File.WriteAllText(Path.Combine(appDir, "help_local.md"), text, new UTF8Encoding(false));
                 helpDirty = false;
-                await LogActivityAsync("更新使用说明", text.Length + " 字符");
                 Msg.Show("已上传；所有成员登录后都会读到这一版。", "使用说明");
             }
             catch (Exception ex) { Msg.Show("上传失败：" + ex.Message, "使用说明"); }
@@ -1790,23 +1974,6 @@ namespace SRLogbook
             helpDirty = true;
         }
 
-        private async void ShowHelpChangelog()
-        {
-            if (string.IsNullOrEmpty(sessionToken)) { Msg.Show("请先在左下角登录 GitHub 账号。", "改动日志"); return; }
-            SyncConfig c = GitHubSync.LoadConfig(appDir);
-            string token = sessionToken;
-            try
-            {
-                List<ActivityEntry> rows = await Task.Run(() => ActivityLog.Read(c.owner, c.repo, c.branch, token, "help/changelog.json"));
-                if (rows.Count == 0) { Msg.Show("还没有改动日志。", "改动日志"); return; }
-                StringBuilder sb = new StringBuilder();
-                for (int i = rows.Count - 1; i >= 0; i--)
-                    sb.Append(rows[i].Time).Append("  ·  ").Append(rows[i].User).Append("  ·  ").Append(rows[i].Detail).AppendLine();
-                Msg.Show(sb.ToString(), "改动日志");
-            }
-            catch (Exception ex) { Msg.Show("读取改动日志失败：" + ex.Message, "改动日志"); }
-        }
-
 
 
         private void SetPage(int idx) { SetPage(idx, true); }
@@ -1911,7 +2078,10 @@ namespace SRLogbook
             }
         }
 
-        /// <summary>拉一次远端状态，算出各栏目是否有新内容（成员资料=成员变化，Quick Post=未读帖子，进度同步=活动日志变化）。</summary>
+        /// <summary>
+        /// 拉一次远端状态，算出各栏目是否有新内容。活动日志已取消（用户 2026-11-05 要求），红点只看实际内容：
+        /// 成员资料=成员目录，Quick Post=未读帖子与最新帖子，参考资料=默认库与公共资料库的文件，本地记录=本机文件，使用说明=help.md。
+        /// </summary>
         private async void RefreshNews()
         {
             if (string.IsNullOrEmpty(sessionToken) || string.IsNullOrEmpty(sessionLogin)) return;
@@ -1923,24 +2093,29 @@ namespace SRLogbook
                 List<PostItem> posts = await Task.Run(() => Posts.List(c.owner, c.repo, c.branch, token));
                 List<string> read = await Task.Run(() => Posts.ReadIds(c.owner, c.repo, c.branch, token, login));
                 int unread = 0;
-                foreach (PostItem p in posts) if (!read.Contains(p.Id)) unread++;
+                string newest = "-";
+                foreach (PostItem p in posts) { if (!read.Contains(p.Id)) unread++; if (string.CompareOrdinal(p.Id, newest) > 0) newest = p.Id; }
                 List<string> members = await Task.Run(() => GitHubSync.ListDir(c.owner, c.repo, "team", c.branch, token));
                 members.Sort(StringComparer.OrdinalIgnoreCase);
-                List<ActivityEntry> pub = await Task.Run(() => ActivityLog.Read(c.owner, c.repo, c.branch, token, ActivityLog.PublicPath));
-                string helpSha = "-";
+                string helpSha = "-", libraries = "-";
                 try
                 {
                     Dictionary<string, string> help = await Task.Run(() => GitHubSync.ListFileShas(c.owner, c.repo, "help", c.branch, token));
                     if (help.ContainsKey("help.md")) helpSha = help["help.md"];
                 }
                 catch { }
+                try
+                {
+                    Dictionary<string, string> def = await Task.Run(() => GitHubSync.ListFileShas(c.owner, c.repo, "default", c.branch, token));
+                    Dictionary<string, string> pub = await Task.Run(() => GitHubSync.ListFileShas(c.owner, c.repo, PublicRemoteDir, c.branch, token));
+                    libraries = ShaSignature(def) + "|" + ShaSignature(pub);
+                }
+                catch { }
                 sig[0] = "team:" + string.Join(",", members.ToArray());
-                sig[4] = "act:" + pub.Count + ":" + (pub.Count == 0 ? "-" : pub[pub.Count - 1].Time);
-                // 红点跟着“日志说的是哪个栏目”走，而不是一律红在进度同步。
-                sig[1] = "posts:" + unread + "|" + Fingerprint(pub, "发布帖子", "删除帖子");
-                sig[2] = "refs:" + Fingerprint(pub, "上传参考资料", "撤除参考资料", "下载默认资料库");
-                sig[3] = "progress:" + Fingerprint(pub, "上传本地记录") + "|" + LocalFolderSignature();
-                sig[5] = "help:" + helpSha + "|" + Fingerprint(pub, "更新使用说明");
+                sig[1] = "posts:" + unread + "|" + newest;
+                sig[2] = "refs:" + libraries;
+                sig[3] = "progress:" + LocalFolderSignature();
+                sig[5] = "help:" + helpSha;
             }
             catch { return; }
             newsNow.Clear();
@@ -1948,25 +2123,14 @@ namespace SRLogbook
             ApplyBadges();
         }
 
-        /// <summary>活动日志里“属于某个栏目”的条目指纹：条数 + 最后一条时间；只有该栏目的日志变化才会变。</summary>
-        private static string Fingerprint(List<ActivityEntry> entries, params string[] actions)
+        /// <summary>远端文件夹的“名称=sha”清单（排序后拼接），文件新增、删除或内容变化都会改变它。</summary>
+        private static string ShaSignature(Dictionary<string, string> shas)
         {
-            int count = 0;
-            string last = "-";
-            foreach (ActivityEntry e in entries)
-            {
-                if (e == null || string.IsNullOrEmpty(e.Action)) continue;
-                foreach (string a in actions)
-                {
-                    if (e.Action.IndexOf(a, StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        count++;
-                        last = e.Time;
-                        break;
-                    }
-                }
-            }
-            return count + ":" + last;
+            List<string> keys = new List<string>(shas.Keys);
+            keys.Sort(StringComparer.OrdinalIgnoreCase);
+            StringBuilder sb = new StringBuilder();
+            foreach (string k in keys) sb.Append(k).Append('=').Append(shas[k]).Append(';');
+            return sb.Length == 0 ? "-" : sb.ToString();
         }
 
         /// <summary>本地记录文件夹（Mat_Local / Reference）的文件数与最新修改时间，用于本地记录栏目的红点。</summary>
@@ -2177,40 +2341,7 @@ namespace SRLogbook
             lstEntries.Invalidate();
         }
 
-        private void LayoutRefsPage()
-        {
-            if (flow == null || refsTop == null) return;
-            Control p = flow.Parent;
-            if (p == null) return;
-            flow.SetBounds(0, refsTop.Height, p.ClientSize.Width, Math.Max(Ui.S(80), p.ClientSize.Height - refsTop.Height));
-            RebuildRefs();
-        }
-
-        private void RebuildRefs()
-        {
-            if (flow == null || !uiReady) return;
-            SyncRefsFromFolders();
-            int keepY = -flow.AutoScrollPosition.Y;
-            flow.SuspendLayout();
-            flow.Controls.Clear();
-            int cardW = Ui.S(430);
-            int avail = flow.ClientSize.Width - Ui.S(2);
-            if (avail < Ui.S(880)) cardW = Math.Max(Ui.S(300), avail - Ui.S(20));
-            foreach (RefItem r in store.Refs)
-            {
-                RefCard card = new RefCard(r, OpenRef, LocateRef, RemoveRef);
-                card.Width = cardW;
-                flow.Controls.Add(card);
-            }
-            flow.ResumeLayout();
-            if (keepY > 0)
-            {
-                int max = flow.VerticalScroll.Maximum - flow.VerticalScroll.LargeChange + 1;
-                flow.AutoScrollPosition = new Point(0, Math.Min(keepY, Math.Max(0, max)));
-            }
-        }
-
-        /// <summary>参考资料页 = 团队默认库 + 我的 Reference + 他人内容（Public_Temp 下的成员目录）。</summary>
+        /// <summary>旧版卡片式参考资料页的数据整理（2026-11-05 起页面改为文件夹列表，此方法不再被调用）。</summary>
         private void SyncRefsFromFolders()
         {
             try

@@ -213,7 +213,6 @@ namespace SRLogbook
             {
                 await Task.Run(() => Posts.Publish(c.owner, c.repo, c.branch, token, login, body));
                 postComposer.Text = "";
-                await LogActivityAsync("发布帖子 / Publish post", body.Length + " 字符");
                 RefreshPostsPage();
                 Msg.Show("已发布；其他成员登录后即可看到。", "Quick Post");
             }
@@ -271,7 +270,6 @@ namespace SRLogbook
             try
             {
                 await Task.Run(() => Posts.Delete(c.owner, c.repo, c.branch, token, p.Id));
-                await LogActivityAsync("删除帖子 / Delete post", p.Time);
                 RefreshPostsPage();
             }
             catch (Exception ex) { Msg.Show("删除失败：" + ex.Message, "Quick Post"); }
@@ -316,8 +314,33 @@ namespace SRLogbook
                     };
                     Button close = Dlg.Button("关闭");
                     close.Click += delegate { dialog.Close(); };
+                    // 历史记录中的帖子也可由发帖人本人删除（用户 2026-11-05 要求）；只对自己的帖子可用。
+                    Button remove = Dlg.Button("删除");
+                    remove.Enabled = false;
+                    DisabledLook(remove);
+                    list.SelectedIndexChanged += delegate
+                    {
+                        PostItem sel = list.SelectedItems.Count > 0 ? (PostItem)list.SelectedItems[0].Tag : null;
+                        remove.Enabled = sel != null && string.Equals(sel.Author, login, StringComparison.OrdinalIgnoreCase);
+                    };
+                    remove.Click += async delegate
+                    {
+                        if (list.SelectedItems.Count == 0) return;
+                        ListViewItem row = list.SelectedItems[0];
+                        PostItem p = (PostItem)row.Tag;
+                        if (!string.Equals(p.Author, login, StringComparison.OrdinalIgnoreCase)) { Msg.Show("只能删除自己发布的帖子。", "Quick Post"); return; }
+                        if (Msg.Show("确定删除这条帖子吗？删除后其他人也看不到了。", "Quick Post", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                        remove.Enabled = false;
+                        try
+                        {
+                            await Task.Run(() => Posts.Delete(c.owner, c.repo, c.branch, token, p.Id));
+                            list.Items.Remove(row);
+                            RefreshPostsPage();
+                        }
+                        catch (Exception ex) { Msg.Show("删除失败：" + ex.Message, "Quick Post"); }
+                    };
                     dialog.Controls.Add(list);
-                    Dlg.BottomBar(dialog, close);
+                    Dlg.BottomBar(dialog, close, remove);
                     Lang.Apply(dialog);
                     dialog.ShowDialog(this);
                 }

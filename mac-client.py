@@ -1,4 +1,4 @@
-"""SRPRecorder2027 0.2.14. Python stdlib; packaged as a macOS .app in CI."""
+"""SRPRecorder2027 0.2.15. Python stdlib; packaged as a macOS .app in CI."""
 from __future__ import annotations
 import base64
 import copy
@@ -25,9 +25,9 @@ import urllib.request
 import uuid
 import zipfile
 from xml.sax.saxutils import escape
-from file_channels import FileChannels, no_links, child, member_folder, upload_files
+from file_channels import FileChannels, no_links, child, member_folder, upload_files, PUBLIC_DIR as PUBLIC_REMOTE_DIR, PublicNameTaken
 
-VERSION = '0.2.14'
+VERSION = '0.2.15'
 # Stable one-time data-cleanup marker introduced in 0.2.0. Do not bump this
 # when publishing an ordinary app release; doing so would erase existing data.
 DATA_VERSION = '0.2.0'
@@ -35,7 +35,7 @@ APP_ID = 'ResearchProgressRecorder'
 DEFAULT_REPO = 'bacoyc0928-art/research-data'
 
 HELP_TEXT = """SRPRecorder2027 使用说明 / User Guide
-适用版本 / Version 0.2.14 · 中文在前，English follows each section
+适用版本 / Version 0.2.15 · 中文在前，English follows each section
 
 本程序帮助课题组记录和交换研究资料。团队资料保存在私有 GitHub 仓库 bacoyc0928-art/research-data；程序本身从公开仓库 research-progress-recorder 下载，不需要登录。没有服务器，也没有实时同步：上传和下载都由你手动发起。
 The app helps the group record and exchange research files. Team data lives in the private GitHub repository bacoyc0928-art/research-data; the app is downloaded from the public repository research-progress-recorder without signing in. There is no server and no real-time sync: you start every upload and download yourself.
@@ -61,16 +61,16 @@ While signed out, sync, posting and Help toolbar buttons are greyed out, the Ref
 
 【2】六个页面 / The six pages
 
-成员资料：列出所有成员及其状态（已连接 · 最近活动 / 已上传 / 已加入 · 未连接 / 待接受邀请）。打开他人的文件夹会先下载其文件再列出（macOS 先选中成员，再点「打开成员文件」）；自己的卡片打开本机 Reference 文件夹。
-Quick Post：给团队发短消息。点卡片看全文；「已阅」后移入「历史记录」；只能删除自己的帖子。
-参考资料：只读浏览团队默认资料库、我的参考资料，以及临时下载的他人内容。
+成员资料：列出所有成员及其状态（已上传资料 / 已加入 · 尚未上传 / 待接受邀请）。打开他人的文件夹会先下载其文件再列出（macOS 先选中成员，再点「打开成员文件」）；自己的卡片打开本机 Reference 文件夹。
+Quick Post：给团队发短消息。点卡片看全文；「已阅」后移入「历史记录」；自己的帖子在列表和历史记录中都可以删除，别人的帖子不能删。
+参考资料：左边竖排列出文件夹（团队默认资料库、公共资料、我的参考资料、他人内容），右边显示所选文件夹里的文件，可滚动；双击打开文件。只读。
 本地记录：选择本地记录文件夹；「新建文档」在 Mat_Local 中生成 Word 文档；下方列出 Mat_Local 中的文件。
 进度同步：所有上传、下载和撤除操作都在这里（见第 3 节）。
 使用说明：本页。登录后可编辑并上传给所有成员。
 
-Members: every member and their state (Connected · last active / Uploaded / Joined · not connected / Invitation pending). Opening another member's folder downloads and then lists their files (on macOS, select the member and press Open Member Files); your own card opens your local Reference folder.
-Quick Post: short team messages. Click a card for the full text; "Mark Read" moves it to History; you can delete only your own posts.
-References: read-only view of the team default library, your references and others' temporary downloads.
+Members: every member and their state (Uploaded files / Joined · no uploads yet / Invitation pending). Opening another member's folder downloads and then lists their files (on macOS, select the member and press Open Member Files); your own card opens your local Reference folder.
+Quick Post: short team messages. Click a card for the full text; "Mark Read" moves it to History; you can delete your own posts from the list or from History, never other people's.
+References: folders listed vertically on the left (team default library, public library, my references, others' files) and the files of the selected folder on the right, scrollable; double-click to open. Read-only.
 Local Records: choose your local records folder; "New Document" creates a Word file in Mat_Local; the list shows the files in Mat_Local.
 Progress Sync: every upload, download and removal (see section 3).
 Help: this page. When signed in you can edit it and upload it for everyone.
@@ -89,14 +89,16 @@ Each action first shows a checklist and processes only the items you tick.
 - 上传参考资料：默认列出 Reference 中的文件，也可添加其他文件；上传到团队区你自己的目录。
 - 上传本地记录：默认列出 Mat_Local 中的文件，保持原有的子文件夹结构。
 - 撤除我上传的参考资料：从团队区删除你自己上传的文件，同时删除本机 Reference 中的副本，其他人从此无法下载。只能撤除自己的。
-- 查看活动日志：查看全员的登录、上传、下载、撤除、发帖和改说明记录。
+- 下载公共资料库：把公共资料下载到 References\\PublicLib\\，永久保存，不会在退出时清空；已下载的文件会跳过。
+- 上传至公共资料库：所有成员都能下载。上传后不可撤销，也不能覆盖；公共资料库已有同名文件时会拒绝上传，请先改名。
 
 - Download team files: selected members' files go to Public_Temp\\<member>\\, which is cleared on start and exit.
 - Download default library: team default files go to References\\Default\\; older copies are kept before overwriting.
 - Upload references: lists files in Reference by default (you can add others) and uploads them to your own team folder.
 - Upload local records: lists files in Mat_Local by default and keeps their sub-folder structure.
 - Remove my uploaded references: deletes your own uploads from the team area and the copy in your local Reference, so others can no longer download them. You can remove only your own.
-- Activity log: everyone's sign-ins, uploads, downloads, removals, posts and help edits.
+- Download public library: public files go to References\\PublicLib\\ and stay there permanently; files you already have are skipped.
+- Upload to public library: everyone can download the files. The upload cannot be undone or overwritten; a file whose name already exists is refused, so rename it first.
 
 需要记住的规则 / Rules to remember
 - 上传前先保存文件；本地保存不等于上传。
@@ -119,6 +121,7 @@ PersonalWorkspaceSRRec\\Mat_Local      你的工作资料，上传本地记录�
 PersonalWorkspaceSRRec\\Reference      你的参考资料，上传参考资料的默认来源 / your references; default source for reference uploads
 PersonalWorkspaceSRRec\\Public_Temp    他人内容的临时区，启动和退出时清空 / temporary area for others' files, cleared on start and exit
 References\\Default                    团队默认资料库，只读 / team default library, read-only
+References\\PublicLib                  公共资料，下载后永久保存 / public library, kept permanently
 *.json                                程序配置，请勿手动修改 / app settings, do not edit by hand
 
 令牌不会写入这些文件。替换或升级程序不会删除上面的资料。
@@ -157,11 +160,11 @@ Release page: https://github.com/bacoyc0928-art/research-progress-recorder/relea
 
 【7】安全与隐私 / Security and privacy
 
-- 令牌只用于连接 GitHub，不会上传、打印或写进日志。请不要把令牌发给别人；不用时可在 GitHub 上撤销。
+- 程序不记录活动日志。令牌只用于连接 GitHub，不会上传、打印或写进任何文件。请不要把令牌发给别人；不用时可在 GitHub 上撤销。
 - 能写入 research-data 的人在技术上可以修改任何成员的目录。请只邀请信任的成员。
 - 卸载程序不会撤销令牌，请到 GitHub 自行撤销。
 
-- The token is used only to talk to GitHub; it is never uploaded, printed or logged. Do not share it; revoke it on GitHub when no longer needed.
+- The app keeps no activity log. The token is used only to talk to GitHub; it is never uploaded, printed or written to any file. Do not share it; revoke it on GitHub when no longer needed.
 - Anyone who can write to research-data can technically change any member's folder. Invite only trusted members.
 - Uninstalling does not revoke the token; revoke it on GitHub yourself."""
 
@@ -781,6 +784,8 @@ class Client:
         self.home.mkdir(parents=True,exist_ok=True)
         self.files_root=self.home/'SRCRec'; self.files_root.mkdir(exist_ok=True)
         self.default=self.files_root/'References'/'Default'; self.default.mkdir(parents=True,exist_ok=True)
+        # 公共资料（PublicLib）：远端 public/ 的本机副本，永久保存（与 Windows 一致）。
+        self.public_lib=self.files_root/'References'/'PublicLib'; self.public_lib.mkdir(parents=True,exist_ok=True)
         # 工作区：PersonalWorkspaceSRRec + Mat_Local / Reference / Public_Temp（与 Windows 同构）
         self.workspace=self.files_root/'PersonalWorkspaceSRRec'
         self.mat_local=self.workspace/'Mat_Local'
@@ -840,6 +845,7 @@ class Client:
         self.status.set(self.display_language(self.status.get()))
         self.update_login_ui()
         self.personal_label.configure(text=self.personal_display())
+        self.refresh_references()   # 参考资料页的文件夹名称和空状态提示随语言切换
         for item in self.members_tree.get_children():
             values=list(self.members_tree.item(item,'values'))
             if len(values)>1:
@@ -919,6 +925,12 @@ class Client:
         threading.Thread(target=job,daemon=True).start()
     def build(self):
         ttk=self.ttk
+        # 表格行高按实际字体行距设定：高 DPI 下字体放大而默认行高不变，会截掉文字下半部分。
+        try:
+            import tkinter.font as tkfont
+            line=tkfont.nametofont('TkDefaultFont').metrics('linespace')
+            ttk.Style(self.root).configure('Treeview',rowheight=max(20,line+8))
+        except Exception: pass
         self.root.columnconfigure(0,weight=1); self.root.rowconfigure(1,weight=1)
         header=ttk.Frame(self.root,padding=12); header.grid(row=0,column=0,sticky='ew')
         ttk.Label(header,text='SRPRecorder2027  '+VERSION,font=('',17,'bold')).pack(side='left')
@@ -1037,8 +1049,6 @@ class Client:
             try:
                 api=GitHub({'repo':DEFAULT_REPO,'branch':'main'},token)
                 login=api.login(); api.login_cached=login
-                try: append_activity(api,login,'登录 / Sign in','身份验证成功 / verified')
-                except Exception: pass
                 return login,None
             except Exception as error:
                 return None,str(error)
@@ -1082,12 +1092,6 @@ class Client:
         self.use_token_mode=False; self.update_login_ui()
         self.team(); self.refresh_posts(); self.update_news(); self._news_tick()
         self.status.set(self.tr('已解锁：','Unlocked: ')+self.session_login)
-        def bg():
-            try:
-                api=GitHub({'repo':DEFAULT_REPO,'branch':'main'},self.session_token)
-                append_activity(api,self.session_login,'登录 / Sign in','PIN 解锁 / unlocked with PIN')
-            except Exception: pass
-        threading.Thread(target=bg,daemon=True).start()
     def switch_to_token(self):
         self.use_token_mode=True; self.update_login_ui()
     def forget_saved(self):
@@ -1114,12 +1118,14 @@ class Client:
         api=GitHub({'repo':DEFAULT_REPO,'branch':'main'}, self.session_token)
         posts=list_posts(api); read=set(read_ids(api,self.session_login))
         unread=len([p for p in posts if p.get('id') not in read])
+        newest=max([str(p.get('id') or '') for p in posts] or ['-'])
         members=','.join(sorted(FileChannels(api).members()))
-        acts=read_activity(api,'logs/public/activity.json')
-        last=acts[-1].get('time') if acts else '-'
-        def fp(*keys):
-            rows=[a for a in acts if any(k in str(a.get('action') or '') for k in keys)]
-            return '%d:%s'%(len(rows),rows[-1].get('time') if rows else '-')
+        def shas(path):
+            # 远端文件夹的“名称=sha”清单；文件新增、删除或修改都会改变它（日志已取消，红点只看实际内容）。
+            try:
+                rows=api.request('GET',api.endpoint(path)+'?ref='+urllib.parse.quote(api.branch,safe=''))
+                return ';'.join(sorted(f"{r.get('name')}={r.get('sha')}" for r in rows if isinstance(r,dict) and r.get('type')=='file')) or '-'
+            except Exception: return '-'
         local=[]
         try:
             for folder in (self.mat_local,self.reference_dir):
@@ -1128,13 +1134,15 @@ class Client:
                         stat=file.stat(); local.append((str(file),stat.st_size,stat.st_mtime_ns))
         except Exception: pass
         local_signature=hashlib.sha256(repr(sorted(local)).encode('utf-8')).hexdigest()
-        # 红点跟着“日志说的是哪个栏目”走，与 Windows 端规则一致
+        help_sha='-'
+        try: help_sha=api.request('GET',api.endpoint('help/help.md')+'?ref='+urllib.parse.quote(api.branch,safe='')).get('sha','-')
+        except Exception: pass
+        # 与 Windows 一致：成员目录、未读帖子、默认库与公共资料库文件、本机文件、help.md。
         return {0:'team:'+members,
-                1:'posts:%d|%s'%(unread,fp('发布帖子','删除帖子')),
-                2:'refs:'+fp('上传参考资料','撤除参考资料','下载默认资料库'),
-                3:'progress:%s|%s'%(fp('上传本地进度'),local_signature),
-                4:'act:%d:%s'%(len(acts),last),
-                5:'help:'+fp('更新使用说明')}
+                1:'posts:%d|%s'%(unread,newest),
+                2:'refs:%s|%s'%(shas('default'),shas(PUBLIC_REMOTE_DIR)),
+                3:'progress:'+local_signature,
+                5:'help:'+help_sha}
     def update_news(self):
         """栏目未读红点：后台线程取状态（不禁用界面），完成后回到主线程更新标签。"""
         if not self.session_token or not getattr(self,'tab_base',None): return
@@ -1173,26 +1181,9 @@ class Client:
             try: self.root.after(90000,self._news_tick)
             except Exception: pass
     def log_activity(self,api,login,action,detail):
-        try: append_activity(api,login,action,detail)
-        except Exception as error: self.status.set(self.tr('活动日志写入失败：','Activity log failed: ')+str(error))
+        """活动日志已取消（用户 2026-11-05 要求）：不再写入任何日志，只在操作后刷新红点。"""
         try: self.update_news()
         except Exception: pass
-    def view_activity(self):
-        api,config=self.api()
-        def work():
-            login=api.login(); api.login_cached=login
-            return login,read_activity(api,'logs/public/activity.json'),read_activity(api,f'logs/private/{login}/activity.json')
-        def done(result):
-            login,pub,mine=result
-            self.remember(api,config)
-            win=self.tk.Toplevel(self.root); win.title(self.tr('活动日志','Activity Log')); self.fit_dialog(win,900,520); win.transient(self.root); win.grab_set()
-            self.ttk.Label(win,text=self.tr('公开日志 ','Public log ')+str(len(pub))+self.tr(' 条 · 我的日志 ',' entries · my log ')+str(len(mine))+self.tr(' 条',' entries'),padding=8).pack(anchor='w')
-            tree=self.table(win,[self.tr('时间','Time'),self.tr('用户','User'),self.tr('动作','Action'),self.tr('详情','Detail')])
-            rows=list(reversed(pub))+list(reversed(mine))
-            for row in rows:
-                tree.insert('','end',values=(row.get('time',''),row.get('user',''),row.get('action',''),row.get('detail','')))
-            self.ttk.Button(self.bottom_bar(win),text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
-        self.run(work,done)
     def choose_workspace(self):
         if not self.require_login(): return
         value=self.fd.askdirectory(initialdir=self.config.get('workspace',str(self.files_root)))
@@ -1225,13 +1216,13 @@ class Client:
         # 0.2.2 规则：个人参考资料固定 PersonalWorkspaceSRRec/Reference，不再允许自选目录。
         self.reference_dir.mkdir(parents=True,exist_ok=True); return self.reference_dir
     def migrate_legacy(self):
-        # 0.2.2 规则：References 下只保留 Default（团队默认库）；旧成员缓存/清单/personal 配置全部清掉。
+        # 0.2.2 规则：References 下只保留 Default（团队默认库）与 PublicLib（公共资料）；旧成员缓存/清单/personal 配置全部清掉。
         try:
             refs=self.files_root/'References'
             if refs.is_dir():
                 for item in refs.iterdir():
                     if item.is_dir():
-                        if item.name.lower()=='default': continue
+                        if item.name.lower() in ('default','publiclib'): continue
                         shutil.rmtree(item,ignore_errors=True)
                     elif item.suffix.lower()=='.json':
                         try: item.unlink()
@@ -1272,32 +1263,17 @@ class Client:
             invites=files.pending_invitations()
             names=sorted({m.lower():m for m in [*accepted,*invites,*upload_names,login]}.values(),key=str.lower)
             invited={m.lower() for m in invites}-{m.lower() for m in accepted}-uploaded
-            last={}; logged=set()
-            try:
-                for row in read_activity(api,'logs/public/activity.json'):
-                    user=str(row.get('user') or '').lower(); stamp=str(row.get('time') or '')
-                    if not user or not stamp: continue
-                    try:
-                        when=dt.datetime.fromisoformat(stamp.replace('Z','+00:00'))
-                        if when.tzinfo is None: when=when.replace(tzinfo=dt.timezone.utc)
-                    except ValueError: continue
-                    if user not in last or when>last[user]: last[user]=when
-                    if '登录' in str(row.get('action') or '') or 'sign in' in str(row.get('action') or '').lower(): logged.add(user)
-            except Exception: pass
+            # 活动日志已取消（用户 2026-11-05 要求）：状态只看是否上传、是否已加入、是否待接受邀请（与 Windows 一致）。
             states={}
             for name in names:
                 if name.lower()==login.lower():
                     states[name]=self.tr('已连接 GitHub 账号','Connected to GitHub account'); continue
                 if name.lower() in invited:
-                    states[name]=self.tr('待接受邀请','Invitation pending'); continue
-                if name.lower() in logged:
-                    when=last.get(name.lower())
-                    stamp=when.astimezone().strftime('%m-%d %H:%M') if when else '-'
-                    states[name]=self.tr('已连接 · 最近活动 ','Connected · last active ')+stamp
+                    states[name]=self.tr('待接受邀请','Invitation pending')
                 elif name.lower() in uploaded:
-                    states[name]=self.tr('已上传 · 无登录记录','Uploaded · no login record')
+                    states[name]=self.tr('已上传资料','Uploaded files')
                 else:
-                    states[name]=self.tr('已加入 · 未连接','Joined · not connected')
+                    states[name]=self.tr('已加入 · 尚未上传','Joined · no uploads yet')
             return names,states
         def done(result):
             names,states=result
@@ -1405,8 +1381,6 @@ class Client:
         def work():
             login=api.login(); api.login_cached=login
             publish_post(api,login,text)
-            try: append_activity(api,login,'发布帖子 / Publish post',str(len(text))+' 字符 / chars')
-            except Exception: pass
             return True
         def done(_):
             self.post_text.delete('1.0','end')
@@ -1435,8 +1409,6 @@ class Client:
         api,config=self.api()
         def work():
             delete_post(api,post['id'])
-            try: append_activity(api,login,'删除帖子 / Delete post',post['time'])
-            except Exception: pass
             return True
         def done(_):
             self.remember(api,config); self.refresh_posts()
@@ -1460,7 +1432,29 @@ class Client:
                 iid=tree.insert('','end',values=(post['author'],post['time'],' '.join(str(post.get('body','')).split())[:120]))
                 self._history_posts[iid]=post
             tree.bind('<Double-1>',lambda e:self.open_history_item(tree,login))
-            self.ttk.Button(self.bottom_bar(win),text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
+            bar=self.bottom_bar(win)
+            self.ttk.Button(bar,text=self.tr('关闭','Close'),command=win.destroy).pack(side='right',padx=6,pady=8)
+            # 历史记录中的帖子也可由发帖人本人删除（用户 2026-11-05 要求，与 Windows 一致）。
+            remove=self.ttk.Button(bar,text=self.tr('删除','Delete'),state='disabled',command=lambda:self.delete_history_item(tree,login,remove))
+            remove.pack(side='right',pady=8)
+            def selected(_=None):
+                sel=tree.selection(); post=self._history_posts.get(sel[0]) if sel else None
+                remove.configure(state='normal' if post and post['author'].lower()==login.lower() else 'disabled')
+            tree.bind('<<TreeviewSelect>>',selected)
+        self.run(work,done)
+    def delete_history_item(self,tree,login,button):
+        sel=tree.selection(); post=self._history_posts.get(sel[0]) if sel else None
+        if not post: return
+        if post['author'].lower()!=login.lower():
+            self.mb.showinfo('SRPRecorder2027',self.tr('只能删除自己的帖子。','You can only delete your own posts.'),parent=self.root); return
+        if not self.mb.askyesno('SRPRecorder2027',self.tr('确定删除这条帖子？删除后其他人也看不到了。','Delete this post? Others will no longer see it.'),parent=tree.winfo_toplevel()): return
+        api,config=self.api(); iid=sel[0]
+        def work():
+            delete_post(api,post['id']); return True
+        def done(_):
+            try: tree.delete(iid); self._history_posts.pop(iid,None); button.configure(state='disabled')
+            except Exception: pass
+            self.remember(api,config); self.refresh_posts()
         self.run(work,done)
     def open_history_item(self,tree,login):
         selection=tree.selection()
@@ -1468,30 +1462,96 @@ class Client:
         post=self._history_posts.get(selection[0])
         if post: self.view_post(post,login)
     def build_references(self):
+        """参考资料页（用户 2026-11-05 要求）：左边竖排文件夹，右边列出所选文件夹里的文件，可滚动（与 Windows 一致）。"""
         p=self.tabs[2]
-        self.wrapped_label(p,self.tr('参考资料只读。默认库需登录私有团队仓库后下载；个人资料在团队同步上传。','Read-only references. Download the default library after joining the private data repository; upload personal files on Team Sync.'),pack_options={'pady':8})
-        bar=self.ttk.Frame(p); bar.pack(fill='x'); self.button(bar,'刷新本地资料','Refresh Local Files',self.refresh_references)
-        self.button(bar,'打开文件','Open File',self.open_reference); self.button(bar,'打开默认资料库','Open Default Library',lambda:self.open_path(self.default))
-        self.ref_tree=self.table(p,[self.tr('文件','File'),self.tr('位置','Location')]); self.ref_tree.bind('<Double-1>',lambda _:self.guarded(self.open_reference))
+        self.wrapped_label(p,self.tr('左边选择文件夹，右边查看其中的文件；参考资料只读，上传与下载在“进度同步”页。','Pick a folder on the left to see its files on the right. References are read-only; upload and download on Progress Sync.'),foreground='#5e697a',pack_options={'pady':(8,6)})
+        body=self.ttk.Frame(p); body.pack(fill='both',expand=True)
+        body.columnconfigure(1,weight=1); body.rowconfigure(0,weight=1)
+        self.ref_folders=self.ttk.Treeview(body,show='tree',selectmode='browse')
+        self.ref_folders.column('#0',width=240,stretch=False)
+        self.ref_folders.grid(row=0,column=0,sticky='ns',padx=(0,12))
+        self.ref_folders.bind('<<TreeviewSelect>>',lambda _:self.show_ref_folder())
+        right=self.ttk.Frame(body); right.grid(row=0,column=1,sticky='nsew')
+        head=self.ttk.Frame(right); head.pack(fill='x')
+        self.ref_title=self.ttk.Label(head,text='',font=('',13,'bold')); self.ref_title.pack(anchor='w')
+        self.ref_path_label=self.ttk.Label(head,text='',foreground='#5e697a'); self.ref_path_label.pack(anchor='w',pady=(2,4))
+        bar=self.ttk.Frame(head); bar.pack(fill='x',pady=(0,6))
+        self.ref_open_btn=self.button(bar,'打开文件','Open File',self.open_reference,primary=True)
+        self.button(bar,'打开文件夹','Open Folder',self.open_ref_folder)
+        self.button(bar,'刷新','Refresh',self.refresh_references)
+        self.ref_tree=self.table(right,[self.tr('名称','Name'),self.tr('子文件夹','Subfolder'),self.tr('大小','Size'),self.tr('修改时间','Modified')])
+        self.ref_tree.column('0',width=340); self.ref_tree.column('1',width=140); self.ref_tree.column('2',width=90); self.ref_tree.column('3',width=150)
+        self.ref_tree.bind('<Double-1>',lambda _:self.guarded(self.open_reference))
+        self.ref_empty=self.ttk.Label(right,text='',foreground='#5e697a',justify='center')
+        self.ref_paths={}; self.ref_folder_items=[]
         self.refresh_references()
-    def refresh_references(self):
-        if not hasattr(self,'ref_tree'): return
-        self.ref_tree.delete(*self.ref_tree.get_children()); self.ref_paths={}
-        references=self.files_root/'References'
-        for directory,dirs,names in os.walk(references,followlinks=False):
-            dirs[:]=[x for x in dirs if '.backup-' not in x and '.download-' not in x and not (Path(directory)/x).is_symlink()]
-            for name in sorted(names):
+    def ref_folder_list(self):
+        items=[(self.tr('团队默认资料库','Team default library'),self.default,
+                self.tr('还没有下载团队默认资料库。\n在“进度同步 → 从团队获取”点“下载默认资料库”。','The team default library has not been downloaded.\nUse Progress Sync → Get from the team → Download Default Library.')),
+               (self.tr('公共资料','Public library'),self.public_lib,
+                self.tr('还没有公共资料。\n在“进度同步”点“下载公共资料库”，文件会永久保存在这里。','No public files yet.\nUse Progress Sync → Download Public Library; files stay here permanently.')),
+               (self.tr('我的参考资料','My references'),self.reference_dir,
+                self.tr('这里放你自己的参考资料（PersonalWorkspaceSRRec/Reference）。','Put your own references here (PersonalWorkspaceSRRec/Reference).'))]
+        if self.public_temp.is_dir():
+            for d in sorted([d for d in self.public_temp.iterdir() if d.is_dir()],key=lambda d:d.name.lower()):
+                items.append((self.tr('他人内容（临时）· ','Others (temp) · ')+d.name,d,self.tr('该成员还没有可查看的文件。','No files from this member.')))
+        return items
+    @staticmethod
+    def ref_files(folder):
+        folder=Path(folder)
+        if not folder.is_dir(): return []
+        out=[]
+        for directory,dirs,names in os.walk(folder,followlinks=False):
+            dirs[:]=[x for x in dirs if not (Path(directory)/x).is_symlink()]
+            for name in names:
                 path=Path(directory)/name
-                if path.is_symlink(): continue
-                ident=self.ref_tree.insert('', 'end',values=(name,str(path.relative_to(references)))); self.ref_paths[ident]=path
-        # 我的参考资料（工作区 Reference）+ 他人内容（Public_Temp\<成员>），与 Windows 一致
-        for label,folder in (('我的参考资料 / My References',self.reference_dir),('他人内容 / Others (temp)',self.public_temp)):
-            if not folder.is_dir(): continue
-            for path in sorted(upload_files(folder)):
-                ident=self.ref_tree.insert('', 'end',values=(path.name,label)); self.ref_paths[ident]=path
+                if path.is_symlink() or name=='README.txt' or name.startswith('~$') or any(tag in name for tag in ('.bak-','.tmp-','.dl-')): continue
+                out.append(path)
+        return sorted(out,key=lambda x:str(x).lower())
+    def refresh_references(self):
+        if not hasattr(self,'ref_folders'): return
+        keep=None
+        sel=self.ref_folders.selection()
+        if sel and sel[0] in getattr(self,'ref_folder_ids',{}): keep=str(self.ref_folder_ids[sel[0]][1])
+        self.ref_folders.delete(*self.ref_folders.get_children()); self.ref_folder_ids={}
+        pick=None
+        for title,folder,empty in self.ref_folder_list():
+            count=len(self.ref_files(folder))
+            iid=self.ref_folders.insert('','end',text='  %s  (%d)'%(title,count))
+            self.ref_folder_ids[iid]=(title,folder,empty)
+            if keep==str(folder): pick=iid
+        if pick is None and self.ref_folders.get_children(): pick=self.ref_folders.get_children()[0]
+        if pick: self.ref_folders.selection_set(pick)
+        self.show_ref_folder()
+    def show_ref_folder(self):
+        sel=self.ref_folders.selection()
+        if not sel or sel[0] not in self.ref_folder_ids: return
+        title,folder,empty=self.ref_folder_ids[sel[0]]
+        self.ref_title.configure(text=title); self.ref_path_label.configure(text=str(folder))
+        self.ref_tree.delete(*self.ref_tree.get_children()); self.ref_paths={}
+        files=self.ref_files(folder)
+        for path in files:
+            stat=path.stat(); sub=str(path.parent.relative_to(folder)) if path.parent!=Path(folder) else ''
+            ident=self.ref_tree.insert('','end',values=(path.name,sub,'%s KB'%format(max(1,stat.st_size//1024),','),dt.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M')))
+            self.ref_paths[ident]=path
+        frame=self.ref_tree.master
+        if files:
+            self.ref_empty.pack_forget()
+            if not frame.winfo_manager(): frame.pack(fill='both',expand=True)
+        else:
+            frame.pack_forget(); self.ref_empty.configure(text=empty); self.ref_empty.pack(fill='both',expand=True,pady=40)
+        self.ref_open_btn.configure(state='normal' if files else 'disabled')
+    def current_ref_folder(self):
+        sel=self.ref_folders.selection()
+        return self.ref_folder_ids[sel[0]][1] if sel and sel[0] in getattr(self,'ref_folder_ids',{}) else None
     def open_reference(self):
         selected=self.ref_tree.selection()
         if selected: self.open_path(self.ref_paths[selected[0]])
+        elif self.ref_paths: self.status.set(self.tr('请先在右侧列表中选择一个文件。','Select a file first.'))
+    def open_ref_folder(self):
+        folder=self.current_ref_folder()
+        if folder is not None:
+            Path(folder).mkdir(parents=True,exist_ok=True); self.open_path(folder)
     def build_progress(self):
         p=self.tabs[3]; self.progress=self.tk.StringVar(value=self.config['progress'])
         self.ttk.Label(p,text=self.tr('本地记录文件夹','Local Records Folder'),font=('',14,'bold')).pack(anchor='w',pady=12)
@@ -1558,16 +1618,18 @@ class Client:
             frame=self.ttk.LabelFrame(p,text=self.tr(zh,en),padding=(12,4,12,8)); frame.pack(fill='x',pady=(0,10))
             self.wrapped_label(frame,self.tr(note_zh,note_en),foreground='#5e697a')
             return self.flow_bar(frame,pady=(2,0))
-        downloads=group('从团队获取','Get from the team','下载到本机查看，不会改动团队资料。','Downloads to this computer; team data is not changed.')
+        downloads=group('从团队获取','Get from the team','下载到本机查看，不会改动团队资料；公共资料下载后永久保存。','Downloads to this computer without changing team data; public files are kept permanently.')
         action(downloads,'从 GitHub 下载他人内容','Download Team Files',self.pull_others)
         action(downloads,'从 GitHub 下载默认资料库','Download Default Library',self.pull_default)
-        uploads=group('分享我的资料','Share my files','把你勾选的文件上传到团队区你自己的文件夹；每个文件最大 50 MiB，只新增或覆盖，不删除旧文件。',
-                      'Uploads the files you tick to your own team folder; up to 50 MiB each, only adds or overwrites, never deletes older files.')
+        action(downloads,'下载公共资料库','Download public library',self.pull_public)
+        uploads=group('分享我的资料','Share my files','上传到团队区你自己的文件夹；“上传至公共资料库”供全员下载，上传后不可撤销。每个文件最大 50 MiB。',
+                      'Uploads to your own team folder; Upload to public library shares with everyone and cannot be undone. Up to 50 MiB per file.')
         action(uploads,'上传参考资料','Upload References',self.upload_references,primary=True)
         action(uploads,'上传本地记录','Upload Local Records',self.upload_progress,primary=True)
-        removals=group('管理我的上传','Manage my uploads','撤除只影响你自己上传的文件；活动日志记录每个人的操作。',"Removal affects only files you uploaded; the activity log shows everyone's actions.")
+        # 不可撤销的公共上传保持次要样式，避免误点（与 Windows 一致）。
+        action(uploads,'上传至公共资料库','Upload to public library',self.upload_public)
+        removals=group('管理我的上传','Manage my uploads','撤除只影响你自己上传的参考资料；公共资料库中的文件不能撤除。','Removal affects only references you uploaded; files in the public library cannot be removed.')
         action(removals,'撤除我上传的参考资料','Remove My Uploaded References',self.remove_my_references)
-        action(removals,'查看活动日志','View Activity Log',self.view_activity)
     def save_sync(self):
         api,config=self.api()
         def work():
@@ -1675,6 +1737,45 @@ class Client:
                 return count
             self.run(work2,lambda count:self.finish(api,config,self.tr('默认资料库已更新：','Default library updated: ')+str(count)))
         self.run(work,done)
+    def pull_public(self):
+        """下载公共资料库到 References/PublicLib，永久保存；已下载过的同名文件跳过（与 Windows 一致）。"""
+        api,config=self.api()
+        def work():
+            return self.channels(api).public_names()
+        def done(names):
+            if not names:
+                self.status.set(self.tr('公共资料库还是空的。','The public library is empty.')); return
+            fresh=[n for n in names if not child(self.public_lib,n).exists()]
+            if not fresh:
+                self.status.set(self.tr('公共资料已全部下载。','All public files are already downloaded.')); return
+            picked=self.pick(self.tr('下载公共资料库','Download public library'),
+                self.tr('勾选要下载的公共资料；下载后永久保存在 References/PublicLib，不会在退出时清空。','Check public files to download; they stay in References/PublicLib permanently.'),fresh)
+            if not picked: return
+            def work2(): return self.channels(api).download_public(picked,self.public_lib)
+            self.run(work2,lambda count:(self.refresh_references(),self.finish(api,config,self.tr('公共资料已下载：','Public files downloaded: ')+str(count))))
+        self.run(work,done)
+    def upload_public(self):
+        """上传至公共资料库：全员可下载，不可撤销；远端已有同名文件时拒绝（不覆盖）。"""
+        if not self.require_login(): return
+        candidates=[str(p) for p in sorted(upload_files(self.reference_dir))] if self.reference_dir.is_dir() else []
+        picked=self.pick(self.tr('上传至公共资料库','Upload to public library'),
+            self.tr('默认列出 Reference 里的文件，也可“添加文件”。上传后全员可下载，且不能撤除或覆盖。','Lists Reference by default. Uploaded files are shared with everyone and cannot be removed or replaced.'),
+            candidates,extra_files=True)
+        if not picked: return
+        names='\n'.join(Path(p).name for p in picked)
+        if not self.mb.askyesno(self.tr('上传至公共资料库（不可撤销）','Upload to public library (cannot be undone)'),
+                self.tr('将把 %d 个文件上传到公共资料库：\n'%len(picked),'Upload %d file(s) to the public library:\n'%len(picked))+names+
+                self.tr('\n\n所有成员都能下载这些文件。上传后不能撤除，也不能覆盖。确定上传吗？','\n\nEveryone can download them. The upload cannot be removed or replaced. Continue?'),
+                icon='warning',parent=self.root): return
+        api,config=self.api()
+        def work():
+            try: return self.channels(api).upload_public([Path(p) for p in picked],self.public_lib)
+            except PublicNameTaken as taken:
+                raise ValueError(self.tr('公共资料库里已有同名文件，公共文件不能覆盖。请改名后再上传：\n','A file with the same name already exists in the public library and cannot be replaced. Rename it first:\n')+'\n'.join(taken.names))
+            except urllib.error.HTTPError as error:
+                if error.code==422: raise ValueError(self.tr('上传被拒绝：公共资料库已有同名文件（可能有人刚刚上传）。','Rejected: a file with that name already exists in the public library.'))
+                raise
+        self.run(work,lambda count:(self.refresh_references(),self.finish(api,config,self.tr('已上传到公共资料库：','Uploaded to public library: ')+str(count))))
     def team_references(self):
         api,config=self.api()
         def work():
@@ -1764,12 +1865,11 @@ class Client:
     def build_help(self):
         panel=self.tabs[5]
         bar=self.flow_bar(panel)
-        # 使用说明未登录只读：四个工具按钮都需要登录（与 Windows 一致）。
+        # 使用说明未登录只读：三个工具按钮都需要登录（与 Windows 一致）；改动日志已随日志同步取消。
         self.login_actions=getattr(self,'login_actions',[])
         self.help_actions=[self.button(bar,'上传到 GitHub','Upload to GitHub',self.upload_help),
             self.button(bar,'读取云端版本','Load From GitHub',self.load_help),
-            self.button(bar,'恢复默认','Restore Default',self.default_help),
-            self.button(bar,'改动日志','Change Log',self.show_help_changelog)]
+            self.button(bar,'恢复默认','Restore Default',self.default_help)]
         self.login_actions+=self.help_actions
         body=self.ttk.Frame(panel); body.pack(fill='both',expand=True)
         self.help_text=self.tk.Text(body,wrap='word',padx=16,pady=16)
@@ -1877,9 +1977,6 @@ class Client:
             body={'message':'help: SRPRecorder2027 '+VERSION,'branch':api.branch,'content':base64.b64encode(text.encode()).decode()}
             if sha: body['sha']=sha
             api.request('PUT',endpoint,body)
-            append_activity_to(api,'help/changelog.json',login,'更新使用说明 / Update help',str(len(text))+' 字符 / chars',200)
-            try: append_activity(api,login,'更新使用说明 / Update help',str(len(text))+' 字符 / chars')
-            except Exception: pass
             return len(text)
         def done(_):
             self.save_help_draft(); self.help_dirty=False
@@ -1906,19 +2003,6 @@ class Client:
             self.set_help_text(text)
             self.save_help_draft()
             self.status.set(self.tr('已读取云端使用说明。','Help loaded from GitHub.'))
-        self.run(work,done)
-    def show_help_changelog(self):
-        api,config=self.api()
-        def work():
-            rows,sha=api.get('help/changelog.json')
-            return normalize_activity(rows)
-        def done(rows):
-            self.remember(api,config)
-            win=self.tk.Toplevel(self.root); win.title(self.tr('改动日志','Change Log')); self.fit_dialog(win,760,420); win.transient(self.root); win.grab_set()
-            tree=self.table(win,[self.tr('时间','Time'),self.tr('用户','User'),self.tr('说明','Detail')])
-            for row in reversed(rows):
-                tree.insert('','end',values=(row.get('time',''),row.get('user',''),row.get('detail','')))
-            self.ttk.Button(self.bottom_bar(win),text=self.tr('关闭','Close'),command=win.destroy).pack(pady=8)
         self.run(work,done)
 
 def verify_update_runtime(output=None):

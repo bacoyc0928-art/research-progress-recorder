@@ -182,14 +182,10 @@ namespace SRLogbook
 
         private static string MemberState(string login, bool uploaded, Dictionary<string, DateTime> last, HashSet<string> logged)
         {
-            bool connected = logged.Contains(login);
-            if (!connected)
-                return uploaded
-                    ? (Lang.En ? "Uploaded · no login record" : "已上传 · 无登录记录")
-                    : (Lang.En ? "Joined · not connected" : "已加入 · 未连接");
-            DateTime t;
-            string when = last.TryGetValue(login, out t) ? t.ToLocalTime().ToString("MM-dd HH:mm") : "-";
-            return (Lang.En ? "Connected · last active " : "已连接 · 最近活动 ") + when;
+            // 不再读取登录日志：只说明是否已经上传过资料。
+            return uploaded
+                ? (Lang.En ? "Uploaded files" : "已上传资料")
+                : (Lang.En ? "Joined · no uploads yet" : "已加入 · 尚未上传");
         }
 
         private void UpdateGithubState()
@@ -261,23 +257,9 @@ namespace SRLogbook
                 List<string> invites = new List<string>();
                 try { invites = await Task.Run(() => GitHubSync.ListPendingInvitations(cfg.owner, cfg.repo, cfg.branch, token)); }
                 catch { invites = new List<string>(); }
+                // 活动日志已取消（用户 2026-11-05 要求）：成员状态只根据是否上传、是否已加入、是否待接受邀请判断。
                 Dictionary<string, DateTime> last = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
                 HashSet<string> logged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                try
-                {
-                    List<ActivityEntry> acts = await Task.Run(() => ActivityLog.Read(cfg.owner, cfg.repo, cfg.branch, token, ActivityLog.PublicPath));
-                    foreach (ActivityEntry a in acts)
-                    {
-                        if (a == null || string.IsNullOrEmpty(a.User) || string.IsNullOrEmpty(a.Time)) continue;
-                        DateTime t;
-                        if (!DateTime.TryParse(a.Time, out t)) continue;
-                        DateTime old;
-                        if (!last.TryGetValue(a.User, out old) || t > old) last[a.User] = t;
-                        if (!string.IsNullOrEmpty(a.Action) && a.Action.IndexOf("登录", StringComparison.Ordinal) >= 0)
-                            logged.Add(a.User);
-                    }
-                }
-                catch { }
                 teamFlow.SuspendLayout();
                 teamFlow.Controls.Clear();
                 AddTeamCard(login + "（我）", Lang.En ? "Connected to GitHub" : "已连接 GitHub 账号", true, true);

@@ -17,6 +17,8 @@ namespace SRLogbook
             Directory.CreateDirectory(root);
             Directory.CreateDirectory(Path.Combine(root, "References"));
             Directory.CreateDirectory(Path.Combine(root, "References", "Default"));
+            // 公共资料（PublicLib）：成员上传到公共区的文件，下载后永久保存在这里（用户 2026-11-05 要求）。
+            Directory.CreateDirectory(Path.Combine(root, "References", "PublicLib"));
             // 默认本地进度文件夹：PersonalWorkspaceSRRec，内含三个子文件夹（用户 2026-10-21 要求）。
             Directory.CreateDirectory(Path.Combine(root, "PersonalWorkspaceSRRec"));
             Directory.CreateDirectory(Path.Combine(root, "PersonalWorkspaceSRRec", "Mat_Local"));
@@ -61,7 +63,7 @@ namespace SRLogbook
 
         /// <summary>
         /// 0.2.2 起“个人参考资料”统一放在 PersonalWorkspaceSRRec\Reference，他人内容放 Public_Temp。
-        /// 这里清掉旧设计留在 References 根下的人员目录、遗留清单和误建的 references 子目录，只保留 Default。
+        /// 这里清掉旧设计留在 References 根下的人员目录、遗留清单和误建的 references 子目录，只保留 Default 与 PublicLib。
         /// </summary>
         public static void MigrateLegacyReferences(string appDir)
         {
@@ -72,7 +74,7 @@ namespace SRLogbook
                 foreach (string dir in Directory.GetDirectories(refs))
                 {
                     string name = Path.GetFileName(dir);
-                    if (string.Equals(name, "Default", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (string.Equals(name, "Default", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "PublicLib", StringComparison.OrdinalIgnoreCase)) continue;
                     try { Directory.Delete(dir, true); } catch { }
                 }
                 foreach (string file in Directory.GetFiles(refs, "*.json")) { try { File.Delete(file); } catch { } }
@@ -85,6 +87,13 @@ namespace SRLogbook
         {
             Ensure(appDir);
             return Path.Combine(Root(appDir), "References", "Default");
+        }
+
+        /// <summary>公共资料：远端 public/ 的本机副本，永久保存（不随启动/退出清空）。</summary>
+        public static string PublicLib(string appDir)
+        {
+            Ensure(appDir);
+            return Path.Combine(Root(appDir), "References", "PublicLib");
         }
 
         public static string PersonalProgress(string appDir)

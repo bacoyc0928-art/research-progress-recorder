@@ -12,6 +12,14 @@ public static class LocalTransferChecks
     public static void Run(string root)
     {
         string t = Path.Combine(root, "transfer-tests"); Directory.CreateDirectory(t);
+        // 公共资料（PublicLib）永久保存：启动时的旧目录清理只能删旧成员缓存，不能删 Default 与 PublicLib。
+        string refsRoot = Path.Combine(t, "References");
+        Directory.CreateDirectory(Path.Combine(refsRoot, "PublicLib")); File.WriteAllText(Path.Combine(refsRoot, "PublicLib", "book.pdf"), "pub");
+        Directory.CreateDirectory(Path.Combine(refsRoot, "oldmember")); File.WriteAllText(Path.Combine(refsRoot, "oldmember", "x.txt"), "legacy");
+        AppPaths.MigrateLegacyReferences(t);
+        Check(File.Exists(Path.Combine(refsRoot, "PublicLib", "book.pdf")) && Directory.Exists(AppPaths.DefaultReferences(t)) && !Directory.Exists(Path.Combine(refsRoot, "oldmember"))
+            && AppPaths.PublicLib(t) == Path.Combine(AppPaths.Root(t), "References", "PublicLib"),
+            "startup reference cleanup keeps Default and PublicLib and removes only legacy member caches");
         // 软件内更新替换脚本：已有 src、卸载工具 时必须合并内容，不能套出 src\src；且保留上一版 exe。
         string upSource = Path.Combine(root, "update-source"), upTarget = Path.Combine(root, "update-target");
         foreach (string d in new[] { Path.Combine(upSource, "src"), Path.Combine(upSource, "卸载工具"), Path.Combine(upTarget, "src"), Path.Combine(upTarget, "卸载工具"), Path.Combine(upTarget, "PersonalWorkspaceSRRec") }) Directory.CreateDirectory(d);

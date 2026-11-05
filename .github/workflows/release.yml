@@ -1,4 +1,4 @@
-name: Build 0.2.14 packages
+name: Build 0.2.15 packages
 on:
   workflow_dispatch:
 permissions:
@@ -13,17 +13,17 @@ jobs:
         shell: pwsh
         run: |
           ./test-local.ps1 -TestDirectory "$env:RUNNER_TEMP/offline-tests"
-          ./package-local.ps1 -Destination "$env:RUNNER_TEMP/package-0214"
-          $package = "$env:RUNNER_TEMP/package-0214/SRCRec"
-          if ((Get-Item "$package/SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.2.14.0') { throw 'Incorrect application version' }
-          if ((Get-Item "$package/卸载SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.2.14.0') { throw 'Incorrect uninstaller version' }
+          ./package-local.ps1 -Destination "$env:RUNNER_TEMP/package-0215"
+          $package = "$env:RUNNER_TEMP/package-0215/SRCRec"
+          if ((Get-Item "$package/SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.2.15.0') { throw 'Incorrect application version' }
+          if ((Get-Item "$package/卸载SRPRecorder2027.exe").VersionInfo.FileVersion -ne '0.2.15.0') { throw 'Incorrect uninstaller version' }
           $unexpected = Get-ChildItem $package -Recurse -File | Where-Object { $_.Extension -in '.pdf','.docx','.json' }
           if ($unexpected) { throw 'Private data entered the public package' }
-          Copy-Item "$env:RUNNER_TEMP/package-0214/research-progress-recorder-0.2.14-Windows.zip" .
+          Copy-Item "$env:RUNNER_TEMP/package-0215/research-progress-recorder-0.2.15-Windows.zip" .
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-0.2.14
-          path: research-progress-recorder-0.2.14-Windows.zip
+          name: windows-0.2.15
+          path: research-progress-recorder-0.2.15-Windows.zip
           if-no-files-found: error
   macos:
     timeout-minutes: 25
@@ -56,11 +56,11 @@ jobs:
       - name: Verify real native layouts
         run: |
           python -m pip install pillow pyobjc-framework-Quartz
-          python tools/capture_macos_ui.py --output ui-captures --label release-0.2.14 --strict
+          python tools/capture_macos_ui.py --output ui-captures --label release-0.2.15 --strict
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: macos-ui-${{ matrix.arch }}-0.2.14
+          name: macos-ui-${{ matrix.arch }}-0.2.15
           path: ui-captures/
           if-no-files-found: warn
       - name: Build and verify app
@@ -68,8 +68,8 @@ jobs:
           python -m pip install pyinstaller==6.22.3
           python -m PyInstaller --noconfirm --clean --windowed --name ResearchProgressRecorder --osx-bundle-identifier org.syncresearch.recorder mac-client.py
           app=dist/ResearchProgressRecorder.app
-          plutil -replace CFBundleShortVersionString -string 0.2.14 "$app/Contents/Info.plist"
-          plutil -insert CFBundleVersion -string 0.2.14 "$app/Contents/Info.plist"
+          plutil -replace CFBundleShortVersionString -string 0.2.15 "$app/Contents/Info.plist"
+          plutil -insert CFBundleVersion -string 0.2.15 "$app/Contents/Info.plist"
           codesign --force --deep --sign - "$app"
           "$app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
           codesign --verify --deep --strict --verbose=2 "$app"
@@ -79,14 +79,14 @@ jobs:
           import json
           from pathlib import Path
           result=json.loads(Path('update-runtime.json').read_text())
-          assert result['version']=='0.2.14' and result['tls_verified'] and result['checksum_download'], result
+          assert result['version']=='0.2.15' and result['tls_verified'] and result['checksum_download'], result
           assert result['install_mode']=='unnotarized-build', result
           print(result)
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: update-runtime-${{ matrix.arch }}-0.2.14
+          name: update-runtime-${{ matrix.arch }}-0.2.15
           path: update-runtime.json
           if-no-files-found: warn
       - name: Create and verify DMG
@@ -97,8 +97,8 @@ jobs:
           cp README.md 使用说明.md 使用说明-EN.md dmg-root/
           cp 卸载工具/uninstall-macos.command dmg-root/uninstall-macos.command
           chmod +x dmg-root/uninstall-macos.command
-          image=research-progress-recorder-0.2.14-macOS-${{ matrix.arch }}.dmg
-          hdiutil create -volname 'Research Progress Recorder 0.2.14' -srcfolder dmg-root -format UDZO -fs HFS+ "$image"
+          image=research-progress-recorder-0.2.15-macOS-${{ matrix.arch }}.dmg
+          hdiutil create -volname 'Research Progress Recorder 0.2.15' -srcfolder dmg-root -format UDZO -fs HFS+ "$image"
           hdiutil verify "$image"
           mount="$RUNNER_TEMP/verify-dmg"
           mkdir "$mount"
@@ -107,12 +107,12 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$mount/ResearchProgressRecorder.app"
           "$mount/ResearchProgressRecorder.app/Contents/MacOS/ResearchProgressRecorder" --smoke-test
           test -x "$mount/uninstall-macos.command"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/ResearchProgressRecorder.app/Contents/Info.plist")" = '0.2.14'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$mount/ResearchProgressRecorder.app/Contents/Info.plist")" = '0.2.15'
           shasum -a 256 "$image"
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}-0.2.14
-          path: research-progress-recorder-0.2.14-macOS-${{ matrix.arch }}.dmg
+          name: macos-${{ matrix.arch }}-0.2.15
+          path: research-progress-recorder-0.2.15-macOS-${{ matrix.arch }}.dmg
           if-no-files-found: error
 
   publish:
@@ -128,25 +128,25 @@ jobs:
       - name: Stage release assets and checksums
         run: |
           mkdir -p release-assets
-          cp release-assets/staged/windows-0.2.14/research-progress-recorder-0.2.14-Windows.zip release-assets/
-          cp release-assets/staged/macos-arm64-0.2.14/research-progress-recorder-0.2.14-macOS-arm64.dmg release-assets/
-          cp release-assets/staged/macos-x64-0.2.14/research-progress-recorder-0.2.14-macOS-x64.dmg release-assets/
+          cp release-assets/staged/windows-0.2.15/research-progress-recorder-0.2.15-Windows.zip release-assets/
+          cp release-assets/staged/macos-arm64-0.2.15/research-progress-recorder-0.2.15-macOS-arm64.dmg release-assets/
+          cp release-assets/staged/macos-x64-0.2.15/research-progress-recorder-0.2.15-macOS-x64.dmg release-assets/
           cp RELEASE_NOTES.md release-assets/
           cd release-assets
-          sha256sum research-progress-recorder-0.2.14-Windows.zip research-progress-recorder-0.2.14-macOS-arm64.dmg research-progress-recorder-0.2.14-macOS-x64.dmg > SHA256SUMS.txt
+          sha256sum research-progress-recorder-0.2.15-Windows.zip research-progress-recorder-0.2.15-macOS-arm64.dmg research-progress-recorder-0.2.15-macOS-x64.dmg > SHA256SUMS.txt
           cd ..
-          gh release view v0.2.14 >/dev/null 2>&1 || gh release create v0.2.14 --target "$GITHUB_SHA" --latest --title 'SRPRecorder2027 0.2.14 · 公开测试版 / Public Test' --notes-file RELEASE_NOTES.md
-          old=$(gh api repos/${{ github.repository }}/git/ref/tags/v0.2.14 --jq '.object.sha')
+          gh release view v0.2.15 >/dev/null 2>&1 || gh release create v0.2.15 --target "$GITHUB_SHA" --latest --title 'SRPRecorder2027 0.2.15 · 公开测试版 / Public Test' --notes-file RELEASE_NOTES.md
+          old=$(gh api repos/${{ github.repository }}/git/ref/tags/v0.2.15 --jq '.object.sha')
           if [ "$old" != "$GITHUB_SHA" ]; then
-            # 只允许把已发布的 v0.2.14（1a6bef9）前移到本次已通过全部测试的提交；其他情况一律停止。
+            # 只允许把已发布的 v0.2.15（1a6bef9）前移到本次已通过全部测试的提交；其他情况一律停止。
             test "$old" = '1a6bef9919a237859482c239234277c040f1ad60'
-            gh api --method PATCH repos/${{ github.repository }}/git/refs/tags/v0.2.14 -f sha="$GITHUB_SHA" -F force=true
+            gh api --method PATCH repos/${{ github.repository }}/git/refs/tags/v0.2.15 -f sha="$GITHUB_SHA" -F force=true
           fi
-          gh release edit v0.2.14 --latest --notes-file RELEASE_NOTES.md
-          gh release upload v0.2.14 \
-            release-assets/research-progress-recorder-0.2.14-Windows.zip \
-            release-assets/research-progress-recorder-0.2.14-macOS-arm64.dmg \
-            release-assets/research-progress-recorder-0.2.14-macOS-x64.dmg \
+          gh release edit v0.2.15 --latest --notes-file RELEASE_NOTES.md
+          gh release upload v0.2.15 \
+            release-assets/research-progress-recorder-0.2.15-Windows.zip \
+            release-assets/research-progress-recorder-0.2.15-macOS-arm64.dmg \
+            release-assets/research-progress-recorder-0.2.15-macOS-x64.dmg \
             release-assets/SHA256SUMS.txt \
             release-assets/RELEASE_NOTES.md \
             --clobber

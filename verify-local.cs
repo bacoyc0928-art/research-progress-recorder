@@ -164,10 +164,10 @@ public class Verify002
             f.SetPagePublic(5); Application.DoEvents();
             var toolbar = (FlowLayoutPanel)typeof(MainForm).GetField("helpToolbar", fields).GetValue(f);
             foreach (Control button in toolbar.Controls) Application.DoEvents();
-            bool helpButtonsFit = toolbar.Controls.Count == 4;
+            bool helpButtonsFit = toolbar.Controls.Count == 3;   // 改动日志已随日志同步一起取消
             foreach (Control button in toolbar.Controls)
                 helpButtonsFit = helpButtonsFit && toolbar.ClientRectangle.Contains(button.Bounds);
-            Check(helpButtonsFit, "all four bilingual Help toolbar buttons fit without clipping");
+            Check(helpButtonsFit, "all three Help toolbar buttons fit without clipping (no change-log button)");
             var updateButton = (Button)typeof(MainForm).GetField("updateButton", fields).GetValue(f);
             var sidebarPanel = (Panel)typeof(MainForm).GetField("sidebar", fields).GetValue(f);
             Check(updateButton != null && updateButton.Parent == sidebarPanel && sidebarPanel.ClientRectangle.Contains(updateButton.Bounds),
@@ -218,6 +218,16 @@ public class Verify002
             f.SetPagePublic(4); Application.DoEvents();
             Check(groupTitles.Length == 3 && groupTitles[0].Bottom <= others.Top && groupTitles[1].Bottom <= upRefs.Top && upRefs.BackColor == Theme.Accent && others.BackColor == Color.White,
                 "Progress Sync groups actions under three captions and highlights uploads as primary");
+            var groups = (Button[][])typeof(MainForm).GetField("syncGroups",fields).GetValue(f);
+            var publicUp = (Button)typeof(MainForm).GetField("btnPublicUp",fields).GetValue(f);
+            var publicDown = (Button)typeof(MainForm).GetField("btnPublicDown",fields).GetValue(f);
+            Check(Array.IndexOf(groups[0], publicDown) >= 0 && Array.IndexOf(groups[1], publicUp) >= 0 && groups[2].Length == 1 && publicUp.BackColor == Color.White && publicUp.Visible,
+                "Share group offers Upload to Public Library (secondary style) and Get group offers Download Public Library; no activity-log button");
+            f.SetPagePublic(2); Application.DoEvents();
+            var refsList = (ListBox)typeof(MainForm).GetField("refsFolders",fields).GetValue(f);
+            var refsFilesView = (ListView)typeof(MainForm).GetField("refsFiles",fields).GetValue(f);
+            Check(refsList.Items.Count >= 3 && refsList.Dock == DockStyle.Left && refsFilesView.Parent != null && refsList.Right <= refsFilesView.Parent.Left + 1,
+                "References lists folders vertically on the left with the file list on the right");
             var signedInIssues = new List<string>();
             for (int page = 0; page < 6; page++) { f.SetPagePublic(page); Application.DoEvents(); signedInIssues.AddRange(LayoutIssues(f, "signed-in page" + page)); }
             foreach (string issue in signedInIssues) Console.WriteLine("LAYOUT " + issue);

@@ -147,12 +147,21 @@ namespace SRLogbook
             { "打开", "Open" },
             { "移除", "Remove" },
             { "改动记录", "Change Log" },
+            { "左边选择文件夹，右边查看其中的文件；参考资料只读，上传与下载在“进度同步”页。", "Pick a folder on the left to see its files on the right. References are read-only; upload and download on Progress Sync." },
+            { "打开文件", "Open File" },
+            { "打开文件夹", "Open Folder" },
+            { "名称", "Name" },
+            { "子文件夹", "Subfolder" },
+            { "大小", "Size" },
+            { "修改时间", "Modified" },
+            { "上传至公共资料库", "Upload to public library" },
+            { "下载公共资料库", "Download public library" },
             { "从团队获取", "Get from the team" },
             { "分享我的资料", "Share my files" },
             { "管理我的上传", "Manage my uploads" },
-            { "下载到本机查看，不会改动团队资料。", "Downloads to this computer; team data is not changed." },
-            { "把你勾选的文件上传到团队区你自己的文件夹；每个文件最大 50 MiB，只新增或覆盖。", "Uploads the files you tick to your own team folder; up to 50 MiB each, only adds or overwrites." },
-            { "撤除只影响你自己上传的文件；活动日志记录每个人的操作。", "Removal affects only files you uploaded; the activity log shows everyone's actions." },
+            { "下载到本机查看，不会改动团队资料；公共资料下载后永久保存。", "Downloads to this computer without changing team data; public files are kept permanently." },
+            { "上传到团队区你自己的文件夹；“上传至公共资料库”供全员下载，上传后不可撤销。每个文件最大 50 MiB。", "Uploads to your own team folder; Upload to public library shares with everyone and cannot be undone. Up to 50 MiB per file." },
+            { "撤除只影响你自己上传的参考资料；公共资料库中的文件不能撤除。", "Removal affects only references you uploaded; files in the public library cannot be removed." },
             { "选择文件夹", "Choose Folder" },
             { "补录文件", "Add Files" },
             { "保存配置", "Save Config" },
@@ -294,7 +303,7 @@ namespace SRLogbook
 
         private const string HelpBoth =
             "SRPRecorder2027 使用说明 / User Guide\r\n" +
-            "适用版本 / Version 0.2.14 · 中文在前，English follows each section\r\n" +
+            "适用版本 / Version 0.2.15 · 中文在前，English follows each section\r\n" +
             "\r\n" +
             "本程序帮助课题组记录和交换研究资料。团队资料保存在私有 GitHub 仓库 bacoyc0928-art/research-data；程序本身从公开仓库 research-progress-recorder 下载，不需要登录。没有服务器，也没有实时同步：上传和下载都由你手动发起。\r\n" +
             "The app helps the group record and exchange research files. Team data lives in the private GitHub repository bacoyc0928-art/research-data; the app is downloaded from the public repository research-progress-recorder without signing in. There is no server and no real-time sync: you start every upload and download yourself.\r\n" +
@@ -320,16 +329,16 @@ namespace SRLogbook
             "\r\n" +
             "【2】六个页面 / The six pages\r\n" +
             "\r\n" +
-            "成员资料：列出所有成员及其状态（已连接 · 最近活动 / 已上传 / 已加入 · 未连接 / 待接受邀请）。打开他人的文件夹会先下载其文件再列出（macOS 先选中成员，再点「打开成员文件」）；自己的卡片打开本机 Reference 文件夹。\r\n" +
-            "Quick Post：给团队发短消息。点卡片看全文；「已阅」后移入「历史记录」；只能删除自己的帖子。\r\n" +
-            "参考资料：只读浏览团队默认资料库、我的参考资料，以及临时下载的他人内容。\r\n" +
+            "成员资料：列出所有成员及其状态（已上传资料 / 已加入 · 尚未上传 / 待接受邀请）。打开他人的文件夹会先下载其文件再列出（macOS 先选中成员，再点「打开成员文件」）；自己的卡片打开本机 Reference 文件夹。\r\n" +
+            "Quick Post：给团队发短消息。点卡片看全文；「已阅」后移入「历史记录」；自己的帖子在列表和历史记录中都可以删除，别人的帖子不能删。\r\n" +
+            "参考资料：左边竖排列出文件夹（团队默认资料库、公共资料、我的参考资料、他人内容），右边显示所选文件夹里的文件，可滚动；双击打开文件。只读。\r\n" +
             "本地记录：选择本地记录文件夹；「新建文档」在 Mat_Local 中生成 Word 文档；下方列出 Mat_Local 中的文件。\r\n" +
             "进度同步：所有上传、下载和撤除操作都在这里（见第 3 节）。\r\n" +
             "使用说明：本页。登录后可编辑并上传给所有成员。\r\n" +
             "\r\n" +
-            "Members: every member and their state (Connected · last active / Uploaded / Joined · not connected / Invitation pending). Opening another member's folder downloads and then lists their files (on macOS, select the member and press Open Member Files); your own card opens your local Reference folder.\r\n" +
-            "Quick Post: short team messages. Click a card for the full text; \"Mark Read\" moves it to History; you can delete only your own posts.\r\n" +
-            "References: read-only view of the team default library, your references and others' temporary downloads.\r\n" +
+            "Members: every member and their state (Uploaded files / Joined · no uploads yet / Invitation pending). Opening another member's folder downloads and then lists their files (on macOS, select the member and press Open Member Files); your own card opens your local Reference folder.\r\n" +
+            "Quick Post: short team messages. Click a card for the full text; \"Mark Read\" moves it to History; you can delete your own posts from the list or from History, never other people's.\r\n" +
+            "References: folders listed vertically on the left (team default library, public library, my references, others' files) and the files of the selected folder on the right, scrollable; double-click to open. Read-only.\r\n" +
             "Local Records: choose your local records folder; \"New Document\" creates a Word file in Mat_Local; the list shows the files in Mat_Local.\r\n" +
             "Progress Sync: every upload, download and removal (see section 3).\r\n" +
             "Help: this page. When signed in you can edit it and upload it for everyone.\r\n" +
@@ -348,14 +357,16 @@ namespace SRLogbook
             "- 上传参考资料：默认列出 Reference 中的文件，也可添加其他文件；上传到团队区你自己的目录。\r\n" +
             "- 上传本地记录：默认列出 Mat_Local 中的文件，保持原有的子文件夹结构。\r\n" +
             "- 撤除我上传的参考资料：从团队区删除你自己上传的文件，同时删除本机 Reference 中的副本，其他人从此无法下载。只能撤除自己的。\r\n" +
-            "- 查看活动日志：查看全员的登录、上传、下载、撤除、发帖和改说明记录。\r\n" +
+            "- 下载公共资料库：把公共资料下载到 References\\PublicLib\\，永久保存，不会在退出时清空；已下载的文件会跳过。\r\n" +
+            "- 上传至公共资料库：所有成员都能下载。上传后不可撤销，也不能覆盖；公共资料库已有同名文件时会拒绝上传，请先改名。\r\n" +
             "\r\n" +
             "- Download team files: selected members' files go to Public_Temp\\<member>\\, which is cleared on start and exit.\r\n" +
             "- Download default library: team default files go to References\\Default\\; older copies are kept before overwriting.\r\n" +
             "- Upload references: lists files in Reference by default (you can add others) and uploads them to your own team folder.\r\n" +
             "- Upload local records: lists files in Mat_Local by default and keeps their sub-folder structure.\r\n" +
             "- Remove my uploaded references: deletes your own uploads from the team area and the copy in your local Reference, so others can no longer download them. You can remove only your own.\r\n" +
-            "- Activity log: everyone's sign-ins, uploads, downloads, removals, posts and help edits.\r\n" +
+            "- Download public library: public files go to References\\PublicLib\\ and stay there permanently; files you already have are skipped.\r\n" +
+            "- Upload to public library: everyone can download the files. The upload cannot be undone or overwritten; a file whose name already exists is refused, so rename it first.\r\n" +
             "\r\n" +
             "需要记住的规则 / Rules to remember\r\n" +
             "- 上传前先保存文件；本地保存不等于上传。\r\n" +
@@ -378,6 +389,7 @@ namespace SRLogbook
             "PersonalWorkspaceSRRec\\Reference      你的参考资料，上传参考资料的默认来源 / your references; default source for reference uploads\r\n" +
             "PersonalWorkspaceSRRec\\Public_Temp    他人内容的临时区，启动和退出时清空 / temporary area for others' files, cleared on start and exit\r\n" +
             "References\\Default                    团队默认资料库，只读 / team default library, read-only\r\n" +
+            "References\\PublicLib                  公共资料，下载后永久保存 / public library, kept permanently\r\n" +
             "*.json                                程序配置，请勿手动修改 / app settings, do not edit by hand\r\n" +
             "\r\n" +
             "令牌不会写入这些文件。替换或升级程序不会删除上面的资料。\r\n" +
@@ -416,11 +428,11 @@ namespace SRLogbook
             "\r\n" +
             "【7】安全与隐私 / Security and privacy\r\n" +
             "\r\n" +
-            "- 令牌只用于连接 GitHub，不会上传、打印或写进日志。请不要把令牌发给别人；不用时可在 GitHub 上撤销。\r\n" +
+            "- 程序不记录活动日志。令牌只用于连接 GitHub，不会上传、打印或写进任何文件。请不要把令牌发给别人；不用时可在 GitHub 上撤销。\r\n" +
             "- 能写入 research-data 的人在技术上可以修改任何成员的目录。请只邀请信任的成员。\r\n" +
             "- 卸载程序不会撤销令牌，请到 GitHub 自行撤销。\r\n" +
             "\r\n" +
-            "- The token is used only to talk to GitHub; it is never uploaded, printed or logged. Do not share it; revoke it on GitHub when no longer needed.\r\n" +
+            "- The app keeps no activity log. The token is used only to talk to GitHub; it is never uploaded, printed or written to any file. Do not share it; revoke it on GitHub when no longer needed.\r\n" +
             "- Anyone who can write to research-data can technically change any member's folder. Invite only trusted members.\r\n" +
             "- Uninstalling does not revoke the token; revoke it on GitHub yourself.\r\n";
 

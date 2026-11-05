@@ -20,14 +20,14 @@ class SyncTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target=Path(tmp)/'result.json'
             context=SimpleNamespace(check_hostname=True,verify_mode=ssl.CERT_REQUIRED)
-            release=dict(tag_name='v0.2.14',assets=[dict(name='SHA256SUMS.txt',browser_download_url='https://example.invalid/sums')])
+            release=dict(tag_name='v0.2.15',assets=[dict(name='SHA256SUMS.txt',browser_download_url='https://example.invalid/sums')])
             checksum=('a'*64+'  app.dmg').encode()
-            page=dict(tag_name='v0.2.14',assets=[dict(name='research-progress-recorder-0.2.14-macOS-arm64.dmg'),dict(name='research-progress-recorder-0.2.14-macOS-x64.dmg')],source='release-page')
+            page=dict(tag_name='v0.2.15',assets=[dict(name='research-progress-recorder-0.2.15-macOS-arm64.dmg'),dict(name='research-progress-recorder-0.2.15-macOS-x64.dmg')],source='release-page')
             with patch.object(m,'network_context',return_value=context), patch.object(m,'release_info',return_value=release), patch.object(m,'release_info_from_page',return_value=page), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(checksum)), patch.object(m,'app_bundle_path',return_value=None):
                 m.verify_update_runtime(target)
             result=m.json.loads(target.read_text())
             self.assertTrue(result['tls_verified']); self.assertTrue(result['checksum_download']); self.assertEqual(result['version'],m.VERSION)
-            self.assertEqual(result['page_fallback'],'v0.2.14')
+            self.assertEqual(result['page_fallback'],'v0.2.15')
 
     class _Response(io.BytesIO):
         def __init__(self,body=b'',url=''):
@@ -38,9 +38,9 @@ class SyncTests(unittest.TestCase):
         return urllib.error.HTTPError('https://api.github.com/x',403,'rate limit exceeded',{},None)
 
     def test_release_check_falls_back_to_release_page_when_api_rate_limited(self):
-        tag_url='https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.14'
-        sums=('a'*64+'  research-progress-recorder-0.2.14-Windows.zip\n'+'b'*64+'  research-progress-recorder-0.2.14-macOS-arm64.dmg\n'
-              +'c'*64+'  research-progress-recorder-0.2.14-macOS-x64.dmg\n'+'d'*64+'  ../evil.dmg\n').encode()
+        tag_url='https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.15'
+        sums=('a'*64+'  research-progress-recorder-0.2.15-Windows.zip\n'+'b'*64+'  research-progress-recorder-0.2.15-macOS-arm64.dmg\n'
+              +'c'*64+'  research-progress-recorder-0.2.15-macOS-x64.dmg\n'+'d'*64+'  ../evil.dmg\n').encode()
         calls=[]
         def fake(req,**kwargs):
             calls.append(req.full_url)
@@ -49,18 +49,18 @@ class SyncTests(unittest.TestCase):
             return self._Response(sums)
         with patch.object(m.urllib.request,'urlopen',side_effect=fake):
             rel=m.release_info()
-        self.assertEqual(rel['tag_name'],'v0.2.14'); self.assertEqual(rel['source'],'release-page')
+        self.assertEqual(rel['tag_name'],'v0.2.15'); self.assertEqual(rel['source'],'release-page')
         names=[a['name'] for a in rel['assets']]
         self.assertNotIn('../evil.dmg',names); self.assertIn('SHA256SUMS.txt',names)
-        self.assertTrue(all(a['browser_download_url'].startswith('https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.14/') for a in rel['assets']))
+        self.assertTrue(all(a['browser_download_url'].startswith('https://github.com/bacoyc0928-art/research-progress-recorder/releases/download/v0.2.15/') for a in rel['assets']))
         with patch.object(m.platform,'machine',return_value='arm64'):
-            self.assertEqual(m.update_asset(rel)['name'],'research-progress-recorder-0.2.14-macOS-arm64.dmg')
+            self.assertEqual(m.update_asset(rel)['name'],'research-progress-recorder-0.2.15-macOS-arm64.dmg')
         self.assertEqual(len(calls),3)
 
     def test_release_page_fallback_rejects_unexpected_redirects(self):
-        for url in ('https://evil.example/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.14',
-                    'https://github.com/other/repo/releases/tag/v0.2.14',
-                    'https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.14-rc',
+        for url in ('https://evil.example/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.15',
+                    'https://github.com/other/repo/releases/tag/v0.2.15',
+                    'https://github.com/bacoyc0928-art/research-progress-recorder/releases/tag/v0.2.15-rc',
                     'https://github.com/login'):
             def fake(req,**kwargs): return self._Response(b'',url)
             with patch.object(m.urllib.request,'urlopen',side_effect=fake):
@@ -86,8 +86,8 @@ class SyncTests(unittest.TestCase):
 
     def test_release_check_passes_verified_tls_context(self):
         context=object()
-        with patch.object(m,'network_context',return_value=context), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(b'{"tag_name":"v0.2.14"}')) as request:
-            self.assertEqual(m.release_info()['tag_name'],'v0.2.14')
+        with patch.object(m,'network_context',return_value=context), patch.object(m.urllib.request,'urlopen',return_value=io.BytesIO(b'{"tag_name":"v0.2.15"}')) as request:
+            self.assertEqual(m.release_info()['tag_name'],'v0.2.15')
             self.assertIs(request.call_args.kwargs['context'],context)
 
     def test_download_and_checksum_both_pass_verified_tls_context(self):
@@ -165,16 +165,15 @@ class SyncTests(unittest.TestCase):
         client.channels=lambda api:SimpleNamespace(identity=lambda:'ME',members=lambda:['Mixed'],
             collaborators=lambda:['me','mixed','NewMember'],pending_invitations=lambda:['Invited'])
         client.run=lambda work,done:results.append(work())
-        with patch.object(m,'read_activity',return_value=[
-            dict(user='MIXED',time=OLD,action='登录'),
-            dict(user='mixed',time='2026-10-21T00:00:00',action='upload')]):
+        # 活动日志已取消：成员状态不得再读取日志。
+        with patch.object(m,'read_activity',side_effect=AssertionError('activity log must not be read')):
             client.team()
         names,states=results[0]
         self.assertEqual(len(names),4)
-        self.assertIn('已连接',states['Mixed'])
+        self.assertEqual(states['Mixed'],'已上传资料')
         self.assertIn('已连接 GitHub',states['ME'])
         self.assertEqual(states['Invited'],'待接受邀请')
-        self.assertEqual(states['NewMember'],'已加入 · 未连接')
+        self.assertEqual(states['NewMember'],'已加入 · 尚未上传')
 
     def test_download_picker_marks_invited_and_unuploaded_and_skips_them(self):
         client=m.Client.__new__(m.Client); client.en=False; downloaded=[]; labels=[]
@@ -254,9 +253,10 @@ class SyncTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             client=m.Client.__new__(m.Client); client.session_token='offline'; client.session_login='me'
             client.mat_local=client.reference_dir=Path(tmp)
-            with patch.object(m,'GitHub',return_value=object()) as github, patch.object(m,'list_posts',return_value=[]), patch.object(m,'read_ids',return_value=[]), patch.object(m,'read_activity',return_value=[]), patch.object(m,'FileChannels') as channels:
+            with patch.object(m,'GitHub',return_value=object()) as github, patch.object(m,'list_posts',return_value=[]), patch.object(m,'read_ids',return_value=[]), patch.object(m,'read_activity',side_effect=AssertionError('activity log must not be read')), patch.object(m,'FileChannels') as channels:
                 channels.return_value.members.return_value=['me','colleague']
-                self.assertEqual(set(client.news_state()),set(range(6)))
+                # 进度同步栏目（4）原先只看活动日志，日志取消后不再有红点。
+                self.assertEqual(set(client.news_state()),{0,1,2,3,5})
                 github.assert_called_once()
     def test_sign_out_uses_normal_exit_cleanup(self):
         client=m.Client.__new__(m.Client); client.root=object(); client.mb=SimpleNamespace(askyesno=lambda *a,**k:True)
@@ -505,7 +505,7 @@ class SignedOutStateTkTests(unittest.TestCase):
                 client=m.Client(root,home,smoke=True); client.run=lambda *a:None; client.load_help=lambda *a,**k:None
                 root.update()
                 actions=client.sync_actions+client.login_actions
-                self.assertEqual(len(client.help_actions),4)
+                self.assertEqual(len(client.help_actions),3)   # 改动日志已取消
                 self.assertTrue(all(str(b.cget('state'))=='disabled' for b in actions))
                 self.assertEqual(str(client.post_text.cget('state')),'disabled')
                 self.assertEqual(str(client.help_text.cget('state')),'disabled')
@@ -531,11 +531,46 @@ class SignedOutStateTkTests(unittest.TestCase):
                 self.assertEqual([str(f.cget('text')) for f in frames],['从团队获取','分享我的资料','管理我的上传'])
                 primary=[str(b.cget('text')) for b in client.sync_actions if str(b.cget('default'))=='active']
                 self.assertEqual(primary,['上传参考资料','上传本地记录'])
-                self.assertEqual(len(client.sync_actions),6)
+                self.assertEqual(len(client.sync_actions),7)   # +下载/上传公共资料库，-查看活动日志
+                self.assertEqual([str(b.cget('text')) for b in client.sync_actions][-1],'撤除我上传的参考资料')
                 client.toggle_language(); root.update()
                 self.assertEqual(str(frames[1].cget('text')),'Share my files')
         finally:
             root.destroy()
+    def test_references_page_lists_folders_vertically_and_keeps_publiclib(self):
+        try:
+            import tkinter
+            root=tkinter.Tk(); root.withdraw()
+        except Exception as error:
+            self.skipTest('Tk unavailable: '+str(error))
+        try:
+            with tempfile.TemporaryDirectory() as home, patch.object(m,'remembered_blob',return_value=None), patch.object(m.GitHub,'request',side_effect=AssertionError('offline')):
+                client=m.Client(root,home,smoke=True); client.run=lambda *a:None; client.load_help=lambda *a,**k:None
+                (client.public_lib/'book.pdf').write_bytes(b'pdf')
+                client.migrate_legacy()   # 启动清理不得删除 PublicLib
+                self.assertTrue((client.public_lib/'book.pdf').exists())
+                client.refresh_references(); root.update()
+                titles=[client.ref_folders.item(i,'text') for i in client.ref_folders.get_children()]
+                self.assertEqual(len(titles),3)
+                self.assertIn('团队默认资料库',titles[0]); self.assertIn('公共资料',titles[1]); self.assertIn('(1)',titles[1])
+                client.ref_folders.selection_set(client.ref_folders.get_children()[1]); root.update(); client.show_ref_folder()
+                self.assertEqual([client.ref_tree.item(i,'values')[0] for i in client.ref_tree.get_children()],['book.pdf'])
+                self.assertEqual(str(client.ref_open_btn.cget('state')),'normal')
+        finally:
+            root.destroy()
+    def test_history_delete_only_for_own_posts(self):
+        client=m.Client.__new__(m.Client); client.en=False; client.root=None
+        deleted=[]; tree=SimpleNamespace(selection=lambda:['i1'],delete=lambda iid:None,winfo_toplevel=lambda:None)
+        client._history_posts={'i1':{'id':'p1','author':'Other','time':'t'}}
+        shown=[]; client.mb=SimpleNamespace(showinfo=lambda *a,**k:shown.append(a),askyesno=lambda *a,**k:True)
+        client.api=lambda:(SimpleNamespace(),{}); client.run=lambda work,done:(work(),done(True))
+        client.remember=lambda *a:None; client.refresh_posts=lambda:None
+        with patch.object(m,'delete_post',side_effect=lambda api,pid:deleted.append(pid)):
+            client.delete_history_item(tree,'me',SimpleNamespace(configure=lambda **k:None))
+            self.assertEqual(deleted,[]); self.assertTrue(shown)
+            client._history_posts={'i1':{'id':'p2','author':'ME','time':'t'}}
+            client.delete_history_item(tree,'me',SimpleNamespace(configure=lambda **k:None))
+            self.assertEqual(deleted,['p2'])
     def test_member_files_dialog_handles_unresolved_folder_path(self):
         # macOS 上临时目录 /var 是 /private/var 的链接；upload_files 返回解析后的路径，弹窗不能因此崩溃。
         try:

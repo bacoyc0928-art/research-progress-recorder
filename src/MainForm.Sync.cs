@@ -32,7 +32,8 @@ namespace SRLogbook
         private Label boundLabel;
         private Label lblSyncAccount;
         private Label syncHint;
-        private Button btnActivity;
+        private Button btnPublicDown;
+        private Button btnPublicUp;
 
         private Button[][] syncGroups;
         private Label[] syncGroupTitles, syncGroupNotes;
@@ -109,16 +110,20 @@ namespace SRLogbook
             btnUpProgress.Click += delegate { UploadProgressFolder(); };
             btnRemoveRefs = SButton("撤除我上传的参考资料", 24, 200, 330);
             btnRemoveRefs.Click += delegate { RemoveMyUploadedRefs(); };
-            btnActivity = SButton("查看活动日志", 364, 200, 220);
-            btnActivity.Click += delegate { ShowActivityLogs(); };
+            // 公共资料库（用户 2026-11-05 要求）：远端 public/，下载后永久存放在 References\PublicLib；上传不可撤销。
+            btnPublicDown = SButton("下载公共资料库", 24, 240, 240);
+            btnPublicDown.Click += delegate { PullPublicLibrary(); };
+            btnPublicUp = SButton("上传至公共资料库", 274, 240, 240);
+            btnPublicUp.Click += delegate { UploadToPublicLibrary(); };
 
-            // 六个动作按用途分三组，每组一句话说明文件去向；上传是最常用的操作，用主要按钮突出。
-            syncGroups = new Button[][] { new[] { btnOthers, btnDefault }, new[] { btnUpRefs, btnUpProgress }, new[] { btnRemoveRefs, btnActivity } };
+            // 动作按用途分三组，每组一句话说明文件去向；常用上传用主要按钮突出，不可撤销的公共上传保持次要样式以免误点。
+            // 活动日志已取消（用户 2026-11-05 要求），不再提供“查看活动日志”。
+            syncGroups = new Button[][] { new[] { btnOthers, btnDefault, btnPublicDown }, new[] { btnUpRefs, btnUpProgress, btnPublicUp }, new[] { btnRemoveRefs } };
             string[] groupTitles = { "从团队获取", "分享我的资料", "管理我的上传" };
             string[] groupNotes = {
-                "下载到本机查看，不会改动团队资料。",
-                "把你勾选的文件上传到团队区你自己的文件夹；每个文件最大 50 MiB，只新增或覆盖。",
-                "撤除只影响你自己上传的文件；活动日志记录每个人的操作。" };
+                "下载到本机查看，不会改动团队资料；公共资料下载后永久保存。",
+                "上传到团队区你自己的文件夹；“上传至公共资料库”供全员下载，上传后不可撤销。每个文件最大 50 MiB。",
+                "撤除只影响你自己上传的参考资料；公共资料库中的文件不能撤除。" };
             syncGroupTitles = new Label[3]; syncGroupNotes = new Label[3];
             for (int i = 0; i < 3; i++)
             {
@@ -633,7 +638,6 @@ namespace SRLogbook
                 SaveSyncConfig();
                 Log("已上传本地记录 " + n + " 个文件；其他远端文件保留，不自动删除 / Uploaded; remote older files kept.");
                 lblSStatus.Text = "本地记录上传完成 / Progress uploaded: " + n + " 个文件 / files";
-                await LogActivityAsync("上传本地记录 / Upload local progress", n + " 个文件 / files");
             }
             catch (Exception ex) { Log("本地记录上传失败（可能已上传部分文件）/ Upload failed: " + ex.Message); lblSStatus.Text = "上传失败，详见日志 / Upload failed; see log."; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
@@ -681,7 +685,8 @@ namespace SRLogbook
             if (btnUpRefs != null) btnUpRefs.Enabled = has;
             if (btnUpProgress != null) btnUpProgress.Enabled = has;
             if (btnRemoveRefs != null) btnRemoveRefs.Enabled = has;
-            if (btnActivity != null) btnActivity.Enabled = has;
+            if (btnPublicDown != null) btnPublicDown.Enabled = has;
+            if (btnPublicUp != null) btnPublicUp.Enabled = has;
         }
 
         /// <summary>通用“先预览、再勾选”对话框：列出可下载或可上传的条目，只处理勾选项。</summary>
@@ -831,7 +836,6 @@ namespace SRLogbook
                 }
                 SaveSyncConfig();
                 lblSStatus.Text = n == 0 ? "没有其他成员内容 / No other member content." : "已下载 / Downloaded: " + n;
-                if (n > 0) await LogActivityAsync("下载他人内容 / Download team files", n + " 位成员 / members");
                 string baseDir = AppPaths.PublicTemp(appDir);
                 Log(lblSStatus.Text + " " + baseDir);
                 if (n > 0) OpenPath(baseDir);
@@ -875,10 +879,124 @@ namespace SRLogbook
                 }
                 SaveSyncConfig();
                 lblSStatus.Text = "默认资料库已更新 / Default library updated: " + n2 + (updated > 0 ? "（备份 / backups: " + updated + "）" : "");
-                await LogActivityAsync("下载默认资料库 / Download default library", n2 + " 个文件 / files");
                 Log(lblSStatus.Text); RebuildRefs();
             }
             catch (Exception ex) { Log("下载默认资料库失败 / Default library failed: " + ex.Message); lblSStatus.Text = "下载失败，原有默认资料库保留 / Failed; existing library kept."; }
+            finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
+        }
+
+        /// <summary>下载公共资料库（远端 public/）到 References\PublicLib，永久保存；已下载的同名文件跳过（公共文件不可修改）。</summary>
+        private async void PullPublicLibrary()
+        {
+            if (syncBusy || teamLoading) return;
+            string owner, repo, path, branch, token;
+            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
+            string local = AppPaths.PublicLib(appDir);
+            syncBusy = true; syncCard.Enabled = false;
+            lblSStatus.Text = "正在读取公共资料库… / Reading public library…";
+            try
+            {
+                Dictionary<string, string> remote = await Task.Run(() => GitHubSync.ListFileShas(owner, repo, PublicRemoteDir, branch, token));
+                if (remote.Count == 0) { lblSStatus.Text = "公共资料库还是空的 / The public library is empty."; return; }
+                List<string> names = new List<string>(remote.Keys);
+                names.Sort(StringComparer.OrdinalIgnoreCase);
+                List<string> fresh = names.FindAll(n => !File.Exists(FileTransfers.Child(local, n)));
+                if (fresh.Count == 0) { lblSStatus.Text = "公共资料已全部下载 / All public files are already downloaded."; return; }
+                List<string> picked = PickItems("下载公共资料库 / Download public library",
+                    "勾选要下载的公共资料；下载后永久保存在 References\\PublicLib，不会在退出时清空。 / Check public files to download; they stay in References\\PublicLib permanently.",
+                    Rows(fresh, n => n + "  ·  新增 / new"), false);
+                if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
+                Directory.CreateDirectory(local);
+                int n2 = 0;
+                foreach (string name in picked)
+                {
+                    string sha = null;
+                    byte[] bytes = await Task.Run(() => GitHubSync.GetFileBytes(owner, repo, PublicRemoteDir + "/" + name, branch, token, out sha));
+                    if (bytes == null) continue;
+                    string dest = FileTransfers.Child(local, name);
+                    if (File.Exists(dest)) continue;
+                    string temp = dest + ".tmp-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                    File.WriteAllBytes(temp, bytes);
+                    File.Move(temp, dest);
+                    n2++;
+                }
+                lblSStatus.Text = "公共资料已下载 / Public files downloaded: " + n2;
+                Log(lblSStatus.Text); RebuildRefs();
+            }
+            catch (Exception ex) { Log("下载公共资料库失败 / Public library failed: " + ex.Message); lblSStatus.Text = "下载失败，已下载的公共资料保留 / Failed; downloaded public files kept."; }
+            finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
+        }
+
+        internal const string PublicRemoteDir = "public";
+
+        /// <summary>
+        /// 上传至公共资料库：所有成员可下载，不可撤销——远端已有同名文件时拒绝（不覆盖），
+        /// 写入只“新建”不带 sha，若他人同时上传同名文件，GitHub 会拒绝而不是覆盖。
+        /// </summary>
+        private async void UploadToPublicLibrary()
+        {
+            if (syncBusy || teamLoading) return;
+            string owner, repo, path, branch, token;
+            if (!ReadSyncForm(out owner, out repo, out path, out branch, out token)) return;
+            List<string> candidates = new List<string>();
+            string previewDir = AppPaths.ReferenceDir(appDir);
+            if (Directory.Exists(previewDir))
+                foreach (string f in Directory.GetFiles(previewDir, "*", SearchOption.AllDirectories)) candidates.Add(f);
+            candidates.Sort(StringComparer.OrdinalIgnoreCase);
+            List<string> picked = PickItems("上传至公共资料库 / Upload to public library",
+                "默认列出 Reference 里的文件，也可“添加文件”。上传后全员可下载，且不能撤除或覆盖。 / Lists Reference by default. Uploaded files are shared with everyone and cannot be removed or replaced.",
+                Rows(candidates, f => Path.GetFileName(f) + "  ·  " + Math.Max(1, new FileInfo(f).Length / 1024) + " KB"), true);
+            if (picked.Count == 0) { lblSStatus.Text = "已取消 / Cancelled."; return; }
+            syncBusy = true; syncCard.Enabled = false;
+            lblSStatus.Text = "正在检查公共资料库… / Checking public library…";
+            try
+            {
+                string local = AppPaths.PublicLib(appDir);
+                HashSet<string> names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string file in picked)
+                {
+                    FileTransfers.NoLinks(file);
+                    FileTransfers.Child(local, Path.GetFileName(file));   // 校验文件名
+                    if (new FileInfo(file).Length > FileTransfers.MaxUploadBytes) throw new IOException("文件超过 50 MiB / File exceeds 50 MiB: " + Path.GetFileName(file));
+                    if (!names.Add(Path.GetFileName(file))) throw new IOException("所选文件有重名，请先改名 / Selected files have duplicate names.");
+                }
+                Dictionary<string, string> remote = await Task.Run(() => GitHubSync.ListFileShas(owner, repo, PublicRemoteDir, branch, token));
+                List<string> taken = new List<string>();
+                foreach (string n in names) if (remote.ContainsKey(n)) taken.Add(n);
+                if (taken.Count > 0)
+                {
+                    Msg.Show("公共资料库里已有同名文件，公共文件不能覆盖。请改名后再上传：\n" + string.Join("\n", taken.ToArray()) + "\n\nA file with the same name already exists in the public library and cannot be replaced. Rename it first.", "上传至公共资料库", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    lblSStatus.Text = "未上传：有同名文件 / Not uploaded: name already exists.";
+                    return;
+                }
+                string confirm = "将把 " + picked.Count + " 个文件上传到公共资料库：\n" + string.Join("\n", new List<string>(names).ToArray()) +
+                    "\n\n所有成员都能下载这些文件。上传后不能撤除，也不能覆盖。确定上传吗？\n\nUpload " + picked.Count + " file(s) to the public library? Everyone can download them and the upload cannot be undone.";
+                if (Msg.Show(confirm, "上传至公共资料库（不可撤销）", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) { lblSStatus.Text = "已取消 / Cancelled."; return; }
+                lblSStatus.Text = "正在上传到公共资料库… / Uploading to public library…";
+                Directory.CreateDirectory(local);
+                int done = 0;
+                foreach (string file in picked)
+                {
+                    string name = Path.GetFileName(file);
+                    byte[] bytes = File.ReadAllBytes(file);
+                    await Task.Run(() => GitHubSync.PutFileBytes(owner, repo, PublicRemoteDir + "/" + name, branch, token, bytes, null));
+                    string copy = FileTransfers.Child(local, name);
+                    if (!File.Exists(copy)) File.Copy(file, copy);
+                    done++;
+                }
+                lblSStatus.Text = "已上传到公共资料库 / Uploaded to public library: " + done;
+                Log(lblSStatus.Text); RebuildRefs();
+            }
+            catch (Exception ex)
+            {
+                GitHubApiException api = ex as GitHubApiException;
+                if (api != null && api.StatusCode == 422)
+                {
+                    Log("公共资料库上传被拒绝（可能有人刚上传了同名文件）/ Rejected: " + ex.Message);
+                    lblSStatus.Text = "上传被拒绝：公共资料库已有同名文件 / Rejected: a file with that name already exists.";
+                }
+                else { Log("上传至公共资料库失败（可能已上传部分文件）/ Public upload failed: " + ex.Message); lblSStatus.Text = "上传失败，详见日志 / Upload failed; see log."; }
+            }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
         }
 
@@ -946,7 +1064,6 @@ namespace SRLogbook
                 Persist(); RebuildRefs(); SaveSyncConfig();
                 Log("已上传 / Uploaded " + files.Length + " 个参考文件 / reference file(s).");
                 lblSStatus.Text = "参考资料上传完成 / References uploaded.";
-                await LogActivityAsync("上传参考资料 / Upload references", files.Length + " 个文件 / files");
             }
             catch (Exception ex) { Log("参考资料上传失败（可能已上传部分文件）/ Upload failed: " + ex.Message); lblSStatus.Text = "上传失败，详见日志 / Upload failed; see log."; }
             finally { syncBusy = false; syncCard.Enabled = true; UpdateSyncActionState(); Lang.Apply(this); }
@@ -1001,7 +1118,6 @@ namespace SRLogbook
                 await UpdateReferencesManifest(owner, repo, branch, token, login, selected);
                 Persist(); RebuildRefs();
                 lblSStatus.Text = "已撤除 / Removed: " + removed;
-                await LogActivityAsync("撤除参考资料 / Remove references", removed + " 个文件 / files: " + string.Join("、", selected.ToArray()));
                 Msg.Show(lblSStatus.Text, "撤除参考资料");
             }
             catch (Exception ex) { Log("撤除参考资料失败 / Remove failed: " + ex.Message); lblSStatus.Text = "撤除失败，详见日志 / Remove failed; see log."; }
@@ -1067,81 +1183,6 @@ namespace SRLogbook
                     foreach (object o in list.CheckedItems) picked.Add(Convert.ToString(o));
             }
             return picked;
-        }
-
-        private async void ShowActivityLogs()
-        {
-            if (string.IsNullOrEmpty(sessionToken)) { Msg.Show("请先在左下角登录 GitHub 账号。", "活动日志"); return; }
-            SyncConfig c = GitHubSync.LoadConfig(appDir);
-            string login = sessionLogin, token = sessionToken;
-            Cursor = Cursors.WaitCursor;
-            try
-            {
-                List<ActivityEntry> pub = await Task.Run(() => ActivityLog.Read(c.owner, c.repo, c.branch, token, ActivityLog.PublicPath));
-                List<ActivityEntry> mine = await Task.Run(() => ActivityLog.Read(c.owner, c.repo, c.branch, token, ActivityLog.PrivatePath(login)));
-                ShowActivityDialog(pub, mine);
-            }
-            catch (Exception ex) { Msg.Show("读取活动日志失败：" + ex.Message, "活动日志"); }
-            finally { Cursor = Cursors.Default; }
-        }
-
-        private void ShowActivityDialog(List<ActivityEntry> pub, List<ActivityEntry> mine)
-        {
-            using (Form dialog = new Form())
-            {
-                dialog.Text = "活动日志";
-                Dlg.Fit(dialog, 920, 600);
-                dialog.StartPosition = FormStartPosition.CenterParent;
-                dialog.BackColor = Color.White;
-                ListView list = new ListView();
-                list.Dock = DockStyle.Fill;
-                list.View = View.Details;
-                list.FullRowSelect = true;
-                list.Columns.Add("时间", 190);
-                list.Columns.Add("用户", 150);
-                list.Columns.Add("动作", 130);
-                list.Columns.Add("详情", 380);
-                List<ActivityEntry> all = new List<ActivityEntry>();
-                all.AddRange(pub);
-                all.AddRange(mine);
-                all.Reverse();
-                foreach (ActivityEntry e in all)
-                {
-                    ListViewItem it = new ListViewItem(e.Time ?? "");
-                    it.SubItems.Add(e.User ?? "");
-                    it.SubItems.Add(e.Action ?? "");
-                    it.SubItems.Add(e.Detail ?? "");
-                    list.Items.Add(it);
-                }
-                Panel bottom = new Panel();
-                bottom.Dock = DockStyle.Bottom;
-                bottom.Height = 48;
-                Button close = new Button();
-                close.Text = "关闭";
-                close.FlatStyle = FlatStyle.Flat;
-                close.SetBounds(12, 10, 100, 30);
-                close.Click += delegate { dialog.Close(); };
-                bottom.Controls.Add(close);
-                Label note = new Label();
-                note.Text = "公开日志 " + pub.Count + " 条 · 我的日志 " + mine.Count + " 条";
-                note.SetBounds(130, 14, 600, 22);
-                note.ForeColor = Theme.TextMuted;
-                bottom.Controls.Add(note);
-                dialog.Controls.Add(list);
-                dialog.Controls.Add(bottom);
-                Lang.Apply(dialog);
-                dialog.ShowDialog(this);
-            }
-        }
-
-        private async Task LogActivityAsync(string action, string detail, bool toPublic = true)
-        {
-            if (string.IsNullOrEmpty(sessionToken) || string.IsNullOrEmpty(sessionLogin)) return;
-            SyncConfig c = GitHubSync.LoadConfig(appDir);
-            string login = sessionLogin, token = sessionToken;
-            try { await Task.Run(() => ActivityLog.Append(c.owner, c.repo, c.branch, token, login, action, detail, toPublic)); }
-            catch (Exception ex) { Log("活动日志写入失败 / Activity log failed: " + ex.Message); }
-            RefreshNews();
         }
 
         private void Log(string text)

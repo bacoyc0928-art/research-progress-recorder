@@ -173,4 +173,32 @@ class FileChannelTests(unittest.TestCase):
         self.api.files['team/alice/profile.json']=b'{}'; self.assertEqual(self.files.members(),['alice'])
         self.assertFalse(any(method=='PUT' for method,_ in self.api.calls))
 
+    # 公共资料库：上传不可撤销、不覆盖；下载永久保存并跳过已有文件。
+    def test_public_upload_creates_new_files_without_sha_and_keeps_local_copy(self):
+        book=self.root/'book.pdf'; book.write_bytes(b'pdf'); local=self.root/'PublicLib'
+        bodies=[]; original=self.api.request
+        def spy(method,endpoint,data=None,**k):
+            if method=='PUT': bodies.append(dict(data))
+            return original(method,endpoint,data,**k)
+        self.api.request=spy
+        self.assertEqual(self.files.upload_public([book],local),1)
+        self.assertEqual(self.api.files['public/book.pdf'],b'pdf')
+        self.assertNotIn('sha',bodies[0])
+        self.assertEqual((local/'book.pdf').read_bytes(),b'pdf')
+    def test_public_upload_refuses_existing_names_before_any_upload(self):
+        self.api.files['public/Book.pdf']=b'old'
+        a=self.root/'book.pdf'; a.write_bytes(b'new'); b=self.root/'other.pdf'; b.write_bytes(b'x')
+        with self.assertRaises(f.PublicNameTaken) as caught: self.files.upload_public([b,a])
+        self.assertEqual(caught.exception.names,['book.pdf'])
+        self.assertEqual(self.api.files['public/Book.pdf'],b'old')
+        self.assertNotIn('public/other.pdf',self.api.files)
+    def test_public_download_is_permanent_and_skips_existing(self):
+        self.api.files['public/a.pdf']=b'A'; self.api.files['public/b.pdf']=b'B'
+        dest=self.root/'PublicLib'; dest.mkdir(); (dest/'a.pdf').write_bytes(b'mine')
+        self.assertEqual(self.files.public_names(),['a.pdf','b.pdf'])
+        self.assertEqual(self.files.download_public(['a.pdf','b.pdf'],dest),1)
+        self.assertEqual((dest/'a.pdf').read_bytes(),b'mine'); self.assertEqual((dest/'b.pdf').read_bytes(),b'B')
+    def test_public_names_empty_when_folder_missing(self):
+        self.assertEqual(self.files.public_names(),[])
+
 if __name__=='__main__': unittest.main()

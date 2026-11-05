@@ -13,6 +13,12 @@ import urllib.parse
 import uuid
 
 MAX_FILE = 50 * 1024 * 1024
+PUBLIC_DIR = 'public'
+
+class PublicNameTaken(ValueError):
+    """公共资料库已有同名文件：公共文件不能覆盖。"""
+    def __init__(self, names):
+        super().__init__('Public library already has: ' + ', '.join(names)); self.names = list(names)
 
 def no_links(path):
     path = Path(os.path.abspath(path))
@@ -190,11 +196,46 @@ class FileChannels:
             except urllib.error.HTTPError as error:
                 if error.code != 404: raise
                 sha = None
-            body = {'message': 'upload: SRPRecorder2027 0.2.14', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
+            body = {'message': 'upload: SRPRecorder2027 0.2.15', 'branch': self.api.branch, 'content': base64.b64encode(content).decode()}
             if sha: body['sha'] = sha
             try: self.api.request('PUT', self.api.endpoint(path), body); return
             except urllib.error.HTTPError as error:
                 if attempt == 2 or error.code not in (409,422): raise
+    # 公共资料库（用户 2026-11-05 要求）：远端 public/，全员可下载；上传不可撤销，不覆盖已有同名文件。
+    def public_names(self):
+        return sorted(row['name'] for row in self.listing(PUBLIC_DIR, True) if row.get('type') == 'file')
+    def upload_public(self, files, local_copy_dir=None):
+        files = [no_links(x) for x in files]; names = {}
+        for file in files:
+            name = safe_name(file.name)
+            if name.casefold() in names: raise ValueError('Selected files have duplicate names; rename them first')
+            if file.stat().st_size > MAX_FILE: raise ValueError('File exceeds 50 MiB: ' + file.name)
+            names[name.casefold()] = name
+        existing = {n.casefold() for n in self.public_names()}
+        taken = sorted(names[k] for k in names if k in existing)
+        if taken: raise PublicNameTaken(taken)
+        count = 0
+        for file in files:
+            name = safe_name(file.name)
+            # 只“新建”、不带 sha：若他人同时上传了同名文件，GitHub 返回 422，不会覆盖。
+            body = {'message': 'public: ' + name, 'branch': self.api.branch, 'content': base64.b64encode(file.read_bytes()).decode()}
+            self.api.request('PUT', self.api.endpoint(PUBLIC_DIR + '/' + name), body)
+            if local_copy_dir is not None:
+                target = child(local_copy_dir, name)
+                if not target.exists():
+                    Path(local_copy_dir).mkdir(parents=True, exist_ok=True); shutil.copy2(file, target)
+            count += 1
+        return count
+    def download_public(self, names, destination):
+        """下载到 PublicLib 并永久保存；已存在的同名文件跳过（公共文件不可修改）。"""
+        destination = no_links(destination); destination.mkdir(parents=True, exist_ok=True); count = 0
+        for name in names:
+            target = child(destination, name)
+            if target.exists(): continue
+            data = self.get_bytes(PUBLIC_DIR + '/' + safe_name(name))
+            tmp = target.with_name(target.name + '.tmp-' + uuid.uuid4().hex[:8]); tmp.write_bytes(data); os.replace(tmp, target)
+            count += 1
+        return count
     def remote_references(self):
         login = self.identity()
         rows = self.listing('team/' + login + '/references', True)
@@ -204,7 +245,7 @@ class FileChannels:
         for name in names:
             path = 'team/' + login + '/references/' + name
             data = self.api.request('GET', self.api.endpoint(path) + '?ref=' + urllib.parse.quote(self.api.branch, safe=''))
-            body = {'message': 'remove: SRPRecorder2027 0.2.14', 'branch': self.api.branch, 'sha': data['sha']}
+            body = {'message': 'remove: SRPRecorder2027 0.2.15', 'branch': self.api.branch, 'sha': data['sha']}
             self.api.request('DELETE', self.api.endpoint(path), body)
             if personal_folder:
                 local = local_reference_copy(personal_folder, name)
